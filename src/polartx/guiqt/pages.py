@@ -67,6 +67,8 @@ class ChainPage(Page):
 
     def _overrides(self, name: str) -> dict:
         ov = {}
+        if name.startswith("Bench:"):
+            return ov            # benchmarks fix their published-class params
         if "WiFi" in name or "NR" in name:
             ov["n_bits"] = self.dtc_bits.value()
             ov["env_skew_s"] = self.skew_ns.value() * 1e-9

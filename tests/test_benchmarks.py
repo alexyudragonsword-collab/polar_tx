@@ -1,8 +1,47 @@
 """Literature-class benchmark presets stay in their published classes."""
+import polartx
+from polartx.guiutil import PRESETS, build_preset, run_chain_report
 from polartx.metrics.aclr_ext import aclr_multi
 from polartx.presets import (bench_edge_polar_staszewski05,
                              bench_lte20_polar_madoglio14,
                              bench_wifi11n_polar)
+
+BENCH_PRESETS = ["Bench: Staszewski'05 EDGE", "Bench: Madoglio'14 LTE-20",
+                 "Bench: 802.11n 20 MHz"]
+
+
+def test_benchmarks_are_registered_presets():
+    for name in BENCH_PRESETS:
+        assert name in PRESETS
+    assert len(PRESETS) == 13
+
+
+def test_benchmarks_exported_top_level():
+    for fn in ("bench_edge_polar_staszewski05",
+               "bench_lte20_polar_madoglio14", "bench_wifi11n_polar"):
+        assert fn in polartx.__all__ and hasattr(polartx, fn)
+
+
+def test_benchmarks_run_through_report_layer():
+    """The GUI/report path builds and scores each benchmark, dispatching
+    the right burst-length kwarg via signature inspection (EDGE uses
+    n_syms, the others n_symbols)."""
+    for name in BENCH_PRESETS:
+        rep = run_chain_report(name, seed=1, noise=True, n_units=200)
+        assert rep["fig"] is not None
+        m = rep["metrics"]
+        assert ("EVM [dB]" in m) or ("DEVM [%]" in m)
+
+
+def test_benchmarks_ignore_overrides():
+    """Benchmarks fix their published-class parameters — a stray
+    override must not perturb them."""
+    a = build_preset("Bench: Madoglio'14 LTE-20")
+    b = build_preset("Bench: Madoglio'14 LTE-20", dp_gain=1.5, n_bits=6)
+    wf = a.make_waveform(n_symbols=6, seed=0)
+    ea = a.tx.run(wf, noise=False).evm().db
+    eb = b.tx.run(b.make_waveform(n_symbols=6, seed=0), noise=False).evm().db
+    assert abs(ea - eb) < 1e-9
 
 
 def test_edge_polar_class():

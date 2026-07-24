@@ -10,7 +10,10 @@ seed = col.number_input("seed", 0, 9999, 1)
 noise = col.checkbox("noise on", True)
 
 overrides = {}
-if "WiFi" in name or "NR" in name:
+if name.startswith("Bench:"):
+    col.caption("literature-class benchmark — parameters fixed to the "
+                "published-class assumptions (see the preset docstring)")
+elif "WiFi" in name or "NR" in name:
     overrides["n_bits"] = col.slider("DTC bits", 6, 14, 11)
     overrides["env_skew_s"] = col.slider("AM/PM skew [ns]", -4.0, 4.0,
                                          0.0, 0.1) * 1e-9

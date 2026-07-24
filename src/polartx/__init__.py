@@ -18,8 +18,10 @@ from .phasemod import (ADPLLTwoPoint, DTCPhaseModulator, DTCPMConfig,
 from .cal.polar_dpd import PolarDPD
 from .montecarlo import MCResult, run_mc, wifi_chip_builder
 from .polar import bandwidth_expansion, polar_recombine, polar_split
-from .presets import (TxPreset, ble_1m_adpll, ble_2m_adpll, ble_adpll,
-                      bt_edr_adpll, lte20_adpll, nr_dtc, wifi_dtc)
+from .presets import (TxPreset, bench_edge_polar_staszewski05,
+                      bench_lte20_polar_madoglio14, bench_wifi11n_polar,
+                      ble_1m_adpll, ble_2m_adpll, ble_adpll, bt_edr_adpll,
+                      lte20_adpll, nr_dtc, wifi_dtc)
 from .waveforms import (Waveform, edr_dpsk, gfsk_ble, ofdm_waveform,
                         wifi_waveform)
 from .waveforms.ofdm import lte_waveform, nr_waveform
@@ -34,6 +36,8 @@ __all__ = [
     "PolarDPD", "MCResult", "run_mc", "wifi_chip_builder",
     "TxPreset", "ble_adpll", "ble_1m_adpll", "ble_2m_adpll", "bt_edr_adpll",
     "lte20_adpll", "nr_dtc", "wifi_dtc",
+    "bench_edge_polar_staszewski05", "bench_lte20_polar_madoglio14",
+    "bench_wifi11n_polar",
     "Waveform", "edr_dpsk", "gfsk_ble", "lte_waveform", "nr_waveform",
     "ofdm_waveform", "wifi_waveform",
 ]

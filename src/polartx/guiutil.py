@@ -7,32 +7,55 @@ from __future__ import annotations
 
 import numpy as np
 
-PRESETS = ["BLE LE-1M", "BLE LE-2M", "BT EDR2 pi/4-DQPSK", "BT EDR3 8DPSK",
-           "LTE 20 MHz", "WiFi 80 MHz", "WiFi 160 MHz", "WiFi 320 MHz",
-           "NR FR1 100 MHz", "NR FR2 200 MHz"]
+def _registry():
+    """Display name -> factory(**overrides) -> TxPreset.
+
+    Standard chains plus the literature-class benchmarks (pllsim ex14
+    convention); benchmarks ignore overrides that would break their
+    published-class assumptions by fixing their own parameters."""
+    from . import presets as P
+    return {
+        "BLE LE-1M": lambda **o: P.ble_1m_adpll(**o),
+        "BLE LE-2M": lambda **o: P.ble_2m_adpll(**o),
+        "BT EDR2 pi/4-DQPSK": lambda **o: P.bt_edr_adpll("pi4dqpsk", **o),
+        "BT EDR3 8DPSK": lambda **o: P.bt_edr_adpll("8dpsk", **o),
+        "LTE 20 MHz": lambda **o: P.lte20_adpll(**o),
+        "WiFi 80 MHz": lambda **o: P.wifi_dtc(bw=80e6, **o),
+        "WiFi 160 MHz": lambda **o: P.wifi_dtc(bw=160e6, **o),
+        "WiFi 320 MHz": lambda **o: P.wifi_dtc(bw=320e6, **o),
+        "NR FR1 100 MHz": lambda **o: P.nr_dtc(bw=100e6, **o),
+        "NR FR2 200 MHz": lambda **o: P.nr_dtc(bw=200e6, **o),
+        "Bench: Staszewski'05 EDGE": lambda **o: P.bench_edge_polar_staszewski05(),
+        "Bench: Madoglio'14 LTE-20": lambda **o: P.bench_lte20_polar_madoglio14(),
+        "Bench: 802.11n 20 MHz": lambda **o: P.bench_wifi11n_polar(),
+    }
+
+
+#: chain presets selectable in the GUIs and the headless report layer
+PRESETS = list(_registry())
 
 
 def build_preset(name: str, **overrides):
-    """Preset registry -> TxPreset; overrides forwarded to the factory."""
-    from . import presets as P
-    if name == "BLE LE-1M":
-        return P.ble_1m_adpll(**overrides)
-    if name == "BLE LE-2M":
-        return P.ble_2m_adpll(**overrides)
-    if name == "BT EDR2 pi/4-DQPSK":
-        return P.bt_edr_adpll("pi4dqpsk", **overrides)
-    if name == "BT EDR3 8DPSK":
-        return P.bt_edr_adpll("8dpsk", **overrides)
-    if name == "LTE 20 MHz":
-        return P.lte20_adpll(**overrides)
-    if name.startswith("WiFi"):
-        bw = float(name.split()[1]) * 1e6
-        return P.wifi_dtc(bw=bw, **overrides)
-    if name == "NR FR1 100 MHz":
-        return P.nr_dtc(bw=100e6, **overrides)
-    if name == "NR FR2 200 MHz":
-        return P.nr_dtc(bw=200e6, **overrides)
-    raise ValueError(f"unknown preset {name!r}")
+    """Preset registry -> TxPreset; overrides forwarded to the factory
+    (benchmark presets fix their own parameters and ignore overrides)."""
+    reg = _registry()
+    if name not in reg:
+        raise ValueError(f"unknown preset {name!r}")
+    return reg[name](**overrides)
+
+
+def _size_kwargs(make_waveform, n_units: int | None) -> dict:
+    """Map a burst-length request onto whatever length kwarg this
+    preset's make_waveform actually accepts (n_bits / n_syms /
+    n_symbols) — robust to the per-preset waveform signature."""
+    if n_units is None:
+        return {}
+    import inspect
+    params = inspect.signature(make_waveform).parameters
+    for kw in ("n_bits", "n_syms", "n_symbols"):
+        if kw in params:
+            return {kw: n_units}
+    return {}
 
 
 def run_chain_report(name: str, *, seed: int = 1, noise: bool = True,
@@ -46,10 +69,7 @@ def run_chain_report(name: str, *, seed: int = 1, noise: bool = True,
     from .metrics.masks import default_mask
 
     p = build_preset(name, **overrides)
-    wf = p.make_waveform(**({} if n_units is None else
-                            ({"n_bits": n_units} if "BLE" in name else
-                             {"n_syms": n_units} if "EDR" in name else
-                             {"n_symbols": n_units})))
+    wf = p.make_waveform(**_size_kwargs(p.make_waveform, n_units))
     res = p.tx.run(wf, noise=noise, seed=seed)
 
     metrics = {}
