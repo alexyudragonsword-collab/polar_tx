@@ -24,6 +24,7 @@ class DPAConfig:
     gradient: float = 0.0           # systematic tilt across the thermo array
     amam: object = "ideal"          # "ideal" | ("rapp", p, drive) | ("lut", r_in, r_out)
     ampm_deg_poly: tuple = ()       # AM-PM [deg] polynomial in code/fullscale
+    ampm_lut: tuple | None = None   # (r_in, deg) measured AM-PM, overrides poly
     seed: int = 0
 
     @property
@@ -39,7 +40,13 @@ class DPA:
                                    cfg.sigma_cell, cfg.gradient, rng)
         r = raw / raw[-1]                       # normalized array amplitude
         self.amp_table = amam_curve(cfg.amam, r)
-        self.phase_table = ampm_curve(cfg.ampm_deg_poly, r)
+        if cfg.ampm_lut is not None:
+            r_in, deg = cfg.ampm_lut
+            self.phase_table = np.deg2rad(
+                np.interp(r, np.asarray(r_in, float),
+                          np.asarray(deg, float)))
+        else:
+            self.phase_table = ampm_curve(cfg.ampm_deg_poly, r)
         self._mismatch = inl_dnl(raw)
 
     # ------------------------------------------------------------- codes

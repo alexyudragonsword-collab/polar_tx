@@ -1,0 +1,477 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>polartx — Digital Polar TX Behavioral Simulation</title>
+<style>
+  :root {
+    --fg: #1a1d21; --bg: #ffffff; --muted: #5c6570; --accent: #0b63c4;
+    --card: #f5f7fa; --border: #dde3ea; --code-bg: #eef1f5; --warn: #9a4b00;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; color: var(--fg); background: var(--bg);
+    font: 16px/1.65 -apple-system, "Segoe UI", Roboto, "Helvetica Neue",
+          "PingFang SC", "Microsoft YaHei", sans-serif;
+  }
+  .wrap { max-width: 980px; margin: 0 auto; padding: 24px 20px 80px; }
+  h1 { font-size: 1.9em; margin: 0.4em 0 0.2em; }
+  h2 { font-size: 1.45em; margin-top: 2.2em; border-bottom: 2px solid var(--border);
+       padding-bottom: 6px; }
+  h3 { font-size: 1.15em; margin-top: 1.8em; color: var(--accent); }
+  p { margin: 0.7em 0; }
+  .sub { color: var(--muted); }
+  code, pre { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+              font-size: 0.92em; }
+  code { background: var(--code-bg); padding: 1px 5px; border-radius: 4px; }
+  pre { background: var(--code-bg); padding: 12px 16px; border-radius: 8px;
+        overflow-x: auto; line-height: 1.5; }
+  pre code { background: none; padding: 0; }
+  table { border-collapse: collapse; width: 100%; margin: 1em 0; font-size: 0.93em; }
+  th, td { border: 1px solid var(--border); padding: 7px 10px; text-align: left; }
+  th { background: var(--card); }
+  figure { margin: 1.4em 0; text-align: center; }
+  figure img { max-width: 100%; border: 1px solid var(--border); border-radius: 8px; }
+  figcaption { font-size: 0.88em; color: var(--muted); margin-top: 8px; }
+  .formula { background: var(--card); border-left: 3px solid var(--accent);
+             padding: 8px 14px; margin: 0.9em 0; font-family: ui-monospace, Menlo,
+             Consolas, monospace; font-size: 0.93em; overflow-x: auto; }
+  .callout { background: #fff7ed; border-left: 4px solid var(--warn);
+             padding: 10px 16px; border-radius: 0 8px 8px 0; margin: 1.1em 0; }
+  .callout.blue { background: #eef6ff; border-left-color: var(--accent); }
+  .lang-btn {
+    position: fixed; top: 16px; right: 18px; z-index: 10;
+    background: var(--accent); color: #fff; border: none; border-radius: 999px;
+    padding: 8px 18px; font-size: 15px; cursor: pointer; font-weight: 600;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.18);
+  }
+  .lang-btn:hover { filter: brightness(1.12); }
+  body.lang-en .zh { display: none !important; }
+  body.lang-zh .en { display: none !important; }
+  .toc { background: var(--card); border-radius: 10px; padding: 14px 22px; }
+  .toc a { color: var(--accent); text-decoration: none; }
+  .toc a:hover { text-decoration: underline; }
+  .toc li { margin: 3px 0; }
+  .num { color: var(--muted); font-weight: 600; margin-right: 6px; }
+  @media (prefers-color-scheme: dark) {
+    :root { --fg: #e6e9ed; --bg: #14171b; --muted: #98a2ad; --accent: #58a6ff;
+            --card: #1d2228; --border: #313941; --code-bg: #22282f; }
+    .callout { background: #2a2118; }
+    .callout.blue { background: #17222e; }
+  }
+</style>
+</head>
+<body class="lang-zh">
+<button id="langBtn" class="lang-btn" onclick="toggleLang()">English</button>
+<div class="wrap">
+
+<h1>polartx</h1>
+<p class="sub">
+  <span class="en">Behavioral simulation of digital polar transmitters — an illustrated design guide.
+  Two architectures over one composable chain: ADPLL two-point modulation (narrowband: BLE, BT EDR, LTE &le; 20 MHz)
+  and open-loop DTC phase modulation (wideband: WiFi 6/7 &le; 320 MHz, 5G NR &le; 200 MHz), each driving a
+  unit-cell digital PA. Python (numpy/scipy/matplotlib), 87 physical-assertion tests, 9 worked examples.</span>
+  <span class="zh">数字极坐标发射机行为级仿真——图文设计指南。两种架构共用一条可组合链路：ADPLL 两点调制
+  （窄带：BLE、BT EDR、LTE ≤20 MHz）与开环 DTC 相位调制（宽带：WiFi 6/7 ≤320 MHz、5G NR ≤200 MHz），
+  均驱动单元阵列数字 PA。Python 实现（numpy/scipy/matplotlib），87 项物理量断言测试，9 个成套示例。</span>
+</p>
+
+<div class="toc">
+  <b><span class="en">Contents</span><span class="zh">目录</span></b>
+  <ol>
+    <li><a href="#philosophy"><span class="en">Design philosophy</span><span class="zh">设计思路</span></a></li>
+    <li><a href="#narrow"><span class="en">Narrowband: ADPLL two-point modulation</span><span class="zh">窄带：ADPLL 两点调制</span></a></li>
+    <li><a href="#piflip"><span class="en">The &pi;-flip problem</span><span class="zh">π 翻转问题</span></a></li>
+    <li><a href="#wide"><span class="en">Wideband: the open-loop DTC phase modulator</span><span class="zh">宽带：开环 DTC 相位调制器</span></a></li>
+    <li><a href="#bwexp"><span class="en">Bandwidth expansion and hole punching</span><span class="zh">带宽扩展与 hole punching</span></a></li>
+    <li><a href="#results"><span class="en">End-to-end results</span><span class="zh">端到端结果</span></a></li>
+    <li><a href="#cal"><span class="en">The calibration suite</span><span class="zh">校准套件</span></a></li>
+    <li><a href="#memory"><span class="en">Memory effects and the Cartesian DPD</span><span class="zh">记忆效应与 Cartesian DPD</span></a></li>
+    <li><a href="#measured"><span class="en">Measured-data DPA modeling</span><span class="zh">实测数据 DPA 建模</span></a></li>
+    <li><a href="#yield"><span class="en">Monte Carlo, GUI, RTL export</span><span class="zh">Monte Carlo、GUI、RTL 导出</span></a></li>
+    <li><a href="#lessons"><span class="en">Lessons learned</span><span class="zh">经验教训</span></a></li>
+    <li><a href="#repro"><span class="en">Reproducing everything</span><span class="zh">复现方法</span></a></li>
+  </ol>
+</div>
+
+<!-- ============================================================ -->
+<h2 id="philosophy"><span class="num">1</span><span class="en">Design philosophy</span><span class="zh">设计思路</span></h2>
+
+<h3><span class="en">1.1 One chain, two phase modulators</span><span class="zh">1.1 一条链路，两种相位调制器</span></h3>
+<pre>Waveform → [CFR] → polar split → envelope path (quantize · skew · DPA code) ─┐
+                              └─ phase path (PhaseModulator) ────────────────┤→ DPA → y → EVM/ACLR/mask
+                                    [PolarDPD LUTs applied before both paths]</pre>
+<p>
+  <span class="en">A polar TX splits the complex baseband into envelope and phase; the digital PA turns the amplitude
+  code into RF amplitude while a phase modulator steers the carrier. Everything from BLE to 320 MHz WiFi shares one
+  <code>PolarTX</code> pipeline; only the <code>PhaseModulator</code> block swaps — <code>ADPLLTwoPoint</code> for the
+  narrowband flavor, <code>DTCPhaseModulator</code> for the wideband one. Every impairment (quantization, INL, mismatch,
+  skew, phase noise, ZOH images, memory) lives in exactly one block, and every result object carries per-stage taps so
+  calibrations can observe what hardware would observe.</span>
+  <span class="zh">极坐标发射机把复基带拆成包络与相位：数字 PA 把幅度码变成射频幅度，相位调制器操纵载波。从 BLE 到
+  320 MHz WiFi 全部共用一条 <code>PolarTX</code> 管线，只更换 <code>PhaseModulator</code> 模块——窄带用
+  <code>ADPLLTwoPoint</code>，宽带用 <code>DTCPhaseModulator</code>。每种损伤（量化、INL、失配、时延失配、相噪、ZOH
+  镜像、记忆效应）只在一个模块里建模；结果对象携带各级 tap，校准算法只能看到硬件也能看到的观测量。</span>
+</p>
+
+<h3><span class="en">1.2 Every simulated level has an analytic companion</span><span class="zh">1.2 每个仿真量都有解析对照</span></h3>
+<p>
+  <span class="en">Inherited from the sibling <code>pllsim</code> library's discipline: quantization floors, INL spur
+  levels, ZOH image levels, envelope-quantization EVM and phase-noise budgets are all available in closed form
+  (<code>polartx.analysis.responses</code>), and the test suite asserts simulation-vs-analytic agreement (0.2–2 dB
+  depending on the effect). When the two disagree, one of them is wrong — several sections below exist because finding
+  out which one was wrong taught us something.</span>
+  <span class="zh">继承姊妹库 <code>pllsim</code> 的纪律：量化噪底、INL 杂散电平、ZOH 镜像电平、包络量化 EVM、相噪预算
+  全部有闭式解析（<code>polartx.analysis.responses</code>），测试套件断言仿真与解析吻合（按效应 0.2–2 dB）。两者不一致
+  时必有一方是错的——下文好几节的存在，正是因为查明谁错了让我们学到了东西。</span>
+</p>
+
+<h3><span class="en">1.3 Vendored provenance</span><span class="zh">1.3 移植出处</span></h3>
+<p>
+  <span class="en">The phase-path engine (ADPLL, DTC, DCO/Leeson, &Sigma;&Delta;, LMS calibrators) is an adapted copy of
+  <code>pll_simulator</code>; the waveform/metrics/PA infrastructure (OFDM, QAM, EVM/ACLR/mask/CCDF, CFR, delay
+  alignment, ILA) comes from <code>PA_DPD</code>. Copies live under <code>polartx.vendor</code> with per-file origin
+  headers; the three intentional divergences (FracConfig extraction, <code>mod_freq_dp</code> range-limited direct DAC,
+  <code>dp_cal</code> per-cycle hook) are documented in <code>vendor/__init__.py</code>. WiFi OFDM generation is
+  regression-tested bit-exact against the padpd generator.</span>
+  <span class="zh">相位路径引擎（ADPLL、DTC、DCO/Leeson、&Sigma;&Delta;、LMS 校准器）改编移植自
+  <code>pll_simulator</code>；波形/指标/PA 基础设施（OFDM、QAM、EVM/ACLR/mask/CCDF、CFR、延迟对齐、ILA）来自
+  <code>PA_DPD</code>。副本位于 <code>polartx.vendor</code>，逐文件注明出处；三处刻意改动（FracConfig 抽取、
+  <code>mod_freq_dp</code> 受限直通 DAC、<code>dp_cal</code> 逐周期挂钩）记录在 <code>vendor/__init__.py</code>。
+  WiFi OFDM 生成与 padpd 逐位回归。</span>
+</p>
+
+<!-- ============================================================ -->
+<h2 id="narrow"><span class="num">2</span><span class="en">Narrowband: ADPLL two-point modulation</span><span class="zh">窄带：ADPLL 两点调制</span></h2>
+<div class="formula">
+  H<sub>tp</sub>(f) = h(f) + g<sub>eff</sub>·(1 − h(f)), &nbsp; g<sub>eff</sub> = g<sub>dp</sub>/(1+&epsilon;<sub>Kdco</sub>)
+  &nbsp;&nbsp;→&nbsp;&nbsp; matched: H<sub>tp</sub> ≡ 1;&nbsp; residual = (g<sub>eff</sub>−1)·(1−h)·&phi;<sub>mod</sub>
+</div>
+<p>
+  <span class="en">The data enters the loop twice: at the FCW (lowpass through the closed loop h) and as a direct DCO
+  push (highpass 1−h). Matched gains sum to exactly one at every offset, so a 1 Mb/s GFSK stream rides through a
+  100 kHz loop untouched; a direct-path gain error &epsilon; leaves &epsilon;·highpass(&phi;) — the EVM-limiting spec
+  that the two-point calibrations in &sect;7 exist for. <code>ADPLLTwoPoint</code> ships two engines, cross-checked by
+  tests: a linearized z-domain <b>response</b> mode (exact H<sub>tp</sub> on the FFT grid + phase noise synthesized from
+  the <code>analyze()</code> budget; full frames in seconds) and the cycle-accurate <b>event</b> mode that calls the
+  vendored <code>ADPLL.simulate(mod_freq=…)</code> engine. Across the whole mismatch sweep the two agree within 0.3%
+  EVM.</span>
+  <span class="zh">数据从两个点进入环路：FCW（经闭环 h 低通）与 DCO 直推（高通 1−h）。两点增益匹配时响应在所有频偏处
+  严格相加为 1，1 Mb/s GFSK 穿过 100 kHz 环路毫发无损；直通点增益误差 &epsilon; 留下残差
+  &epsilon;·highpass(&phi;)——正是第 7 节两点校准针对的 EVM 决定性规格。<code>ADPLLTwoPoint</code> 提供两个引擎并被
+  测试交叉验证：线性化 z 域 <b>response</b> 模式（FFT 网格上的精确 H<sub>tp</sub> + 由 <code>analyze()</code> 预算
+  合成的相噪；整帧秒级）与逐参考周期的 <b>event</b> 模式（直接调用移植的 <code>ADPLL.simulate(mod_freq=…)</code>）。
+  整个失配扫描上两引擎 EVM 吻合 0.3% 以内。</span>
+</p>
+<figure>
+  <img src="img/ex01_ble_gfsk_adpll.png" alt="ex01">
+  <figcaption><span class="en">ex01 — BLE LE-1M: frequency trajectory/eye, the EVM-vs-mismatch design chart
+  (response ↔ event overlay), PSD vs the BLE mask. Matched EVM is phase-noise-limited (2.7%).</span>
+  <span class="zh">ex01——BLE LE-1M：频率轨迹/眼图、EVM-失配设计图（response 与 event 引擎重叠）、PSD 对 BLE
+  mask。匹配时 EVM 由相噪决定（2.7%）。</span></figcaption>
+</figure>
+
+<!-- ============================================================ -->
+<h2 id="piflip"><span class="num">3</span><span class="en">The &pi;-flip problem</span><span class="zh">π 翻转问题</span></h2>
+<p>
+  <span class="en">BT EDR's 8DPSK payload is <em>not</em> constant-envelope: the trajectory crosses the origin and the
+  polar phase flips by &pi; in one sample — f<sub>s</sub>/2 = 16 MHz of instantaneous deviation the direct DAC must
+  cover. DEVM alone hides this (it samples symbol centers, and the DPA output is tiny at the null). The moment the DAC
+  range is finite the story changes: the clipped phase is recovered only through the loop's lowpass path at loop-BW
+  timescale (~10 symbols of "hangover"), so clipping just 1% of samples collapses DEVM to 40% and costs ~20 dB of ACP —
+  while the coarse spectral mask still passes. <b>ACP is the sensitive metric; the mask is not.</b></span>
+  <span class="zh">BT EDR 的 8DPSK 载荷<em>不是</em>恒包络：轨迹穿过原点时极坐标相位在一个采样内翻转 π——直通 DAC 需要
+  覆盖 f<sub>s</sub>/2 = 16 MHz 的瞬时频偏。仅看 DEVM 会掩盖此事（它在符号中心采样，而过零处 DPA 输出幅度趋零）。
+  DAC 范围一旦有限，剧情反转：被削掉的相位只能靠环路低通路径以环路带宽时间尺度（约 10 个符号的"宿醉"）补回，
+  削掉 1% 的采样就让 DEVM 崩到 40%、ACP 恶化约 20 dB——而粗粒度频谱 mask 依然 PASS。<b>ACP 才是敏感指标，mask
+  不是。</b></span>
+</p>
+<p>
+  <span class="en">The fix is trajectory-side: <em>vector hole punching</em> linearizes the unwrapped phase across each
+  null (slew-triggered, window widened iteratively until compliant). A 2 MHz slew limit brings the required DAC range
+  from 16 MHz to 2 MHz with zero clipping, DEVM back to 2.4%, at an exactly-computable −32 dB trajectory cost.
+  A negative result worth keeping: at a fixed slew bound, a smoothstep S-curve loses to plain linear interpolation —
+  its 1.5&times; wider window costs more than its continuous derivative saves (locked in tests).</span>
+  <span class="zh">解法在轨迹侧：<em>矢量 hole punching</em> 在每个过零点把展开相位线性化（按斜率触发、窗口迭代加宽
+  直到达标）。2 MHz 斜率限制把所需 DAC 范围从 16 MHz 压到 2 MHz、零削波、DEVM 回到 2.4%，代价是精确可算的 −32 dB
+  轨迹 EVM。一个值得保留的负结果：固定斜率上限下 smoothstep S 曲线输给普通线性插值——1.5× 加宽的窗口代价大于导数
+  连续的收益（测试固化）。</span>
+</p>
+<figure>
+  <img src="img/ex05_edr_pi_jump.png" alt="ex05">
+  <figcaption><span class="en">ex05 — DEVM collapse vs DAC range; spectra showing ACP (not mask) as the sensitive
+  metric; the slew-limited phase trajectory at a null.</span>
+  <span class="zh">ex05——DEVM 随 DAC 范围崩塌；频谱显示敏感指标是 ACP 而非 mask；过零点处斜率受限的相位轨迹。</span></figcaption>
+</figure>
+<div class="callout">
+  <span class="en"><b>OFDM is the opposite regime.</b> LTE-20 polar phase slews at P99 ≈ 2&times; the channel BW
+  <em>everywhere</em>, not only at nulls (39 MHz for 20 MHz BW, tail to f<sub>s</sub>/2). Slew-limiting below ~2&times;BW
+  destroys the signal; the direct DAC must simply cover it. This is the honest core of why wideband OFDM polar is hard —
+  and why the wideband flavor abandons the loop for an open-loop DTC.</span>
+  <span class="zh"><b>OFDM 是相反的领域。</b>LTE-20 极坐标相位斜率 P99 ≈ 2× 信道带宽且<em>处处如此</em>，不只在过零点
+  （20 MHz 带宽对应 39 MHz，尾部到 f<sub>s</sub>/2）。把斜率限到 ~2×BW 以下会摧毁信号；直通 DAC 必须整体覆盖。
+  这就是宽带 OFDM polar 难做的诚实内核——也是宽带方案放弃环路、改用开环 DTC 的原因。</span>
+</div>
+
+<!-- ============================================================ -->
+<h2 id="wide"><span class="num">4</span><span class="en">Wideband: the open-loop DTC phase modulator</span><span class="zh">宽带：开环 DTC 相位调制器</span></h2>
+<p>
+  <span class="en">A clean integer-PLL LO is phase-shifted sample-by-sample by a DTC covering one carrier UI (2&pi;,
+  wrapping modulo the range). Everything runs vectorized on the baseband grid — up to 1.28 GS/s at WiFi-320 — with
+  n-bit phase quantization (optional first-order error-feedback dither, vectorized via the
+  <i>diff-of-floor-of-cumsum</i> identity), gain error, INL (pllsim conventions, in UI), jitter, a locked-LO Leeson
+  model (flat below the PLL loop BW), and a phase-update clock slower than the grid (ZOH → images). The design
+  charts: 4096-QAM needs ~10 bits plain, ~9 with dither; the quantization floor matches
+  (2&pi;/2<sup>B</sup>)/&radic;12·&radic;(1/OSR) within 0.2 dB; INL spurs and ZOH images land on their closed forms
+  within 2 dB.</span>
+  <span class="zh">干净的整数 PLL LO 被 DTC 逐样本移相，覆盖一个载波 UI（2π，按范围回绕）。全部在基带网格上向量化
+  运行——WiFi-320 高达 1.28 GS/s——含 n-bit 相位量化（可选一阶误差反馈 dither，用 <i>diff-of-floor-of-cumsum</i>
+  恒等式向量化）、增益误差、INL（沿用 pllsim 约定，UI 单位）、抖动、锁定 LO 的 Leeson 模型（环内平坦）、以及慢于
+  网格的相位更新时钟（ZOH → 镜像）。设计图结论：4096-QAM 裸量化需 ~10 bit，dither 省 ~1 bit；量化噪底与
+  (2π/2<sup>B</sup>)/√12·√(1/OSR) 差 0.2 dB 内；INL 杂散与 ZOH 镜像与闭式预测吻合 2 dB 内。</span>
+</p>
+<figure>
+  <img src="img/ex03_dtc_phase_modulator.png" alt="ex03">
+  <figcaption><span class="en">ex03 — DTC resolution design chart (with analytic floor), INL spur spectrum vs
+  prediction, locked-LO phase-noise contribution.</span>
+  <span class="zh">ex03——DTC 分辨率设计图（含解析地板）、INL 杂散频谱与预测对照、锁定 LO 相噪贡献。</span></figcaption>
+</figure>
+
+<!-- ============================================================ -->
+<h2 id="bwexp"><span class="num">5</span><span class="en">Bandwidth expansion and hole punching</span><span class="zh">带宽扩展与 hole punching</span></h2>
+<p>
+  <span class="en">The polar split is nonlinear: for an 80 MHz OFDM channel the envelope occupies 2.1&times; and the
+  phase path 3.2&times; the composite 99% bandwidth. Magnitude hole punching (clamping the envelope at
+  <code>env_floor</code>·rms) bounds the DPA dynamic range at an exactly computable EVM cost — the clamp-error power,
+  asserted in tests to 0.01 dB — but note it does <em>not</em> shrink the phase-path bandwidth: the &pi;-flips remain
+  (the DTC wraps them mod 2&pi;); bounding the phase slew is the separate, trajectory-side operation of &sect;3.</span>
+  <span class="zh">极坐标分解是非线性的：80 MHz OFDM 信道分解后，包络占用复合信号 99% 带宽的 2.1×，相位路径 3.2×。
+  幅度域 hole punching（把包络钳制在 <code>env_floor</code>·rms）以精确可算的 EVM 代价（钳位误差功率，测试断言到
+  0.01 dB）约束 DPA 动态范围——但注意它<em>不会</em>压缩相位路径带宽：π 翻转仍在（DTC 按 mod 2π 处理）；限制相位
+  斜率是第 3 节那个独立的轨迹侧操作。</span>
+</p>
+<figure>
+  <img src="img/ex02_polar_bandwidth_expansion.png" alt="ex02">
+  <figcaption><span class="en">ex02 — polar component spectra vs composite; the envelope at a null under increasing
+  clamp levels; the clamp-EVM / dynamic-range trade.</span>
+  <span class="zh">ex02——极坐标分量频谱与复合信号对比；不同钳位下的过零包络；钳位 EVM 与动态范围的权衡。</span></figcaption>
+</figure>
+
+<!-- ============================================================ -->
+<h2 id="results"><span class="num">6</span><span class="en">End-to-end results</span><span class="zh">端到端结果</span></h2>
+<table>
+  <tr><th><span class="en">Chain</span><span class="zh">链路</span></th>
+      <th><span class="en">Configuration</span><span class="zh">配置</span></th>
+      <th>EVM</th><th>ACLR / mask</th></tr>
+  <tr><td>BLE LE-1M/2M</td><td><span class="en">ADPLL two-point, 100 kHz loop, −112 dBc/Hz DCO</span><span class="zh">ADPLL 两点，100 kHz 环路，−112 dBc/Hz DCO</span></td>
+      <td>2.7% <span class="sub">(&Delta;f1avg 250.3 kHz)</span></td><td>mask PASS</td></tr>
+  <tr><td>BT EDR2/EDR3</td><td><span class="en">same phase path + SRRC envelope (PAPR 3.2 dB)</span><span class="zh">同一相位路径 + SRRC 包络（PAPR 3.2 dB）</span></td>
+      <td>DEVM 1.8% <span class="sub">(lim 20/13%)</span></td><td>mask PASS</td></tr>
+  <tr><td>LTE 20 MHz 64/256-QAM</td><td><span class="en">ADPLL @122.88 MHz + compressive DPA + polar DPD</span><span class="zh">ADPLL @122.88 MHz + 压缩性 DPA + polar DPD</span></td>
+      <td><b>−53.3 dB</b> <span class="sub">(−37.2 no DPD)</span></td><td>ACLR1 −62.6 dBc, SEM PASS</td></tr>
+  <tr><td>WiFi 6 80/160 MHz 1024-QAM</td><td><span class="en">11-bit dithered DTC + 10-bit DPA + CFR 8.5 dB</span><span class="zh">11-bit dithered DTC + 10-bit DPA + CFR 8.5 dB</span></td>
+      <td><b>−40.9 / −39.5 dB</b></td><td>−54/−58 dBc, PASS</td></tr>
+  <tr><td>WiFi 7 320 MHz 4096-QAM</td><td><span class="en">as above, WiFi-7-class locked LO</span><span class="zh">同上，WiFi-7 级锁定 LO</span></td>
+      <td><b>−39.6 dB</b> <span class="sub">(req −38)</span></td><td>−58 dBc, PASS</td></tr>
+  <tr><td>NR FR1 100 MHz 256-QAM</td><td><span class="en">open-loop DTC @3.5 GHz, 30 kHz SCS</span><span class="zh">开环 DTC @3.5 GHz，30 kHz SCS</span></td>
+      <td><b>−37.1 dB</b> <span class="sub">(req −29)</span></td><td>−61.4 dBc, OBUE PASS</td></tr>
+  <tr><td>NR FR2 200 MHz 64-QAM</td><td><span class="en">DTC @28 GHz, 120 kHz SCS — mmWave-LO-limited</span><span class="zh">DTC @28 GHz，120 kHz SCS——毫米波 LO 受限</span></td>
+      <td><b>−27.6 dB</b> <span class="sub">(req −22)</span></td><td>−47.5 dBc, OBUE PASS</td></tr>
+</table>
+<figure>
+  <img src="img/spectrum_constellation_nb_wb.png" alt="nb/wb showcase">
+  <figcaption><span class="en">The two flavors side by side: BLE GFSK spectrum + unit-circle IQ trajectory;
+  WiFi-7 320 MHz spectrum + 4096-QAM constellation at −39.6 dB EVM.</span>
+  <span class="zh">两种架构并列：BLE GFSK 频谱 + 单位圆 IQ 轨迹；WiFi-7 320 MHz 频谱 + −39.6 dB EVM 的 4096-QAM
+  星座。</span></figcaption>
+</figure>
+<figure>
+  <img src="img/ex04_wifi_polar_chain.png" alt="ex04">
+  <figcaption><span class="en">ex04 — WiFi chain: constellation, CFR CCDF, and the skew-sensitivity chart with the
+  estimate-and-correct loop closed (0.5 ns of AM/PM skew costs 18 dB of EVM; calibration recovers it fully).</span>
+  <span class="zh">ex04——WiFi 链路：星座、CFR CCDF、skew 灵敏度与"估计-校正"闭环（0.5 ns AM/PM skew 损失 18 dB
+  EVM；校准完全恢复）。</span></figcaption>
+</figure>
+<figure>
+  <img src="img/ex06_lte20_polar_chain.png" alt="ex06">
+  <figcaption><span class="en">ex06 — LTE-20: polar DPD closes ACLR (exact LUT vs measured-fit within 0.5 dB), the
+  64-QAM constellation, and the DPA characteristic with its DPD inversion.</span>
+  <span class="zh">ex06——LTE-20：polar DPD 收拢 ACLR（精确 LUT 与测量拟合差 0.5 dB）、64-QAM 星座、DPA 特性及其
+  DPD 反演。</span></figcaption>
+</figure>
+
+<!-- ============================================================ -->
+<h2 id="cal"><span class="num">7</span><span class="en">The calibration suite</span><span class="zh">校准套件</span></h2>
+<table>
+  <tr><th><span class="en">Calibration</span><span class="zh">校准</span></th>
+      <th><span class="en">Observation</span><span class="zh">观测量</span></th>
+      <th><span class="en">Result</span><span class="zh">结果</span></th></tr>
+  <tr><td><span class="en">AM/PM skew (waveform)</span><span class="zh">AM/PM skew（波形域）</span></td>
+      <td><span class="en">env command vs |y| (cross-spectrum phase slope)</span><span class="zh">包络命令 vs |y|（互谱相位斜率）</span></td>
+      <td><span class="en">0.05-sample accuracy, EVM fully restored</span><span class="zh">0.05 采样精度，EVM 完全恢复</span></td></tr>
+  <tr><td><span class="en">AM/PM skew (power only)</span><span class="zh">AM/PM skew（仅功率）</span></td>
+      <td><span class="en">band-power detector, trial-delay search</span><span class="zh">带功率检波器，试探延迟搜索</span></td>
+      <td><span class="en">2.3 ns recovered within 0.25 ns</span><span class="zh">2.3 ns 恢复到 0.25 ns 内</span></td></tr>
+  <tr><td>Polar DPD</td>
+      <td><span class="en">DPA tables (factory) or binned |y| vs command (self-cal)</span><span class="zh">DPA 码表（出厂）或分箱 |y| vs 命令（自校准）</span></td>
+      <td><span class="en">LTE: −37.2 → −53.3 dB; fit within 0.5 dB of exact</span><span class="zh">LTE：−37.2 → −53.3 dB；拟合与精确反演差 0.5 dB</span></td></tr>
+  <tr><td><span class="en">Two-point gain, offline</span><span class="zh">两点增益（离线）</span></td>
+      <td><span class="en">LS vs the loop's exact highpass</span><span class="zh">对环路精确高通的最小二乘</span></td>
+      <td><span class="en">3% injected → 3.00% estimated, one shot</span><span class="zh">注入 3% → 一发估计 3.00%</span></td></tr>
+  <tr><td><span class="en">Two-point gain, background</span><span class="zh">两点增益（在线后台）</span></td>
+      <td><span class="en">sign-sign LMS on phase error &times; mod regressor, per ref cycle</span><span class="zh">相位误差 × 调制回归量的 sign-sign LMS，逐参考周期</span></td>
+      <td><span class="en">5% error slews out in ~40 ms; EVM to the matched floor</span><span class="zh">5% 误差 ~40 ms 滑出；EVM 回到匹配噪声底</span></td></tr>
+  <tr><td><span class="en">DTC gain/INL LUT</span><span class="zh">DTC 增益/INL LUT</span></td>
+      <td><span class="en">CW training, code-binned phase error</span><span class="zh">CW 训练，按码分箱的相位误差</span></td>
+      <td><span class="en">INL spur −47 → −92 dBc in 2 iterations; residual at the quant floor</span><span class="zh">两次迭代 INL 杂散 −47 → −92 dBc；残差达量化地板</span></td></tr>
+</table>
+<figure>
+  <img src="img/ex07_nr_polar_and_cal.png" alt="ex07">
+  <figcaption><span class="en">ex07 — NR FR1 constellation, DTC-cal spectra before/after, the background LMS
+  convergence trace, and DPA interleaving combing the first amplitude image (&gt;15 dB) out to N&times;f<sub>DPA</sub>.</span>
+  <span class="zh">ex07——NR FR1 星座、DTC 校准前后频谱、后台 LMS 收敛轨迹、DPA 交织把首个幅度镜像梳齿抑制
+  （&gt;15 dB）并推到 N×f<sub>DPA</sub>。</span></figcaption>
+</figure>
+
+<!-- ============================================================ -->
+<h2 id="memory"><span class="num">8</span><span class="en">Memory effects and the Cartesian DPD</span><span class="zh">记忆效应与 Cartesian DPD</span></h2>
+<p>
+  <span class="en">Polar LUTs fix what is code-static. Memory (supply/bias dynamics, output-network dispersion — the
+  chain's post-DPA <code>memory</code> hook) needs a Volterra-class predistorter in front of the split:
+  <code>cal.memory_dpd</code> fits the vendored ILA-GMP against the <em>entire chain</em> as a black-box PA. On a chain
+  with compressive DPA + AM-PM + linear/cubic memory it takes EVM from −19.8 to <b>−68.8 dB</b> and ACLR from −27.2 to
+  −54.2 dBc with 52 coefficients.</span>
+  <span class="zh">Polar LUT 只能修码字静态的部分。记忆效应（电源/偏置动态、输出网络色散——链路的 post-DPA
+  <code>memory</code> 挂钩）需要在分解之前放 Volterra 级预失真器：<code>cal.memory_dpd</code> 把<em>整条链</em>当黑盒
+  PA 做 vendored ILA-GMP 拟合。在含压缩 DPA + AM-PM + 线性/三次记忆的链路上，52 个系数把 EVM 从 −19.8 拉到
+  <b>−68.8 dB</b>、ACLR 从 −27.2 到 −54.2 dBc。</span>
+</p>
+<div class="callout">
+  <span class="en"><b>The fs_scale_fixed lesson.</b> The chain normalized its envelope full-scale to each run's peak.
+  Predistortion expands peaks, so the "PA" changed between ILA iterations — a non-static plant — and ILA's gain capped
+  at ~4 dB. Fixing the full scale (<code>ChainConfig.fs_scale_fixed</code>) restored the textbook convergence. The
+  failure mode is locked in a test so it cannot silently return.</span>
+  <span class="zh"><b>fs_scale_fixed 教训。</b>链路原本按每次运行的包络峰值归一化满量程。预失真会扩张峰值，于是
+  "PA" 在 ILA 迭代之间变了——被辨识对象非静态——ILA 收益封顶在 ~4 dB。固定满量程
+  （<code>ChainConfig.fs_scale_fixed</code>）后恢复教科书式收敛。该失效模式已被测试锁定，不会悄悄回归。</span>
+</div>
+<figure>
+  <img src="img/ex08_m4_dpd_mc_rtl.png" alt="ex08">
+  <figcaption><span class="en">ex08 — ACP-search skew cal cost surface; whole-chain ILA spectra; the mismatch Monte
+  Carlo (&sect;10); the exported fixed-point dual-LUT DPD.</span>
+  <span class="zh">ex08——ACP 搜索 skew 校准的代价面；整链 ILA 频谱；失配 Monte Carlo（第 10 节）；导出的定点双
+  LUT DPD。</span></figcaption>
+</figure>
+
+<!-- ============================================================ -->
+<h2 id="measured"><span class="num">9</span><span class="en">Measured-data DPA modeling</span><span class="zh">实测数据 DPA 建模</span></h2>
+<p>
+  <span class="en">Through the vendored OpenDPD data path, <code>polartx.measured</code> loads real digital-PA captures
+  (DPA_160MHz @ 640 MS/s, DPA_200MHz @ 800 MS/s), aligns them, and extracts binned AM-AM/AM-PM into a polartx DPA
+  (LUT + LUT). The headline number: the <b>static-polar NMSE is ≈ −20 dB</b> on both devices, versus OpenDPD's
+  published GMP-510 (with memory) at −39/−34 dB. That 15–19 dB gap <em>is</em> the device's memory, measured — the
+  quantitative justification for &sect;8. Running the WiFi-160 chain on the measured characteristics: −32.1 dB raw,
+  −50.0 dB with the polar LUT DPD; the remainder is memory.</span>
+  <span class="zh">经 vendored OpenDPD 数据通路，<code>polartx.measured</code> 加载真实数字 PA 采集
+  （DPA_160MHz @640 MS/s、DPA_200MHz @800 MS/s），对齐后分箱提取 AM-AM/AM-PM 构建 polartx DPA（LUT + LUT）。
+  关键数字：两颗器件的<b>静态极坐标 NMSE 都在 ≈ −20 dB</b>，而 OpenDPD 发表的含记忆 GMP-510 是 −39/−34 dB。
+  这 15–19 dB 的差距<em>就是</em>器件记忆效应的实测值——第 8 节存在的定量理由。用实测特性跑 WiFi-160 链路：
+  裸 −32.1 dB，polar LUT DPD 后 −50.0 dB；剩下的就是记忆。</span>
+</p>
+<figure>
+  <img src="img/ex09_measured_dpa.png" alt="ex09">
+  <figcaption><span class="en">ex09 — measured AM-AM scatter with LUT fits, the two devices' AM-PM (8.5° / 24.4°
+  span), and the chain spectrum on the measured device with/without polar DPD.</span>
+  <span class="zh">ex09——实测 AM-AM 散点与 LUT 拟合、两颗器件的 AM-PM（跨度 8.5°/24.4°）、实测器件上链路频谱的
+  polar DPD 前后对比。</span></figcaption>
+</figure>
+
+<!-- ============================================================ -->
+<h2 id="yield"><span class="num">10</span><span class="en">Monte Carlo, GUI, RTL export</span><span class="zh">Monte Carlo、GUI、RTL 导出</span></h2>
+<p>
+  <span class="en"><b>Monte Carlo</b> (<code>polartx.montecarlo</code>): per-chip seeded draws of DPA cell mismatch, DTC
+  gain error and AM/PM skew. The reference population (40 chips, skew &sigma; = 0.5 ns, −35 dB limit) yields 5% raw —
+  and <b>70% with the per-chip skew calibration in the loop</b>: the quantitative case for shipping the calibration.
+  <b>GUI</b>: <code>pip install -e .[gui]; streamlit run gui/Home.py</code> — chain workbench (10 presets + impairment
+  knobs), calibration lab, Monte Carlo; all computation in the headless-tested <code>polartx.guiutil</code>.
+  <b>RTL</b>: <code>polartx.export.rtl</code> quantizes the polar-DPD dual LUT (12-bit amplitude / 14-bit &pi;-scaled
+  phase), emits a <code>$readmemh</code> ROM Verilog module, a self-checking testbench and golden CSV — iverilog-verified,
+  256 vectors, zero mismatches.</span>
+  <span class="zh"><b>Monte Carlo</b>（<code>polartx.montecarlo</code>）：逐芯片种子抽取 DPA 单元失配、DTC 增益误差、
+  AM/PM skew。参考批次（40 芯片，skew σ=0.5 ns，−35 dB 限）裸良率 5%——<b>把逐芯片 skew 校准放进流程后 70%</b>：
+  这是"校准值得流片面积"的定量论证。<b>GUI</b>：<code>pip install -e .[gui]; streamlit run gui/Home.py</code>——
+  链路工作台（10 个预设 + 损伤旋钮）、校准实验室、Monte Carlo；计算全部在可脱离 GUI 测试的
+  <code>polartx.guiutil</code>。<b>RTL</b>：<code>polartx.export.rtl</code> 把 polar DPD 双 LUT 定点化（12-bit 幅度 /
+  14-bit π 标度相位），生成 <code>$readmemh</code> ROM Verilog、自校验 testbench 与金向量 CSV——iverilog 实测
+  256 向量零失配。</span>
+</p>
+
+<!-- ============================================================ -->
+<h2 id="lessons"><span class="num">11</span><span class="en">Lessons learned</span><span class="zh">经验教训</span></h2>
+<ol>
+  <li><span class="en"><b>DEVM can lie; ACP tells the truth.</b> Symbol-center metrics are blind to what happens at
+    envelope nulls; band power is not (&sect;3).</span>
+    <span class="zh"><b>DEVM 会说谎，ACP 说真话。</b>符号中心指标看不见包络过零点发生的事，带功率看得见（第 3 节）。</span></li>
+  <li><span class="en"><b>Quasi-constant-envelope and OFDM polar are different regimes.</b> Slew-limiting is an EDR
+    tool; OFDM's phase slews at 2&times;BW everywhere and the DAC must cover it (&sect;3).</span>
+    <span class="zh"><b>准恒包络与 OFDM polar 是两个领域。</b>斜率限制是 EDR 的工具；OFDM 相位处处以 2×BW 斜率摆动，
+    DAC 必须整体覆盖（第 3 节）。</span></li>
+  <li><span class="en"><b>Identification needs a static plant.</b> Per-run normalization silently broke ILA;
+    <code>fs_scale_fixed</code> (&sect;8).</span>
+    <span class="zh"><b>系统辨识需要静态对象。</b>逐次归一化悄悄毁了 ILA；<code>fs_scale_fixed</code>（第 8 节）。</span></li>
+  <li><span class="en"><b>A free-running Leeson LO is not a TX LO.</b> Without the flat-below-loop-BW locked
+    approximation the random-walk FM dominated everything at −10 dB EVM (&sect;4).</span>
+    <span class="zh"><b>自由振荡的 Leeson LO 不是发射机 LO。</b>不加"环内平坦"锁定近似时，随机游走 FM 把 EVM 直接
+    压到 −10 dB（第 4 节）。</span></li>
+  <li><span class="en"><b>Smoother is not better.</b> The smoothstep transition lost to linear at a fixed slew bound —
+    measure, don't assume (&sect;3).</span>
+    <span class="zh"><b>更平滑未必更好。</b>固定斜率上限下 smoothstep 输给线性插值——要测量，别想当然（第 3 节）。</span></li>
+  <li><span class="en"><b>Estimators hide errors.</b> The EVM lag/detrend recovery absorbs part of a two-point mismatch,
+    so the strict 6 dB/octave law is asserted on the raw modulator residual, not the estimator output.</span>
+    <span class="zh"><b>估计器会吸收误差。</b>EVM 的 lag/去趋势恢复会吃掉部分两点失配，因此严格的 6 dB/倍频程定律
+    在调制器原始残差上断言，而不是在估计器输出上。</span></li>
+  <li><span class="en"><b>Real DPAs are memory devices.</b> Static polar explains only −20 dB of the OpenDPD captures;
+    the polar LUTs are necessary, not sufficient (&sect;9).</span>
+    <span class="zh"><b>真实 DPA 是记忆器件。</b>静态极坐标只能解释 OpenDPD 实测的 −20 dB；polar LUT 是必要条件，
+    不是充分条件（第 9 节）。</span></li>
+</ol>
+
+<!-- ============================================================ -->
+<h2 id="repro"><span class="num">12</span><span class="en">Reproducing everything</span><span class="zh">复现方法</span></h2>
+<pre><code>pip install -e .            # numpy / scipy / matplotlib
+pytest tests/               # 87 tests: physical assertions + bit-exact regressions
+python examples/ex01_ble_gfsk_adpll.py     # ... through ex09; plots land in examples/out/
+
+pip install -e .[gui]
+streamlit run gui/Home.py   # chain workbench / calibration lab / Monte Carlo
+
+# measured-data example (ex09) additionally needs the OpenDPD clone (~55 MB):
+git clone --depth 1 https://github.com/lab-emi/OpenDPD.git ../OpenDPD</code></pre>
+<p class="sub">
+  <span class="en">Every number in this guide is printed by one of the nine examples; every law it states is asserted by
+  the test suite. Sibling libraries: <code>pll_simulator</code> (phase-domain engines), <code>PA_DPD</code>
+  (waveform/DPD infrastructure).</span>
+  <span class="zh">本指南中的每个数字都由九个示例之一打印；每条规律都有测试套件断言。姊妹库：
+  <code>pll_simulator</code>（相位域引擎）、<code>PA_DPD</code>（波形/DPD 基础设施）。</span>
+</p>
+
+</div>
+<script>
+function setLang(l) {
+  document.body.className = 'lang-' + l;
+  document.getElementById('langBtn').textContent = (l === 'zh') ? 'English' : '中文';
+  document.documentElement.lang = (l === 'zh') ? 'zh-CN' : 'en';
+  try { localStorage.setItem('polartx-doc-lang', l); } catch (e) {}
+}
+function toggleLang() {
+  setLang(document.body.className === 'lang-zh' ? 'en' : 'zh');
+}
+(function () {
+  var l = 'zh';
+  try { l = localStorage.getItem('polartx-doc-lang') || 'zh'; } catch (e) {}
+  setLang(l);
+})();
+</script>
+</body>
+</html>

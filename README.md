@@ -1,6 +1,8 @@
 # polartx — 数字极坐标发射机（Digital Polar TX）行为级仿真
 
-面向 RFIC 系统设计的数字极坐标发射机 Python 行为仿真库，覆盖两种架构、一条可组合的信号链：
+面向 RFIC 系统设计的数字极坐标发射机 Python 行为仿真库，覆盖两种架构、一条可组合的信号链。
+
+**图文设计指南**（中英双语）：浏览器打开 [`docs/index.html`](docs/index.html)——设计原理、九个成套示例的图文解读、经验教训、复现方法。
 
 ```
 Waveform → [CFR] → polar split → 包络路径（量化/skew/DPA 幅度码）─┐
@@ -108,3 +110,4 @@ src/polartx/
 | `ex06_lte20_polar_chain.py` | LTE20 全链路：DPD on/off/拟合、两点校准、E-UTRA ACLR/SEM、RX 频段预算、DPA 特性反演 |
 | `ex07_nr_polar_and_cal.py` | NR FR1/FR2 链路与星座、DTC LUT 校准前后频谱、在线两点 LMS 收敛轨迹、DPA 交织镜像 |
 | `ex08_m4_dpd_mc_rtl.py` | ACP 搜索 skew 校准、整链 ILA-GMP 记忆 DPD、Monte Carlo 良率直方图、DPD LUT RTL 导出+iverilog |
+| `ex09_measured_dpa.py` | **OpenDPD 真实 DPA 实测数据**：AM-AM/AM-PM 提取、静态极坐标 NMSE（≈−20 dB，与含记忆 GMP 的 −39 dB 差距即器件记忆）、实测特性入链 + polar DPD（−32→−50 dB）。需 `git clone --depth 1 https://github.com/lab-emi/OpenDPD.git ../OpenDPD` |
