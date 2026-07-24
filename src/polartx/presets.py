@@ -165,6 +165,58 @@ def wifi_dtc(bw: float = 160e6, qam: int = 1024, *, n_bits: int = 11,
     return TxPreset(tx=tx, fs_bb=fs_bb, make_waveform=make_waveform)
 
 
+# ------------------------------------------------------------ benchmarks
+# Literature-class configurations (pllsim ex14 convention): land in the
+# published performance CLASS with technology-plausible assumptions —
+# order-of-magnitude anchors, not chip reproductions.
+
+def bench_edge_polar_staszewski05() -> TxPreset:
+    """Staszewski JSSC'05-class EDGE digital polar TX: the first
+    all-digital polar transmitter.  fref = 26 MHz (GSM crystal), ADPLL
+    two-point, ~40 kHz loop, 3pi/8-8PSK at 270.833 ksym/s.  Published
+    class: rms EVM ~2-3% (spec limit 9%)."""
+    fref, fout = 26e6, 1.85e9
+    alpha, rho = design_adpll_dlf(fref, 40e3, 60.0)
+    # their normalized-DCO phase noise was excellent (-165 dBc/Hz @ 20 MHz
+    # on the low band scales to ~-120 @ 1 MHz here)
+    osc = OscConfig(f0=fout, gain=23e3, pn_dbchz=-120.0, pn_foffset=1e6,
+                    pn_f1f3=200e3, pn_floor_dbchz=-152.0)
+    pll = ADPLL(ADPLLConfig(
+        fref=fref, fout=fout, osc=osc, dlf=DLFConfig(alpha=alpha, rho=rho),
+        mode="tdc", tdc=TDCConfig(t_res=20e-12), int_band=(1e3, fref / 2)))
+    pm = ADPLLTwoPoint(pll, mode="response")
+    tx = PolarTX(ChainConfig(), pm, DPA(DPAConfig(n_bits=8)))
+
+    def make_waveform(n_syms: int = 400, seed: int = 1) -> Waveform:
+        from .waveforms.edr import edge_waveform
+        return edge_waveform(n_syms, fref, seed=seed)
+
+    return TxPreset(tx=tx, fs_bb=fref, make_waveform=make_waveform)
+
+
+def bench_lte20_polar_madoglio14() -> TxPreset:
+    """Madoglio ISSCC'14-class 32nm LTE-20 digital polar: published
+    class EVM ~ -30 dB / E-UTRA ACLR ~ -33 dBc at 64-QAM.  Modeled with
+    a 9-bit DPA, 1% residual two-point mismatch and a noisier cellular
+    DCO than the lte20_adpll default."""
+    return lte20_adpll(
+        qam=64, dp_gain=1.01,
+        dpa=DPAConfig(n_bits=9, n_thermo=6, sigma_cell=0.004,
+                      amam=("rapp", 2.5, 1.1), ampm_deg_poly=(0.0, 2.0, 3.0)))
+
+
+def bench_wifi11n_polar() -> TxPreset:
+    """802.11n-era 20 MHz digital polar (Intel-class): published class
+    EVM ~ -28 dB at 64-QAM (spec -25 dB).  9-bit DTC, 500 fs jitter,
+    a -100 dBc/Hz-class 2000s-era LO, 8-bit DPA."""
+    return wifi_dtc(
+        bw=20e6, qam=64, n_bits=9, jitter_rms_s=500e-15,
+        lo_pn=OscConfig(f0=5.9e9, gain=1.0, pn_dbchz=-100.0,
+                        pn_foffset=1e6, pn_f1f3=200e3,
+                        pn_floor_dbchz=-148.0),
+        dpa=DPAConfig(n_bits=8, n_thermo=5, sigma_cell=0.004))
+
+
 def nr_dtc(bw: float = 100e6, *, scs: float | None = None,
            qam: int | None = None, fout: float | None = None,
            lo_pn: OscConfig | None = None, **kw) -> TxPreset:

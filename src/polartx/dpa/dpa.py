@@ -12,7 +12,7 @@ from dataclasses import dataclass
 
 import numpy as np
 
-from .characteristics import amam_curve, ampm_curve
+from .characteristics import amam_curve, ampm_curve, efficiency_curve
 from .mismatch import code_amplitude_table, inl_dnl
 
 
@@ -25,6 +25,7 @@ class DPAConfig:
     amam: object = "ideal"          # "ideal" | ("rapp", p, drive) | ("lut", r_in, r_out)
     ampm_deg_poly: tuple = ()       # AM-PM [deg] polynomial in code/fullscale
     ampm_lut: tuple | None = None   # (r_in, deg) measured AM-PM, overrides poly
+    eff: tuple | None = ("scpa", 0.67, 0.85)   # drain-efficiency law
     seed: int = 0
 
     @property
@@ -64,3 +65,29 @@ class DPA:
     def inl_dnl(self) -> dict:
         """Array INL/DNL (mismatch only, before the AM-AM law)."""
         return self._mismatch
+
+    # -------------------------------------------------------- efficiency
+    def efficiency(self, code: np.ndarray) -> np.ndarray:
+        """Instantaneous drain efficiency per code (cfg.eff law)."""
+        if self.cfg.eff is None:
+            raise ValueError("DPAConfig.eff is None")
+        return efficiency_curve(self.cfg.eff,
+                                self.amp_table[np.asarray(code, np.int64)])
+
+    def average_efficiency(self, code: np.ndarray) -> dict:
+        """Modulated average: eta_avg = sum(P_out) / sum(P_dc).
+
+        P_out ∝ amp², P_dc = P_out/η(amp) evaluated per sample; the polar
+        TX's headline advantage over a linear PA is exactly this number
+        at OFDM backoff."""
+        code = np.asarray(code, np.int64)
+        amp = self.amp_table[code]
+        p_out = amp * amp
+        eta = efficiency_curve(self.cfg.eff, amp)
+        on = eta > 0
+        p_dc = np.zeros_like(p_out)
+        p_dc[on] = p_out[on] / eta[on]
+        tot_dc = p_dc.sum()
+        return {"eta_avg": float(p_out.sum() / tot_dc) if tot_dc else 0.0,
+                "p_out_norm": float(p_out.mean()),
+                "backoff_db": float(-10 * np.log10(max(p_out.mean(), 1e-30)))}

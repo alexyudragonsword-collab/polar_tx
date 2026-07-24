@@ -19,6 +19,8 @@ TWOPI = 2.0 * np.pi
 #: differential phase increments (Gray-coded index -> radians)
 _PI4DQPSK = np.array([1, 3, -1, -3]) * np.pi / 4.0
 _8DPSK = np.array([0, 1, 3, 2, 7, 6, 4, 5]) * np.pi / 4.0
+#: EDGE: 8PSK with a continuous 3pi/8 rotation per symbol
+_3PI8_8PSK = _8DPSK + 3.0 * np.pi / 8.0
 
 
 def _srrc(sps: int, rolloff: float, span: int) -> np.ndarray:
@@ -41,20 +43,25 @@ def _srrc(sps: int, rolloff: float, span: int) -> np.ndarray:
 
 
 def edr_dpsk(n_syms: int, fs: float, *, mode: str = "8dpsk",
-             rolloff: float = 0.4, span: int = 16, seed: int = 1) -> Waveform:
-    """EDR DPSK payload burst at symbol rate 1 Msym/s on the fs grid.
+             rate_sym: float = 1e6, rolloff: float = 0.4, span: int = 16,
+             seed: int = 1) -> Waveform:
+    """Differential-PSK payload burst on the fs grid.
 
-    fs must be an integer multiple of 1 MHz (samples/symbol).  The
+    Modes: "pi4dqpsk"/"8dpsk" (BT EDR2/EDR3, 1 Msym/s) and "3pi8_8psk"
+    (EDGE: 8PSK with a 3pi/8 per-symbol rotation, 270.833 ksym/s — pass
+    rate_sym=13e6/48).  fs must be an integer multiple of rate_sym.  The
     Waveform carries the ideal baseband, the symbol-instant indices and
     the ideal differential increments for the DEVM metric.
     """
-    rs = 1e6
+    rs = rate_sym
     sps_f = fs / rs
     sps = int(round(sps_f))
-    if abs(sps_f - sps) > 1e-9 or sps < 8:
-        raise ValueError("fs must be an integer multiple of 1 MHz, >= 8 sps")
-    table = {"8dpsk": _8DPSK, "pi4dqpsk": _PI4DQPSK}[mode]
-    bps = 3 if mode == "8dpsk" else 2
+    if abs(sps_f - sps) > 1e-6 or sps < 8:
+        raise ValueError("fs must be an integer multiple of rate_sym, "
+                         ">= 8 samples/symbol")
+    table = {"8dpsk": _8DPSK, "pi4dqpsk": _PI4DQPSK,
+             "3pi8_8psk": _3PI8_8PSK}[mode]
+    bps = 2 if mode == "pi4dqpsk" else 3
     bits = prbs(n_syms * bps, seed=seed).reshape(n_syms, bps)
     idx = bits @ (1 << np.arange(bps)[::-1])
     dphi = table[idx]
@@ -72,3 +79,12 @@ def edr_dpsk(n_syms: int, fs: float, *, mode: str = "8dpsk",
                     meta={"mode": mode, "rate_sym": rs, "sps": sps,
                           "dphi_ideal": dphi, "symbols": symbols,
                           "rolloff": rolloff, "span": span, "seed": seed})
+
+
+def edge_waveform(n_syms: int, fs: float = 26e6, *, seed: int = 1,
+                  rolloff: float = 0.3) -> Waveform:
+    """EDGE 3pi/8-8PSK burst (stylized: SRRC in place of the linearized
+    GMSK pulse) at 270.833 ksym/s; fs = 26 MHz gives 96 samples/symbol
+    on the classic GSM crystal grid."""
+    return edr_dpsk(n_syms, fs, mode="3pi8_8psk", rate_sym=13e6 / 48,
+                    rolloff=rolloff, seed=seed)

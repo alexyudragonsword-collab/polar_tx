@@ -35,6 +35,33 @@ def amam_curve(amam, r: np.ndarray) -> np.ndarray:
     raise ValueError(f"unknown amam spec: {amam!r}")
 
 
+def efficiency_curve(eff_spec, x: np.ndarray) -> np.ndarray:
+    """Drain efficiency vs normalized output amplitude x = n/N.
+
+    ("scpa", gamma, eta_peak): ideal class-D SCPA law (Yoo & Walling,
+    JSSC 2011) — output power ∝ x², switched-capacitor charging loss
+    ∝ x(1−x), so η(x) = η_peak · x² / (x² + γ·x(1−x)).  γ sets the
+    backoff rolloff (γ = 0.67 → 60% of peak at half amplitude); η_peak
+    absorbs switch/matching losses.
+    ("classb", eta_peak): η = η_peak · x (linear-PA comparison line).
+    ("lut", x_pts, eta_pts): measured curve, interpolated.
+    """
+    x = np.asarray(x, dtype=float)
+    kind = eff_spec[0]
+    if kind == "scpa":
+        _, gamma, eta_peak = eff_spec
+        num = x * x
+        den = num + gamma * x * (1.0 - x)
+        return eta_peak * np.divide(num, den, out=np.zeros_like(x),
+                                    where=den > 0)
+    if kind == "classb":
+        return eff_spec[1] * x
+    if kind == "lut":
+        _, xp, ep = eff_spec
+        return np.interp(x, np.asarray(xp, float), np.asarray(ep, float))
+    raise ValueError(f"unknown efficiency spec: {eff_spec!r}")
+
+
 def ampm_curve(ampm_deg_poly: tuple, r: np.ndarray) -> np.ndarray:
     """AM-PM [rad] vs normalized amplitude; poly coeffs low-order-first
     in degrees, referenced so ampm(0) contributes its constant term."""

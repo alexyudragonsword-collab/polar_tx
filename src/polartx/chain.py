@@ -75,6 +75,10 @@ class PolarResult:
         f, p = self.psd(nfft=nfft)
         return check_mask(f, p, mask)
 
+    def avg_efficiency(self, dpa) -> dict:
+        """Modulated average drain efficiency of this run's code stream."""
+        return dpa.average_efficiency(self.env_code)
+
 
 class PolarTX:
     def __init__(self, cfg: ChainConfig, phasemod: PhaseModulator, dpa: DPA,
