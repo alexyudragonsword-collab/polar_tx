@@ -35,8 +35,8 @@ class DPA:
     def __init__(self, cfg: DPAConfig):
         self.cfg = cfg
         rng = np.random.default_rng(cfg.seed)
-        raw = code_amplitude_table(cfg.n_bits, cfg.n_thermo, cfg.sigma_cell,
-                                   cfg.gradient, rng)
+        raw = code_amplitude_table(cfg.n_bits, min(cfg.n_thermo, cfg.n_bits),
+                                   cfg.sigma_cell, cfg.gradient, rng)
         r = raw / raw[-1]                       # normalized array amplitude
         self.amp_table = amam_curve(cfg.amam, r)
         self.phase_table = ampm_curve(cfg.ampm_deg_poly, r)

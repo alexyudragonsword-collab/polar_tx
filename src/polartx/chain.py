@@ -81,13 +81,17 @@ class PolarTX:
         env, phase, split_info = polar_split(x, c.env_floor)
         info["split"] = split_info
 
-        # envelope path: normalize to DPA full scale, skew, quantize
+        # envelope path: normalize to DPA full scale, skew, quantize.
+        # env_cmd is the ideal DSP-side command (pre-skew) — the reference
+        # a skew calibrator correlates against; the skew is an analog
+        # path impairment applied on the way to the DPA.
         fs_scale = c.env_headroom * float(env.max())
         env_cmd = env / fs_scale
+        env_path = env_cmd
         if c.env_skew_s:
-            env_cmd = np.clip(
+            env_path = np.clip(
                 fractional_delay(env_cmd, c.env_skew_s * wf.fs), 0.0, 1.0)
-        code = self.dpa.encode(env_cmd)
+        code = self.dpa.encode(env_path)
         if c.f_dpa is not None:
             hold = int(round(wf.fs / c.f_dpa))
             if abs(wf.fs / c.f_dpa - hold) > 1e-9:

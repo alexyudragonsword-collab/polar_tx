@@ -8,6 +8,7 @@ from typing import Callable
 from .chain import ChainConfig, PolarTX
 from .dpa.dpa import DPA, DPAConfig
 from .phasemod.adpll_tp import ADPLLTwoPoint
+from .phasemod.dtc_openloop import DTCPhaseModulator, DTCPMConfig
 from .vendor.pllsim.arch.adpll import ADPLL, ADPLLConfig, DLFConfig
 from .vendor.pllsim.blocks.oscillator import OscConfig
 from .vendor.pllsim.blocks.tdc import TDCConfig
@@ -60,3 +61,43 @@ def ble_1m_adpll(**kw) -> TxPreset:
 
 def ble_2m_adpll(**kw) -> TxPreset:
     return ble_adpll(rate=2e6, **kw)
+
+
+def wifi_dtc(bw: float = 160e6, qam: int = 1024, *, n_bits: int = 11,
+             range_ui: float = 1.0, fout: float = 5.9e9,
+             oversampling: int = 4, dither: bool = True,
+             jitter_rms_s: float = 50e-15, lo_pn: OscConfig | None = None,
+             lo_loop_bw: float = 400e3, inl_poly: tuple = (),
+             inl_sin: tuple = (),
+             cfr_papr_db: float | None = 8.5, env_floor: float = 0.02,
+             env_skew_s: float = 0.0, dpa: DPAConfig | None = None
+             ) -> TxPreset:
+    """WiFi 6/7 wideband polar TX: open-loop DTC phase modulator + DPA.
+
+    Baseband at bw x oversampling (up to 1.28 GS/s at 320 MHz); the DTC
+    covers one carrier UI with n_bits resolution.  Defaults: 11-bit
+    dithered DTC, 50 fs jitter, WiFi-class fixed LO (-108 dBc/Hz @ 1 MHz
+    on 5.9 GHz), CFR to 8.5 dB PAPR, 2% envelope hole punching, 10-bit
+    DPA with mild Rapp compression.
+    """
+    if lo_pn is None:
+        # WiFi-7-class synthesizer: -115 dBc/Hz @ 1 MHz on ~6 GHz,
+        # ~3 mrad integrated inside a 400 kHz loop
+        lo_pn = OscConfig(f0=fout, gain=1.0, pn_dbchz=-115.0,
+                          pn_foffset=1e6, pn_f1f3=200e3,
+                          pn_floor_dbchz=-155.0)
+    pm = DTCPhaseModulator(DTCPMConfig(
+        n_bits=n_bits, range_ui=range_ui, dither=dither,
+        jitter_rms_s=jitter_rms_s, fout=fout, lo_pn=lo_pn,
+        lo_loop_bw=lo_loop_bw, inl_poly=inl_poly, inl_sin=inl_sin))
+    dpa_ = DPA(dpa or DPAConfig(n_bits=10, n_thermo=6, sigma_cell=0.002))
+    tx = PolarTX(ChainConfig(cfr_papr_db=cfr_papr_db, env_floor=env_floor,
+                             env_skew_s=env_skew_s), pm, dpa_)
+    fs_bb = bw * oversampling
+
+    def make_waveform(n_symbols: int = 8, seed: int = 0) -> Waveform:
+        from .waveforms.ofdm import wifi_waveform
+        return wifi_waveform(bw, qam, n_symbols=n_symbols,
+                             oversampling=oversampling, seed=seed)
+
+    return TxPreset(tx=tx, fs_bb=fs_bb, make_waveform=make_waveform)
