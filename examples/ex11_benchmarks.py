@@ -10,8 +10,12 @@ performance CLASS — order-of-magnitude anchors, not chip reproductions:
   ~2-3% (spec 9%).
 - Madoglio et al., ISSCC 2014-class: 32 nm LTE-20 digital polar.
   Published class: EVM ~ -30 dB, E-UTRA ACLR limit -33 dBc met.
-- 802.11n-era 20 MHz digital polar (Intel-class): published class EVM
-  ~ -28 dB at 64-QAM (spec -25 dB).
+- Ben Bassat et al., ISSCC/JSSC 2020: a 27 dBm dual-band all-digital
+  polar TX supporting 160 MHz for Wi-Fi 6 (28 nm, switched-capacitor
+  digital PA + transformer combining).  Published class: 160 MHz
+  1024-QAM (MCS11), raw EVM ~ -29 dB at 6 dB backoff, -40 dB with DPD.
+  (The earlier 802.11n-era anchor, bench_wifi11n_polar, stays importable
+  for historical comparison.)
 """
 import os
 
@@ -23,7 +27,7 @@ import numpy as np
 from polartx.metrics.aclr_ext import aclr_multi
 from polartx.presets import (bench_edge_polar_staszewski05,
                              bench_lte20_polar_madoglio14,
-                             bench_wifi11n_polar)
+                             bench_wifi6_polar_benbassat20)
 from polartx.waveforms.ofdm import demodulate_ofdm
 
 OUT = os.path.join(os.path.dirname(__file__), "out")
@@ -64,19 +68,24 @@ ax[1].set_aspect("equal")
 ax[1].set(title=f"LTE-20 64-QAM — EVM {r.evm().db:.1f} dB",
           xlabel="I", ylabel="Q")
 
-# ------------------------------------------------- WiFi 11n-era polar
-p = bench_wifi11n_polar()
-wf = p.make_waveform(n_symbols=8, seed=0)
+# ---------------------- Intel Wi-Fi 6 160 MHz polar (Ben Bassat'20)
+p_raw = bench_wifi6_polar_benbassat20(dpd=False)
+wf = p_raw.make_waveform(n_symbols=8, seed=0)
+r_raw = p_raw.tx.run(wf, noise=True, seed=1)
+p = bench_wifi6_polar_benbassat20()          # DPD on
 r = p.tx.run(wf, noise=True, seed=1)
-print(f"{'802.11n-era 20 MHz polar (EVM)':>34s}{r.evm().db:10.1f} dB"
-      f"{'~-28 dB (spec -25)':>18s}")
+print(f"{'BenBassat ISSCC20 WiFi6 raw EVM':>34s}{r_raw.evm().db:10.1f} dB"
+      f"{'~-29 dB @6dB BO':>18s}")
+print(f"{'  with polar DPD':>34s}{r.evm().db:10.1f} dB"
+      f"{'-40 dB class':>18s}")
 rx = demodulate_ofdm(r.y, wf.ofdm_ref)
 g = np.vdot(wf.ofdm_ref.tx_symbols, rx) / np.vdot(wf.ofdm_ref.tx_symbols,
                                                   wf.ofdm_ref.tx_symbols)
 pts = (rx / g).ravel()
-ax[2].plot(pts.real, pts.imag, ".", ms=1.5, alpha=0.35, color="tab:green")
+ax[2].plot(pts.real, pts.imag, ".", ms=0.6, alpha=0.3, color="tab:green")
 ax[2].set_aspect("equal")
-ax[2].set(title=f"11n 64-QAM — EVM {r.evm().db:.1f} dB",
+ax[2].set(title=f"Wi-Fi 6 160 MHz 1024-QAM (Intel'20)\n"
+                f"raw {r_raw.evm().db:.1f} → DPD {r.evm().db:.1f} dB",
           xlabel="I", ylabel="Q")
 
 print("\nassumption labels are in each preset docstring; '-class' means "

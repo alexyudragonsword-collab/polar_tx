@@ -27,7 +27,7 @@ def _registry():
         "NR FR2 200 MHz": lambda **o: P.nr_dtc(bw=200e6, **o),
         "Bench: Staszewski'05 EDGE": lambda **o: P.bench_edge_polar_staszewski05(),
         "Bench: Madoglio'14 LTE-20": lambda **o: P.bench_lte20_polar_madoglio14(),
-        "Bench: 802.11n 20 MHz": lambda **o: P.bench_wifi11n_polar(),
+        "Bench: BenBassat'20 WiFi6": lambda **o: P.bench_wifi6_polar_benbassat20(),
     }
 
 

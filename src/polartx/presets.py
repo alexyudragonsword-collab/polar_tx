@@ -135,15 +135,17 @@ def wifi_dtc(bw: float = 160e6, qam: int = 1024, *, n_bits: int = 11,
              lo_loop_bw: float = 400e3, inl_poly: tuple = (),
              inl_sin: tuple = (),
              cfr_papr_db: float | None = 8.5, env_floor: float = 0.02,
-             env_skew_s: float = 0.0, dpa: DPAConfig | None = None
-             ) -> TxPreset:
+             env_skew_s: float = 0.0, dpa: DPAConfig | None = None,
+             dpd: bool = False) -> TxPreset:
     """WiFi 6/7 wideband polar TX: open-loop DTC phase modulator + DPA.
 
     Baseband at bw x oversampling (up to 1.28 GS/s at 320 MHz); the DTC
     covers one carrier UI with n_bits resolution.  Defaults: 11-bit
     dithered DTC, 50 fs jitter, WiFi-class fixed LO (-108 dBc/Hz @ 1 MHz
     on 5.9 GHz), CFR to 8.5 dB PAPR, 2% envelope hole punching, 10-bit
-    DPA with mild Rapp compression.
+    DPA with mild Rapp compression.  dpd=True pre-links the exact
+    PolarDPD LUTs (AM-AM/AM-PM inverse), modeling a factory-calibrated
+    predistorter — matters when the DPA is compressive.
     """
     if lo_pn is None:
         # WiFi-7-class synthesizer: -115 dBc/Hz @ 1 MHz on ~6 GHz,
@@ -156,8 +158,12 @@ def wifi_dtc(bw: float = 160e6, qam: int = 1024, *, n_bits: int = 11,
         jitter_rms_s=jitter_rms_s, fout=fout, lo_pn=lo_pn,
         lo_loop_bw=lo_loop_bw, inl_poly=inl_poly, inl_sin=inl_sin))
     dpa_ = DPA(dpa or DPAConfig(n_bits=10, n_thermo=6, sigma_cell=0.002))
+    dpd_ = None
+    if dpd:
+        from .cal.polar_dpd import PolarDPD
+        dpd_ = PolarDPD.from_dpa(dpa_)
     tx = PolarTX(ChainConfig(cfr_papr_db=cfr_papr_db, env_floor=env_floor,
-                             env_skew_s=env_skew_s), pm, dpa_)
+                             env_skew_s=env_skew_s), pm, dpa_, dpd=dpd_)
     fs_bb = bw * oversampling
 
     def make_waveform(n_symbols: int = 8, seed: int = 0) -> Waveform:
@@ -208,10 +214,34 @@ def bench_lte20_polar_madoglio14() -> TxPreset:
                       amam=("rapp", 2.5, 1.1), ampm_deg_poly=(0.0, 2.0, 3.0)))
 
 
+def bench_wifi6_polar_benbassat20(dpd: bool = True) -> TxPreset:
+    """Ben Bassat et al., ISSCC/JSSC 2020-class: a fully integrated
+    27 dBm dual-band all-digital polar TX supporting 160 MHz for Wi-Fi 6
+    (28 nm CMOS, switched-capacitor digital PA with transformer
+    combining).  Published class: 160 MHz MCS11 1024-QAM, raw EVM
+    ~ -30.5/-29 dB (low/high band) at 6 dB backoff, and EVM as low as
+    -40 dB with DPD at 7-8 dB backoff over 20-160 MHz.
+
+    Modeled here on the open-loop-DTC + SCPA wideband flavor at the
+    5 GHz high band: a compressive Rapp DPA with AM-PM gives the ~-29 dB
+    raw EVM; dpd=True (default) links the factory PolarDPD LUTs, landing
+    in the -40 dB class (LO-PN-limited toward the top of the band)."""
+    lo = OscConfig(f0=5.2e9, gain=1.0, pn_dbchz=-122.0, pn_foffset=1e6,
+                   pn_f1f3=200e3, pn_floor_dbchz=-158.0)
+    return wifi_dtc(
+        bw=160e6, qam=1024, fout=5.2e9, n_bits=13, jitter_rms_s=30e-15,
+        lo_pn=lo, cfr_papr_db=8.0, dpd=dpd,
+        dpa=DPAConfig(n_bits=11, n_thermo=7, sigma_cell=0.0015,
+                      amam=("rapp", 2.5, 1.15),
+                      ampm_deg_poly=(0.0, 2.0, 3.5)))
+
+
 def bench_wifi11n_polar() -> TxPreset:
-    """802.11n-era 20 MHz digital polar (Intel-class): published class
-    EVM ~ -28 dB at 64-QAM (spec -25 dB).  9-bit DTC, 500 fs jitter,
-    a -100 dBc/Hz-class 2000s-era LO, 8-bit DPA."""
+    """802.11n-era 20 MHz digital polar (Intel-class, ~2010): published
+    class EVM ~ -28 dB at 64-QAM (spec -25 dB).  9-bit DTC, 500 fs
+    jitter, a -100 dBc/Hz-class 2000s-era LO, 8-bit DPA.  Kept as a
+    historical anchor — see bench_wifi6_polar_benbassat20 for the modern
+    (ISSCC 2020) Intel Wi-Fi 6 result."""
     return wifi_dtc(
         bw=20e6, qam=64, n_bits=9, jitter_rms_s=500e-15,
         lo_pn=OscConfig(f0=5.9e9, gain=1.0, pn_dbchz=-100.0,

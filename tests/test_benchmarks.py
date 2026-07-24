@@ -4,10 +4,11 @@ from polartx.guiutil import PRESETS, build_preset, run_chain_report
 from polartx.metrics.aclr_ext import aclr_multi
 from polartx.presets import (bench_edge_polar_staszewski05,
                              bench_lte20_polar_madoglio14,
+                             bench_wifi6_polar_benbassat20,
                              bench_wifi11n_polar)
 
 BENCH_PRESETS = ["Bench: Staszewski'05 EDGE", "Bench: Madoglio'14 LTE-20",
-                 "Bench: 802.11n 20 MHz"]
+                 "Bench: BenBassat'20 WiFi6"]
 
 
 def test_benchmarks_are_registered_presets():
@@ -59,7 +60,21 @@ def test_lte20_polar_class():
     assert max(a["aclr1_lower_dbc"], a["aclr1_upper_dbc"]) < -33.0
 
 
-def test_wifi11n_polar_class():
+def test_wifi6_polar_benbassat_class():
+    """ISSCC/JSSC 2020 Intel Wi-Fi 6: 160 MHz 1024-QAM, raw EVM ~-29 dB,
+    -40 dB class with DPD."""
+    raw = bench_wifi6_polar_benbassat20(dpd=False)
+    r0 = raw.tx.run(raw.make_waveform(n_symbols=6, seed=0), noise=True,
+                    seed=1)
+    assert -32.0 < r0.evm().db < -26.0       # published raw ~-29/-30.5
+    p = bench_wifi6_polar_benbassat20()      # DPD on (default)
+    r1 = p.tx.run(p.make_waveform(n_symbols=6, seed=0), noise=True, seed=1)
+    assert r1.evm().db < -36.0               # -40 dB class (LO-limited @160)
+    assert r1.evm().db < r0.evm().db - 6.0   # DPD clearly helps
+
+
+def test_wifi11n_polar_still_available():
+    """Historical anchor, importable but no longer in the GUI registry."""
     p = bench_wifi11n_polar()
     r = p.tx.run(p.make_waveform(n_symbols=6, seed=0), noise=True, seed=1)
     assert -32.0 < r.evm().db < -25.0        # class ~-28, spec -25
