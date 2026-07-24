@@ -102,7 +102,12 @@ src/polartx/
   - **Monte Carlo 良率**（`polartx.montecarlo`）：逐芯片种子抽取 DPA 失配/DTC 增益/skew；参考案例 40 芯片 skew σ=0.5 ns：良率 5% → 逐芯片 skew 校准后 **70%**。
   - **双 GUI**：Streamlit 网页版（`gui/`，`streamlit run gui/Home.py`）与 PySide6 原生桌面版（`polartx.guiqt`，`polartx-gui` 入口，计算在工作线程、matplotlib 画布内嵌、offscreen 冒烟测试）——链路工作台/校准实验室/Monte Carlo 三页，计算全部在可脱离 GUI 测试的 `polartx.guiutil`。
   - **RTL 导出**（`polartx.export.rtl`）：polar DPD 双 LUT（12b 幅度/14b 有符号相位）定点化 → `$readmemh` ROM Verilog + 自校验 testbench + 金向量 CSV，iverilog 零失配验证（256 向量）。
-- **暂缓**：GUI（Streamlit/Qt，姊妹库模式可直接照搬）、Monte Carlo 良率、RTL/AMS 导出。
+- **补强轮 2（评审加固 + 三个新特性）— 已完成**：
+  - **真实 CI 首跑核实**：CI 触发在 `push:`，多平台矩阵（Ubuntu 3.10/3.11/3.12 + Windows + macOS）+ offscreen GUI + iverilog RTL + build 全部在真实 GitHub Actions 上**全绿**（此前误以为只在容器内跑过）。
+  - **Vendor 漂移检查**（`tools/vendor_check.py` + CI job）：逐文件解析出处头，对照钉定上游分类 verbatim/adapted/extended/extracted（后两类以 body sha256 钉在 `vendor_manifest.json`），未申报改动即 DRIFT 非零退出；当前 37 verbatim + 1 extended（adpll 两点扩展）+ 1 extracted（frac）无漂移。
+  - **架构选择器**（`polartx.selector`，仿 `pllsim.selector`）：给定需求排序窄带 ADPLL 两点 vs 宽带开环 DTC 并给建议。物理口径——两者共用综合器相噪，DTC 多付量化/抖动/INL 地板、ADPLL 环内 FM 无此地板但直通 DAC 覆盖 ~50 MHz 封顶；校准两点（0.2%）下窄带（BLE/LTE-20）判 ADPLL、宽带（WiFi/NR）判 DTC，未校准（0.5%）优势 ~10 MHz 即崩（正是在线两点校准的价值）。
+  - **更全 RTL/AMS 导出**（`export/rtl.py` 扩展）：DPA 分段温度计译码器（金向量温度计字为 Python 大整数——127 段需 2^127−1，溢出 int64）、polar CFR 削波级、DTC 相位累加器数据通路，三者 iverilog 零失配；DPA 的 **Verilog-AMS `wreal` RNM** 模型（数字↔模拟协仿桥，烘焙 LUT 自校验 <1e-8）。
+  - **多核 / Doherty 功率合路模型**（`dpa/combiner.py`）：N 核（主+峰）电流合路，信号（AM-AM/AM-PM 交接拐点、核间增益/相位失配）与效率（两区负载调制**导出**——理想 class-B 平顶、class-C 双凸；n_way=3 扩展 Doherty）皆由合路物理推出而非拟合；相位失配损耗与插损分离、失配蒙卡良率、`to_dpa_specs()` 直接入链。WiFi 80 MHz 1024-QAM 平均效率 43%→58% @ 同 −40.7 dB EVM。
 
 ## Examples
 
@@ -122,3 +127,7 @@ src/polartx/
 | `ex15_fir_notch_mlo.py` | **Borokhovich RFIC'26 Intel FIR+Doherty polar DTX（WiFi MLO）**：双抽头混合域 FIR 陷波器（`polartx.fir`，两条 DPA 链延迟合路，`H=1+e^{-jωD}`），陷波偏移可配（陷在共存 RX 信道抑制发射机带外噪声），实测机理——**FIR 只陷相关内容**故实际深度受随机噪底限制（确定性 ~25 dB，含随机噪底 ~9 dB）；恒 BW·Δf 律；数字 Doherty 6 dB 回退效率凸起（35% vs SCPA 23%） |
 | `ex12_supply_pushing.py` | 供电推压 AM→PM：6 dB/倍频程律、静态 LUT 与 ILA 均无法修复（GMP 基不表达纹波积分相位）、BLE 分数信道扫描（EVM 平坦） |
 | `ex13_packet_and_ramp.py` | EDR 整包（GFSK 头→guard→8DPSK 载荷分段指标）、功率 ramp 设计图（max-hold 瞬态 ACP：硬开关 −20 → 2 µs ramp −56 dBc） |
+| `ex14_fidelity.py` | 波形保真：SC-FDMA vs CP-OFDM（低 PAPR→更高 polar 平均效率）、接收机式 EVM（前导信道估计 + 导频 CPE 跟踪）、EDGE 线性化 GMSK C0、BLE 认证 Δf2max/调制指数容差 |
+| `ex16_architecture_selector.py` | **架构选择器**：目标制式决策表（BLE/LTE→ADPLL，WiFi/NR→DTC）+ EVM-带宽交叉图（校准两点 vs 未校准 ADPLL 曲线、~50 MHz 覆盖封顶） |
+| `ex17_rtl_ams_datapath.py` | **更全 RTL/AMS 导出**：CFR 削波 + DTC 相位累加器 + DPA 温度计译码器（iverilog 零失配）+ DPA Verilog-AMS `wreal` RNM 模型（数字↔模拟协仿桥，LUT 自校验） |
+| `ex18_doherty_combining.py` | **多核/Doherty 合路**：效率-回退（单核 vs 2/3 路、理想-B vs class-C）、核间失配交接拐点 + 蒙卡良率、Doherty-DPA 入 WiFi 链（平均效率 43%→58% @ 同 EVM） |
