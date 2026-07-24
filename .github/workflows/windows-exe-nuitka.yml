@@ -1,0 +1,144 @@
+name: windows-exe-nuitka
+
+# Nuitka ONEFILE Windows executables for BOTH GUIs — real C compilation
+# via MSVC (slower builds, faster startup than PyInstaller's self-
+# extract).  Each exe is smoke-tested on the runner before upload.
+# PyInstaller counterpart: windows-exe.yml.
+#
+# Trigger: Actions -> windows-exe-nuitka -> Run workflow.  The two GUIs
+# build as independent jobs.
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: "Existing release tag to attach the exes to (optional)"
+        required: false
+        default: ""
+
+jobs:
+  qt:
+    runs-on: windows-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - uses: actions/cache@v4
+        with:
+          path: ~\AppData\Local\Nuitka\Nuitka\Cache
+          key: nuitka-qt-${{ runner.os }}-py311-${{ hashFiles('pyproject.toml') }}
+          restore-keys: nuitka-qt-${{ runner.os }}-py311-
+      - name: Install
+        run: |
+          python -m pip install --upgrade pip
+          pip install .[guiqt] nuitka ordered-set zstandard
+      - name: Build desktop exe (Nuitka, windowed)
+        run: >
+          python -m nuitka packaging/launch_qt.py
+          --onefile --assume-yes-for-downloads --msvc=latest
+          --windows-console-mode=disable
+          --enable-plugin=pyside6
+          --include-package=polartx
+          --include-package-data=polartx
+          --include-package-data=matplotlib
+          --include-module=matplotlib.backends.backend_qtagg
+          --output-dir=build-nuitka
+          --output-filename=polartx-gui-qt-nuitka.exe
+      - name: Smoke desktop exe (opens, renders, exits clean)
+        env:
+          POLARTX_SMOKE: "1"
+        run: build-nuitka\polartx-gui-qt-nuitka.exe
+      - uses: actions/upload-artifact@v4
+        with:
+          name: polartx-gui-qt-nuitka-windows
+          path: build-nuitka/polartx-gui-qt-nuitka.exe
+      - name: Attach to release (optional)
+        if: inputs.release_tag != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: >
+          gh release upload "${{ inputs.release_tag }}"
+          build-nuitka/polartx-gui-qt-nuitka.exe --clobber
+
+  web:
+    runs-on: windows-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - uses: actions/cache/restore@v4
+        id: nuitka-cache
+        with:
+          path: ~\AppData\Local\Nuitka\Nuitka\Cache
+          key: nuitka-web-${{ runner.os }}-py311-${{ hashFiles('pyproject.toml') }}
+          restore-keys: nuitka-web-${{ runner.os }}-py311-
+      - name: Install
+        run: |
+          python -m pip install --upgrade pip
+          pip install .[gui] nuitka ordered-set zstandard
+      - name: Build web exe (Nuitka, console = server log)
+        run: >
+          python -m nuitka packaging/launch_web.py
+          --onefile --assume-yes-for-downloads --msvc=latest
+          --include-package=streamlit
+          --include-package-data=streamlit
+          --include-distribution-metadata=streamlit
+          --include-distribution-metadata=altair
+          --include-distribution-metadata=pyarrow
+          --include-distribution-metadata=pandas
+          --include-distribution-metadata=numpy
+          --include-distribution-metadata=pydeck
+          --include-distribution-metadata=pillow
+          --include-distribution-metadata=click
+          --include-distribution-metadata=protobuf
+          --include-package=polartx
+          --include-package-data=matplotlib
+          --include-raw-dir=gui=gui
+          --output-dir=build-nuitka
+          --output-filename=polartx-gui-web-nuitka.exe
+      # save the long compile cache even if the smoke step fails
+      - uses: actions/cache/save@v4
+        if: always()
+        with:
+          path: ~\AppData\Local\Nuitka\Nuitka\Cache
+          key: ${{ steps.nuitka-cache.outputs.cache-primary-key }}-${{ github.run_id }}
+      - name: Smoke web exe (must serve HTTP 200)
+        shell: pwsh
+        env:
+          POLARTX_NO_BROWSER: "1"
+        run: |
+          $p = Start-Process build-nuitka\polartx-gui-web-nuitka.exe -PassThru `
+            -RedirectStandardOutput exe-out.log -RedirectStandardError exe-err.log
+          $ok = $false
+          foreach ($i in 1..100) {
+            if ($p.HasExited) { break }
+            Start-Sleep -Seconds 3
+            try {
+              $r = Invoke-WebRequest http://localhost:8501 -UseBasicParsing -TimeoutSec 5
+              if ($r.StatusCode -eq 200) { $ok = $true; break }
+            } catch {}
+          }
+          Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue
+          Write-Output "== stdout =="; Get-Content exe-out.log -ErrorAction SilentlyContinue
+          Write-Output "== stderr =="; Get-Content exe-err.log -ErrorAction SilentlyContinue
+          if (-not $ok) { Write-Error "web exe never served HTTP 200"; exit 1 }
+          Write-Output "web exe served HTTP 200"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: polartx-gui-web-nuitka-windows
+          path: build-nuitka/polartx-gui-web-nuitka.exe
+      - name: Attach to release (optional)
+        if: inputs.release_tag != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: >
+          gh release upload "${{ inputs.release_tag }}"
+          build-nuitka/polartx-gui-web-nuitka.exe --clobber

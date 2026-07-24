@@ -1,0 +1,107 @@
+name: windows-exe
+
+# PyInstaller ONEFILE Windows executables for BOTH GUIs (fast build,
+# self-extracting).  Each exe is smoke-tested on the runner before
+# upload.  Nuitka counterpart: windows-exe-nuitka.yml.
+#
+# Trigger: Actions -> windows-exe -> Run workflow.  The desktop and web
+# GUIs build as independent jobs so one freezing issue never blocks the
+# other.
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: "Existing release tag to attach the exes to (optional)"
+        required: false
+        default: ""
+
+jobs:
+  qt:
+    runs-on: windows-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - name: Install
+        run: |
+          pip install -e .[guiqt]
+          pip install pyinstaller
+      - name: Build desktop exe (onefile, windowed)
+        run: >
+          pyinstaller --onefile --windowed --name polartx-gui-qt
+          --collect-all PySide6 --collect-submodules polartx
+          packaging/launch_qt.py
+      - name: Smoke desktop exe (open, render, auto-quit)
+        shell: pwsh
+        env:
+          POLARTX_SMOKE: "1"
+        run: |
+          $p = Start-Process -FilePath dist/polartx-gui-qt.exe -PassThru
+          $p | Wait-Process -Timeout 180
+          if ($p.ExitCode -ne 0) { exit 1 }
+      - uses: actions/upload-artifact@v4
+        with:
+          name: polartx-gui-qt-windows
+          path: dist/polartx-gui-qt.exe
+      - name: Attach to release (optional)
+        if: inputs.release_tag != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload "${{ inputs.release_tag }}" dist/polartx-gui-qt.exe --clobber
+
+  web:
+    runs-on: windows-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - name: Install
+        run: |
+          pip install -e .[gui]
+          pip install pyinstaller
+      - name: Build web exe (onefile, console = server log)
+        run: >
+          pyinstaller --onefile --name polartx-gui-web
+          --add-data "gui;gui"
+          --collect-all streamlit --copy-metadata streamlit
+          --collect-submodules polartx
+          packaging/launch_web.py
+      - name: Smoke web exe (must serve HTTP 200)
+        shell: pwsh
+        env:
+          POLARTX_NO_BROWSER: "1"
+        run: |
+          $p = Start-Process dist/polartx-gui-web.exe -PassThru `
+            -RedirectStandardOutput exe-out.log -RedirectStandardError exe-err.log
+          $ok = $false
+          foreach ($i in 1..100) {
+            if ($p.HasExited) { break }
+            Start-Sleep -Seconds 3
+            try {
+              $r = Invoke-WebRequest http://localhost:8501 -UseBasicParsing -TimeoutSec 5
+              if ($r.StatusCode -eq 200) { $ok = $true; break }
+            } catch {}
+          }
+          Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue
+          Write-Output "== stdout =="; Get-Content exe-out.log -ErrorAction SilentlyContinue
+          Write-Output "== stderr =="; Get-Content exe-err.log -ErrorAction SilentlyContinue
+          if (-not $ok) { Write-Error "web exe never served HTTP 200"; exit 1 }
+          Write-Output "web exe served HTTP 200"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: polartx-gui-web-windows
+          path: dist/polartx-gui-web.exe
+      - name: Attach to release (optional)
+        if: inputs.release_tag != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload "${{ inputs.release_tag }}" dist/polartx-gui-web.exe --clobber
