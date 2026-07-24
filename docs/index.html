@@ -393,18 +393,21 @@
   <span class="en"><b>Monte Carlo</b> (<code>polartx.montecarlo</code>): per-chip seeded draws of DPA cell mismatch, DTC
   gain error and AM/PM skew. The reference population (40 chips, skew &sigma; = 0.5 ns, −35 dB limit) yields 5% raw —
   and <b>70% with the per-chip skew calibration in the loop</b>: the quantitative case for shipping the calibration.
-  <b>GUI</b>: <code>pip install -e .[gui]; streamlit run gui/Home.py</code> — chain workbench (10 presets + impairment
-  knobs), calibration lab, Monte Carlo; all computation in the headless-tested <code>polartx.guiutil</code>.
+  <b>GUI</b>, two flavors over one headless-tested compute layer (<code>polartx.guiutil</code>): the Streamlit web
+  workbench (<code>pip install -e .[gui]; streamlit run gui/Home.py</code>) and a native PySide6 desktop app
+  (<code>pip install -e .[guiqt]; polartx-gui</code> — worker-thread computation, embedded matplotlib canvases,
+  offscreen-smoke-tested) — chain workbench (10 presets + impairment knobs), calibration lab, Monte Carlo.
   <b>RTL</b>: <code>polartx.export.rtl</code> quantizes the polar-DPD dual LUT (12-bit amplitude / 14-bit &pi;-scaled
   phase), emits a <code>$readmemh</code> ROM Verilog module, a self-checking testbench and golden CSV — iverilog-verified,
   256 vectors, zero mismatches.</span>
   <span class="zh"><b>Monte Carlo</b>（<code>polartx.montecarlo</code>）：逐芯片种子抽取 DPA 单元失配、DTC 增益误差、
   AM/PM skew。参考批次（40 芯片，skew σ=0.5 ns，−35 dB 限）裸良率 5%——<b>把逐芯片 skew 校准放进流程后 70%</b>：
-  这是"校准值得流片面积"的定量论证。<b>GUI</b>：<code>pip install -e .[gui]; streamlit run gui/Home.py</code>——
-  链路工作台（10 个预设 + 损伤旋钮）、校准实验室、Monte Carlo；计算全部在可脱离 GUI 测试的
-  <code>polartx.guiutil</code>。<b>RTL</b>：<code>polartx.export.rtl</code> 把 polar DPD 双 LUT 定点化（12-bit 幅度 /
-  14-bit π 标度相位），生成 <code>$readmemh</code> ROM Verilog、自校验 testbench 与金向量 CSV——iverilog 实测
-  256 向量零失配。</span>
+  这是"校准值得流片面积"的定量论证。<b>GUI</b> 两种形态共用可脱离 GUI 测试的计算层
+  <code>polartx.guiutil</code>：Streamlit 网页工作台（<code>pip install -e .[gui]; streamlit run gui/Home.py</code>）
+  与 PySide6 原生桌面版（<code>pip install -e .[guiqt]; polartx-gui</code>——计算在工作线程、matplotlib 画布内嵌、
+  offscreen 冒烟测试）——链路工作台（10 个预设 + 损伤旋钮）、校准实验室、Monte Carlo。<b>RTL</b>：
+  <code>polartx.export.rtl</code> 把 polar DPD 双 LUT 定点化（12-bit 幅度 / 14-bit π 标度相位），生成
+  <code>$readmemh</code> ROM Verilog、自校验 testbench 与金向量 CSV——iverilog 实测 256 向量零失配。</span>
 </p>
 
 <!-- ============================================================ -->

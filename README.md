@@ -23,8 +23,11 @@ pip install -e .          # numpy / scipy / matplotlib
 pytest tests/             # 80+ 项测试：物理量断言 + 与 padpd 逐位回归
 python examples/ex01_ble_gfsk_adpll.py      # 图落在 examples/out/
 
-pip install -e .[gui]     # Streamlit 工作台
+pip install -e .[gui]     # Streamlit 网页工作台
 streamlit run gui/Home.py
+
+pip install -e .[guiqt]   # PySide6 原生桌面版
+polartx-gui               # 或 python -m polartx.guiqt
 ```
 
 ```python
@@ -94,7 +97,7 @@ src/polartx/
   - **整链 ILA-GMP 记忆 DPD**（`cal/memory_dpd.py`，vendored ILA）：把整条极坐标链（压缩 DPA+AM-PM+线性/三次记忆）当黑盒 PA 拟合，EVM −19.8→**−68.8 dB**、ACLR −27.2→−54.2 dBc（52 系数）。关键发现：链路满量程必须固定（`fs_scale_fixed`），逐次归一化会让"PA"非静态、ILA 收益封顶在 ~4 dB（测试固化）。
   - **相位插值形状研究**：固定斜率上限下 smoothstep 因窗口加宽 1.5× 反而比线性插值差（轨迹 EVM 与 ACP 双输）——诚实结论入测试。
   - **Monte Carlo 良率**（`polartx.montecarlo`）：逐芯片种子抽取 DPA 失配/DTC 增益/skew；参考案例 40 芯片 skew σ=0.5 ns：良率 5% → 逐芯片 skew 校准后 **70%**。
-  - **Streamlit GUI**（`gui/`，`pip install -e .[gui]` 后 `streamlit run gui/Home.py`）：链路工作台/校准实验室/Monte Carlo 三页，计算全部在可脱离 GUI 测试的 `polartx.guiutil`。
+  - **双 GUI**：Streamlit 网页版（`gui/`，`streamlit run gui/Home.py`）与 PySide6 原生桌面版（`polartx.guiqt`，`polartx-gui` 入口，计算在工作线程、matplotlib 画布内嵌、offscreen 冒烟测试）——链路工作台/校准实验室/Monte Carlo 三页，计算全部在可脱离 GUI 测试的 `polartx.guiutil`。
   - **RTL 导出**（`polartx.export.rtl`）：polar DPD 双 LUT（12b 幅度/14b 有符号相位）定点化 → `$readmemh` ROM Verilog + 自校验 testbench + 金向量 CSV，iverilog 零失配验证（256 向量）。
 - **暂缓**：GUI（Streamlit/Qt，姊妹库模式可直接照搬）、Monte Carlo 良率、RTL/AMS 导出。
 

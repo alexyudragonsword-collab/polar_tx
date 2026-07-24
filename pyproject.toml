@@ -18,6 +18,10 @@ dependencies = [
 [project.optional-dependencies]
 test = ["pytest"]
 gui = ["streamlit>=1.30"]
+guiqt = ["PySide6>=6.5"]
+
+[project.scripts]
+polartx-gui = "polartx.guiqt.app:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
