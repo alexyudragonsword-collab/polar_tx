@@ -42,9 +42,52 @@ def _srrc(sps: int, rolloff: float, span: int) -> np.ndarray:
     return h / h.max()
 
 
+def linearized_gmsk_pulse(sps: int, bt: float = 0.3, span: int = 8, *,
+                          fit_sps: int = 16, n_train: int = 256,
+                          seed: int = 0) -> tuple[np.ndarray, float]:
+    """Laurent principal pulse C0 of GMSK, extracted numerically.
+
+    EDGE's TX pulse is the 'linearized GMSK' C0 (3GPP 45.004).  Rather
+    than transcribing the piecewise closed form, fit it: synthesize a
+    GMSK(BT) burst, model it as sum(a_k * c0(t - kT)) with the Laurent
+    pseudo-symbols a_k = j^(cumsum NRZ), and least-squares the pulse.
+    Returns (taps at sps samples/symbol, reconstruction NMSE dB) — the
+    NMSE (~ -23 dB, C0 carries >99% of the GMSK energy) is asserted in
+    tests as the extraction's self-check.
+    """
+    from scipy.signal import resample_poly
+
+    from ..vendor.pllsim.modulation import gmsk_trajectory
+    bits = prbs(n_train, seed=seed + 3)
+    _, ph = gmsk_trajectory(bits, float(fit_sps), 1.0, bt=bt, h=0.5)
+    x = np.exp(1j * ph)
+    nrz = 2 * bits - 1
+    a = np.exp(1j * np.pi / 2 * np.cumsum(nrz))
+    L = span * fit_sps
+    A = np.zeros((x.size, L), dtype=complex)
+    for k in range(n_train):
+        i0 = k * fit_sps
+        m = min(L, x.size - i0)
+        if m <= 0:
+            break
+        A[i0:i0 + m, :m] += a[k] * np.eye(m, dtype=complex)
+    c0, *_ = np.linalg.lstsq(A, x, rcond=None)
+    resid = x - A @ c0
+    nmse = float(10 * np.log10(np.mean(np.abs(resid) ** 2)
+                               / np.mean(np.abs(x) ** 2)))
+    c0 = np.real_if_close(c0 * np.exp(-1j * np.angle(c0[np.argmax(
+        np.abs(c0))])), tol=1000).real
+    if sps != fit_sps:
+        if sps % fit_sps:
+            raise ValueError("sps must be a multiple of fit_sps")
+        c0 = resample_poly(c0, sps // fit_sps, 1)
+    return c0 / np.max(np.abs(c0)), nmse
+
+
 def edr_dpsk(n_syms: int, fs: float, *, mode: str = "8dpsk",
              rate_sym: float = 1e6, rolloff: float = 0.4, span: int = 16,
-             seed: int = 1) -> Waveform:
+             seed: int = 1, pulse_taps: np.ndarray | None = None
+             ) -> Waveform:
     """Differential-PSK payload burst on the fs grid.
 
     Modes: "pi4dqpsk"/"8dpsk" (BT EDR2/EDR3, 1 Msym/s) and "3pi8_8psk"
@@ -68,17 +111,22 @@ def edr_dpsk(n_syms: int, fs: float, *, mode: str = "8dpsk",
     phase_sym = np.cumsum(dphi)
     symbols = np.exp(1j * phase_sym)
 
-    # SRRC pulse shaping on the fs grid
+    # pulse shaping on the fs grid (SRRC default; custom taps override,
+    # e.g. the linearized-GMSK C0 for EDGE)
     up = np.zeros(n_syms * sps, dtype=complex)
     up[::sps] = symbols
-    h = _srrc(sps, rolloff, span)
+    h = _srrc(sps, rolloff, span) if pulse_taps is None else \
+        np.asarray(pulse_taps, dtype=float)
     x = np.convolve(up, h, mode="full")[h.size // 2: h.size // 2 + up.size]
     x = x / np.sqrt(np.mean(np.abs(x) ** 2))
 
+    meta = {"mode": mode, "rate_sym": rs, "sps": sps,
+            "dphi_ideal": dphi, "symbols": symbols,
+            "rolloff": rolloff, "span": span, "seed": seed}
+    if pulse_taps is not None:
+        meta["pulse_taps"] = h
     return Waveform(x=x, fs=fs, bw=rs * (1 + rolloff), kind="dpsk",
-                    meta={"mode": mode, "rate_sym": rs, "sps": sps,
-                          "dphi_ideal": dphi, "symbols": symbols,
-                          "rolloff": rolloff, "span": span, "seed": seed})
+                    meta=meta)
 
 
 def edr_packet(n_payload_syms: int, fs: float, *, mode: str = "8dpsk",
@@ -116,10 +164,23 @@ def edr_packet(n_payload_syms: int, fs: float, *, mode: str = "8dpsk",
     return Waveform(x=x, fs=fs, bw=wf_p.bw, kind="dpsk", meta=meta)
 
 
+_LGMSK_CACHE: dict = {}
+
+
 def edge_waveform(n_syms: int, fs: float = 26e6, *, seed: int = 1,
-                  rolloff: float = 0.3) -> Waveform:
-    """EDGE 3pi/8-8PSK burst (stylized: SRRC in place of the linearized
-    GMSK pulse) at 270.833 ksym/s; fs = 26 MHz gives 96 samples/symbol
-    on the classic GSM crystal grid."""
+                  pulse: str = "lgmsk") -> Waveform:
+    """EDGE 3pi/8-8PSK burst at 270.833 ksym/s; fs = 26 MHz gives 96
+    samples/symbol on the classic GSM crystal grid.
+
+    pulse = "lgmsk" (default): the real EDGE TX pulse — the Laurent
+    principal pulse of GMSK BT=0.3 (numerically extracted, cached).
+    pulse = "srrc": the earlier stylized SRRC(0.3) for comparison."""
+    sps = int(round(fs / (13e6 / 48)))
+    if pulse == "lgmsk":
+        if sps not in _LGMSK_CACHE:
+            _LGMSK_CACHE[sps] = linearized_gmsk_pulse(sps)
+        taps, _ = _LGMSK_CACHE[sps]
+        return edr_dpsk(n_syms, fs, mode="3pi8_8psk", rate_sym=13e6 / 48,
+                        seed=seed, pulse_taps=taps)
     return edr_dpsk(n_syms, fs, mode="3pi8_8psk", rate_sym=13e6 / 48,
-                    rolloff=rolloff, seed=seed)
+                    rolloff=0.3, seed=seed)

@@ -94,6 +94,28 @@ def freq_deviation(y: np.ndarray, wf: Waveform, discard_syms: int = 4) -> dict:
     out = {"dev_hz": dev, "dev_avg_hz": float(np.mean(np.abs(dev))),
            "dev_min_hz": float(np.min(signed)),
            "wrong_sign_frac": float(np.mean(signed < 0))}
+
+    # certification-grade extensions --------------------------------
+    # delta-f2-max proper: the RF-PHY suite takes the MAXIMUM deviation
+    # within each symbol (not the center sample) and requires >= 99.9%
+    # of symbols above 185 kHz (LE 1M)
+    n_used = n_sym - 2 * discard_syms
+    k0 = int(discard_syms * sps)
+    per_sym_max = np.empty(n_used)
+    for i in range(n_used):
+        s0 = k0 + int(i * sps)
+        seg = f_inst[s0: s0 + int(sps)]
+        per_sym_max[i] = np.max(seg * sym[i])      # toward correct dir
+    out["df_sym_max_hz"] = per_sym_max
+    out["df2max_p001_hz"] = float(np.percentile(per_sym_max, 0.1))
+    out["frac_above_185k"] = float(np.mean(per_sym_max >= 185e3))
+
+    # carrier drift over the burst (spec: |drift| <= 50 kHz, rate <=
+    # 400 Hz/us): slope of the symbol-center deviations
+    k = np.arange(dev.size, dtype=float)
+    slope = np.polyfit(k, dev, 1)[0]               # Hz per symbol
+    out["drift_hz_per_us"] = float(slope * rate / 1e6)
+    out["drift_hz_total"] = float(slope * dev.size)
     if wf.meta.get("pattern") == "11110000":
         # middle two bits of each 4-run, BLE delta-f1-avg convention
         k = np.arange(signed.size)

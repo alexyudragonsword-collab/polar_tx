@@ -18,23 +18,43 @@ from ..waveforms.edr import _srrc
 def devm(y: np.ndarray, wf: Waveform) -> dict:
     m = wf.meta
     sps, span = m["sps"], m["span"]
-    h = _srrc(sps, m["rolloff"], span)
-    h = h / np.sum(h * h)                    # unit RC peak after matching
+    h = m.get("pulse_taps")
+    if h is None:
+        h = _srrc(sps, m["rolloff"], span)
+    h = np.asarray(h, float)
+    h = h / np.sum(h * h)                    # unit composite peak
     r = np.convolve(y, h, mode="full")[h.size // 2: h.size // 2 + y.size]
     ref = np.convolve(wf.x, h, mode="full")[h.size // 2: h.size // 2 + y.size]
     ref_a, r_a, info = align_delay(ref, r, max_lag=4 * sps)
 
     z = r_a[::sps] / info["gain"]
+    s = slice(span, -span if span else None)
+
+    if "pulse_taps" in m:
+        # Non-Nyquist pulse (EDGE linearized GMSK): the spec's EVM is
+        # measured against the IDEAL TRANSMITTED WAVEFORM, whose symbol
+        # samples carry the same pulse ISI — not against ISI-free
+        # constellation points (a receiver equalizes; the TX metric
+        # must not punish the pulse's own ISI).
+        zr = ref_a[::sps]
+        e = z - zr
+        rms = float(np.sqrt(np.mean(np.abs(e[s]) ** 2) /
+                            np.mean(np.abs(zr[s]) ** 2)))
+        return {"devm_rms": rms, "devm_pct": 100.0 * rms,
+                "devm_db": float(20.0 * np.log10(max(rms, 1e-12))),
+                "symbols_rx": z, "lag_total": info["lag_total"],
+                "reference": "ideal_waveform"}
+
     n_sym = z.size
     dphi = m["dphi_ideal"][1:n_sym]
     w = z[:-1] * np.exp(1j * dphi)           # expected next symbol
     e = z[1:] - w
-    s = slice(span, -span if span else None)
     rms = float(np.sqrt(np.mean(np.abs(e[s]) ** 2) /
                         np.mean(np.abs(w[s]) ** 2)))
     return {"devm_rms": rms, "devm_pct": 100.0 * rms,
             "devm_db": float(20.0 * np.log10(max(rms, 1e-12))),
-            "symbols_rx": z, "lag_total": info["lag_total"]}
+            "symbols_rx": z, "lag_total": info["lag_total"],
+            "reference": "differential"}
 
 
 def packet_metrics(y: np.ndarray, wf: Waveform) -> dict:

@@ -117,10 +117,13 @@ def lte20_adpll(qam: int = 64, *, mode: str = "response",
         dpd_ = PolarDPD.from_dpa(dpa_)
     tx = PolarTX(chain or ChainConfig(env_floor=0.05), pm, dpa_, dpd=dpd_)
 
-    def make_waveform(n_symbols: int = 28, seed: int = 0) -> Waveform:
+    def make_waveform(n_symbols: int = 28, seed: int = 0,
+                      sc_fdma: bool = True) -> Waveform:
+        # uplink SC-FDMA by default: what a handset polar TX transmits
         from .waveforms.ofdm import lte_waveform
         return lte_waveform(20e6, qam, n_symbols=n_symbols,
-                            oversampling=oversampling, seed=seed)
+                            oversampling=oversampling, seed=seed,
+                            sc_fdma=sc_fdma)
 
     return TxPreset(tx=tx, fs_bb=fref, make_waveform=make_waveform)
 

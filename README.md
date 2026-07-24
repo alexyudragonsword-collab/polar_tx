@@ -83,7 +83,7 @@ src/polartx/
 
 ## 建模口径与已知边界
 
-- 波形为**风格化**模型：正确 numerology（SCS/FFT/CP/占用带宽）+ 随机 QAM 数据音，无导频/前导/信道编码；mask 为工程化模板，非认证测试器（沿用 padpd 措辞）。
+- 波形保真度（F1–F4 升级后）：numerology 全部正确且逐位回归；**LTE 预设默认 SC-FDMA 真实上行**（PAPR 低 1.7 dB，平均效率 35.9→41.4%）；**EDGE 用数值提取的线性化 GMSK C0 脉冲**（提取 NMSE 自检，真实 GMSK 频谱裙，EVM 按规范对理想波形参考）；**BLE Δf2max 符号内最大值/99.9% 判据/漂移指标**齐备，调制指数容差窗有测试；OFDM 可选**导频 + 前导**与接收机式 EVM（`metrics.ofdm_rx.evm_rx`，确定性 CPE 完全恢复有证明；对快相噪已量化口径差 <1 dB）。**信道编码刻意排除**：TX 损伤链路上没有任何指标在比特映射之后测量。mask 仍为工程化模板。
 - `ADPLLTwoPoint` response 模式是线性化模型（无 TDC 回绕、dither×调制耦合）；杂散类结论以 event 模式与解析预测背书。event 模式逐参考周期（Python 循环 ~1–2 Mcycles/s），长帧验证用短段。
 - 幅度域 hole punching 钳制包络动态范围与包络带宽，但相位路径保留 π 翻转（DTC 按 mod 2π 处理）；相位轨迹平滑是后续里程碑。
 - LO 相噪用"环内平坦"锁定近似（`lo_loop_bw`）。
