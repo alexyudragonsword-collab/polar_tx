@@ -81,6 +81,41 @@ def edr_dpsk(n_syms: int, fs: float, *, mode: str = "8dpsk",
                           "rolloff": rolloff, "span": span, "seed": seed})
 
 
+def edr_packet(n_payload_syms: int, fs: float, *, mode: str = "8dpsk",
+               n_header_bits: int = 126, guard_us: float = 5.0,
+               seed: int = 1) -> Waveform:
+    """Full EDR packet timing: GFSK access-code/header (1 Mb/s) ->
+    guard (unmodulated carrier, ~5 us) -> DPSK sync+payload.
+
+    The GFSK section is constant-envelope; the guard carries the
+    GFSK-to-DPSK transition; the payload is SRRC DPSK.  meta['segments']
+    holds (start, stop) sample indices for {'gfsk','guard','dpsk'} so
+    segment metrics (header delta-f, payload DEVM) can be sliced from a
+    chain output that is sample-aligned with the input.
+    """
+    from ..vendor.pllsim.modulation import gmsk_trajectory
+
+    bits = prbs(n_header_bits, seed=seed + 100)
+    _, ph_g = gmsk_trajectory(bits, fs, 1e6, bt=0.5, h=0.5)
+    x_gfsk = np.exp(1j * ph_g)
+
+    n_guard = int(round(guard_us * 1e-6 * fs))
+    x_guard = np.full(n_guard, np.exp(1j * ph_g[-1]))   # phase-continuous
+
+    wf_p = edr_dpsk(n_payload_syms, fs, mode=mode, seed=seed)
+    x_dpsk = wf_p.x * np.exp(1j * np.angle(x_guard[-1]))
+
+    x = np.concatenate([x_gfsk, x_guard, x_dpsk])
+    x = x / np.sqrt(np.mean(np.abs(x) ** 2))
+    n0, n1 = x_gfsk.size, x_gfsk.size + n_guard
+    meta = dict(wf_p.meta)
+    meta.update({"packet": True, "header_bits": bits,
+                 "segments": {"gfsk": (0, n0), "guard": (n0, n1),
+                              "dpsk": (n1, x.size)},
+                 "payload_meta": wf_p.meta, "payload_x": x_dpsk})
+    return Waveform(x=x, fs=fs, bw=wf_p.bw, kind="dpsk", meta=meta)
+
+
 def edge_waveform(n_syms: int, fs: float = 26e6, *, seed: int = 1,
                   rolloff: float = 0.3) -> Waveform:
     """EDGE 3pi/8-8PSK burst (stylized: SRRC in place of the linearized

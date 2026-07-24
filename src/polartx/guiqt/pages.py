@@ -46,9 +46,18 @@ class ChainPage(Page):
         form.addRow("", self.dpd)
         self.btn = QPushButton("Run")
         self.btn.clicked.connect(self._go)
+        self.btn_save = QPushButton("Save setup…")
+        self.btn_save.clicked.connect(self._save)
+        self.btn_load = QPushButton("Load setup…")
+        self.btn_load.clicked.connect(self._load)
+        side = QVBoxLayout()
+        side.addWidget(self.btn)
+        side.addWidget(self.btn_save)
+        side.addWidget(self.btn_load)
+        side.addStretch(1)
         top = QHBoxLayout()
         top.addWidget(form_box, 1)
-        top.addWidget(self.btn)
+        top.addLayout(side)
         lay.addLayout(top)
         self.table_slot = QVBoxLayout()
         lay.addLayout(self.table_slot)
@@ -83,6 +92,43 @@ class ChainPage(Page):
         self._table = metrics_table(rep["metrics"])
         self.table_slot.addWidget(self._table)
         self.figbox.set_figure(rep["fig"])
+
+    # -------------------------------------------------- setup save/load
+    def _save(self):
+        from PySide6.QtWidgets import QFileDialog
+
+        from ..guiutil import save_setup
+        path, _ = QFileDialog.getSaveFileName(self, "Save setup", "",
+                                              "polartx setup (*.json)")
+        if path:
+            name = self.preset.currentText()
+            save_setup(path, name, self._overrides(name),
+                       seed=self.seed.value(),
+                       noise=self.noise.isChecked())
+
+    def apply_setup(self, doc: dict):
+        """Push a loaded setup back into the widgets."""
+        self.preset.setCurrentText(doc["preset"])
+        self.seed.setValue(int(doc["seed"]))
+        self.noise.setChecked(bool(doc["noise"]))
+        ov = doc["overrides"]
+        if "n_bits" in ov:
+            self.dtc_bits.setValue(int(ov["n_bits"]))
+        if "env_skew_s" in ov:
+            self.skew_ns.setValue(1e9 * float(ov["env_skew_s"]))
+        if "dp_gain" in ov:
+            self.dp_err_pct.setValue(100.0 * (float(ov["dp_gain"]) - 1.0))
+        if "dpd" in ov:
+            self.dpd.setChecked(bool(ov["dpd"]))
+
+    def _load(self):
+        from PySide6.QtWidgets import QFileDialog
+
+        from ..guiutil import load_setup
+        path, _ = QFileDialog.getOpenFileName(self, "Load setup", "",
+                                              "polartx setup (*.json)")
+        if path:
+            self.apply_setup(load_setup(path))
 
 
 class CalibrationPage(Page):

@@ -96,6 +96,43 @@ def run_chain_report(name: str, *, seed: int = 1, noise: bool = True,
     return {"metrics": metrics, "fig": fig, "result": res, "waveform": wf}
 
 
+def save_setup(path: str, preset: str, overrides: dict | None = None, *,
+               seed: int = 1, noise: bool = True) -> None:
+    """Persist a workbench setup as JSON: (preset name, overrides,
+    seed, noise) — the complete recipe run_chain_report needs.  Only
+    JSON-serializable overrides are accepted (all GUI knobs are)."""
+    import json
+    doc = {"polartx_setup": 1, "preset": preset,
+           "overrides": overrides or {}, "seed": seed, "noise": noise}
+    try:                                # fail fast on non-serializable
+        json.dumps(doc)
+    except TypeError as exc:
+        raise ValueError(f"overrides not JSON-serializable: {exc}") from exc
+    with open(path, "w") as f:
+        json.dump(doc, f, indent=2)
+
+
+def load_setup(path: str) -> dict:
+    """Load a setup saved by save_setup; validates the preset name."""
+    import json
+    with open(path) as f:
+        doc = json.load(f)
+    if doc.get("polartx_setup") != 1:
+        raise ValueError(f"{path} is not a polartx setup file")
+    if doc["preset"] not in PRESETS:
+        raise ValueError(f"unknown preset {doc['preset']!r}")
+    doc.setdefault("overrides", {})
+    doc.setdefault("seed", 1)
+    doc.setdefault("noise", True)
+    return doc
+
+
+def run_setup(doc: dict) -> dict:
+    """Execute a loaded setup through run_chain_report."""
+    return run_chain_report(doc["preset"], seed=int(doc["seed"]),
+                            noise=bool(doc["noise"]), **doc["overrides"])
+
+
 def run_mc_report(n_chips: int = 30, *, bw: float = 160e6,
                   skew_sigma_ns: float = 0.5, calibrated: bool = False,
                   limit_db: float = -35.0) -> dict:

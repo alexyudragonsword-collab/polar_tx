@@ -92,6 +92,7 @@ src/polartx/
 
 - **M2 — 已完成**：LTE 20 MHz 全链路（fft/信道带宽解耦 numerology、E-UTRA ACLR1/2、风格化 SEM）、polar DPD（精确反演 + 测量拟合）、离线两点增益估计、直通 DAC 范围模型 + 矢量 hole punching、BT ACP、RX 频段噪声解析预算。
 - **M3 — 已完成**：5G NR FR1/FR2 链路（38.104 numerology、NR OBUE/ACLR）、开环 DTC 增益/INL LUT 校准（CW 训练两次迭代，INL 杂散 −47→−92 dBc，残差达量化地板）、两点增益**在线** sign-sign LMS（event 引擎逐周期挂钩，5% 误差收敛到 0.1% 内、EVM 回到匹配噪声底）、DPA 交织（首镜像梳齿抑制 >15 dB 并推到 N×f_dpa）、post-DPA 记忆效应挂钩（线性记忆被 per-tone 均衡吸收的教科书行为有测试固化）。
+- **T1–T3（评审补强轮）— 已完成**：CI workflow（多平台 pytest + offscreen GUI + iverilog job）与 Windows exe 打包 workflow；**DPA 效率模型**（SCPA class-D 律，polar 的核心卖点定量化）；三个**文献级对标**；**供电推压 AM→PM**（静态 LUT 与 GMP-ILA 均无法修复的损伤，测试固化）；response↔event **PSD 级回归**；BLE 分数信道；DTC dither 码路径 **RTL**（Verilog≡整数金向量≡浮点引擎恒等式，三方逐位一致）；**并行 Monte Carlo**（spec 化、进程池、扩展抽取）；配置 JSON 序列化（GUI 存取）；**EDR 整包**时序与分段指标；**功率 ramp**（max-hold 瞬态 ACP 度量——Welch 平均看不见 keying 瞬态，这本身是个教训）。
 - **M4 — 已完成**：
   - **功率检波 skew 校准**（`estimate_skew_by_acp`）：只用带外功率观测的试探延迟搜索+抛物线细化，2.3 ns 注入恢复到 0.25 ns 内——芯片上只有功率检波器时的现实方案。
   - **整链 ILA-GMP 记忆 DPD**（`cal/memory_dpd.py`，vendored ILA）：把整条极坐标链（压缩 DPA+AM-PM+线性/三次记忆）当黑盒 PA 拟合，EVM −19.8→**−68.8 dB**、ACLR −27.2→−54.2 dBc（52 系数）。关键发现：链路满量程必须固定（`fs_scale_fixed`），逐次归一化会让"PA"非静态、ILA 收益封顶在 ~4 dB（测试固化）。
@@ -114,3 +115,7 @@ src/polartx/
 | `ex07_nr_polar_and_cal.py` | NR FR1/FR2 链路与星座、DTC LUT 校准前后频谱、在线两点 LMS 收敛轨迹、DPA 交织镜像 |
 | `ex08_m4_dpd_mc_rtl.py` | ACP 搜索 skew 校准、整链 ILA-GMP 记忆 DPD、Monte Carlo 良率直方图、DPD LUT RTL 导出+iverilog |
 | `ex09_measured_dpa.py` | **OpenDPD 真实 DPA 实测数据**：AM-AM/AM-PM 提取、静态极坐标 NMSE（≈−20 dB，与含记忆 GMP 的 −39 dB 差距即器件记忆）、实测特性入链 + polar DPD（−32→−50 dB）。需 `git clone --depth 1 https://github.com/lab-emi/OpenDPD.git ../OpenDPD` |
+| `ex10_dpa_efficiency.py` | **效率——polar 存在的理由**：SCPA vs class-B 回退效率律、各预设调制平均效率（恒包络 85% → WiFi CFR8.5 43%）、CFR 深度的效率-EVM 权衡 |
+| `ex11_benchmarks.py` | 文献级对标：Staszewski JSSC'05 EDGE polar（DEVM 1.9% vs 发表 ~2–3%）、Madoglio ISSCC'14 级 LTE-20（−31.2 vs ~−30 dB）、802.11n 级 20 MHz polar（−29.0 vs ~−28 dB） |
+| `ex12_supply_pushing.py` | 供电推压 AM→PM：6 dB/倍频程律、静态 LUT 与 ILA 均无法修复（GMP 基不表达纹波积分相位）、BLE 分数信道扫描（EVM 平坦） |
+| `ex13_packet_and_ramp.py` | EDR 整包（GFSK 头→guard→8DPSK 载荷分段指标）、功率 ramp 设计图（max-hold 瞬态 ACP：硬开关 −20 → 2 µs ramp −56 dBc） |

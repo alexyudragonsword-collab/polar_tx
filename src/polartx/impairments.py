@@ -20,6 +20,23 @@ def fractional_delay(x: np.ndarray, delay_samples: float) -> np.ndarray:
     return y.real if np.isrealobj(x) else y
 
 
+def apply_ramp(x: np.ndarray, fs: float, t_ramp_s: float) -> np.ndarray:
+    """Raised-cosine power ramp at both burst edges.
+
+    Every real TX ramps its output at packet boundaries; a too-fast
+    ramp is an amplitude step that splatters adjacent channels (the
+    classic BT/GSM ramp-mask spec).  t_ramp_s = 0 returns a hard-keyed
+    burst for comparison."""
+    x = np.asarray(x, dtype=complex).copy()
+    n = int(round(t_ramp_s * fs))
+    if n <= 0:
+        return x
+    ramp = 0.5 * (1.0 - np.cos(np.pi * (np.arange(n) + 0.5) / n))
+    x[:n] *= ramp
+    x[-n:] *= ramp[::-1]
+    return x
+
+
 def zoh_hold(x: np.ndarray, hold: int, offset: int = 0) -> np.ndarray:
     """Sample-and-hold every `hold`-th sample (DPA/phase update clock
     slower than the baseband grid) — produces the ZOH images at

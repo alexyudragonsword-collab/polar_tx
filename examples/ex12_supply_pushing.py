@@ -57,8 +57,10 @@ r0 = tx.run(wf, noise=False)
 dpd = fit_chain_ila(tx, wf)
 r1 = run_with_ila(tx, wf, dpd, noise=False)
 print(f"\nwhole-chain ILA on the pushing memory: EVM {r0.evm().db:.1f} -> "
-      f"{r1.evm().db:.1f} dB (partial: GMP's |x| memory basis is not a "
-      "supply-ripple model)")
+      f"{r1.evm().db:.1f} dB — NO recovery: the GMP basis (lagged x|x|^k)"
+      "\ncannot express phase from INTEGRATED envelope ripple; the fixes "
+      "are supply\nrejection, pushing reduction, or a dedicated "
+      "ripple-model predistorter.")
 a = ax[1]
 for res, lab, c in ((r0, "pushing, no DPD", "tab:red"),
                     (r1, "with whole-chain ILA", "tab:green")):

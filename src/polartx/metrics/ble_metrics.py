@@ -20,6 +20,31 @@ def phase_evm(y: np.ndarray, wf: Waveform, skip: int = 0) -> dict:
     return _phase_evm(np.unwrap(np.angle(y)), wf.phase_ideal, skip=skip)
 
 
+def acp_transient_db(y: np.ndarray, fs: float, *, offset_hz: float = 2e6,
+                     ch_bw: float = 1e6) -> float:
+    """Burst-transient adjacent-channel power, max-hold [dBc].
+
+    The ramp specs (BT/GSM 'power-vs-time in the adjacent channel') are
+    max-hold, not averaged: a keying step splatters for microseconds and
+    a Welch average dilutes it below visibility.  Downconvert the
+    adjacent channel, brick-wall to ch_bw, take the peak instantaneous
+    power relative to the in-channel mean."""
+    y = np.asarray(y, dtype=complex)
+    n = y.size
+    t = np.arange(n) / fs
+
+    def _band_env(fc):
+        z = y * np.exp(-2j * np.pi * fc * t)
+        spec = np.fft.fft(z)
+        f = np.fft.fftfreq(n, 1.0 / fs)
+        spec[np.abs(f) > ch_bw / 2] = 0.0
+        return np.abs(np.fft.ifft(spec)) ** 2
+
+    p_in = _band_env(0.0).mean()
+    p_adj = max(_band_env(offset_hz).max(), _band_env(-offset_hz).max())
+    return float(10 * np.log10(p_adj / p_in))
+
+
 def bt_acp(y: np.ndarray, fs: float, offsets_hz=(2e6, 3e6),
            ch_bw: float = 1e6, nfft: int = 8192) -> dict:
     """Bluetooth adjacent-channel power (stylized BR/EDR in-band spec):
