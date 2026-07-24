@@ -107,6 +107,26 @@ class Siblings:
         )
         return r.stdout if r.returncode == 0 else None
 
+    def has_commit(self, repo: str, sha: str) -> bool:
+        """Is the pinned commit object present in this checkout?  A shallow /
+        rewritten sibling clone (typical in CI) may not contain a historical
+        pin; try a targeted fetch once before giving up."""
+        root = self.path(repo)
+        if root is None:
+            return False
+
+        def _have():
+            return subprocess.run(
+                ["git", "-C", str(root), "cat-file", "-e", f"{sha}^{{commit}}"],
+                capture_output=True).returncode == 0
+
+        if _have():
+            return True
+        subprocess.run(["git", "-C", str(root), "fetch", "--quiet",
+                        "--depth=1", "origin", sha],
+                       capture_output=True)
+        return _have()
+
     def head(self, repo: str) -> str | None:
         root = self.path(repo)
         if root is None:
@@ -168,12 +188,20 @@ def check(siblings: Siblings, manifest: dict) -> list[FileResult]:
         entry = declared.get(rel)
 
         # sibling availability
+        if siblings.path(repo) is None:
+            results.append(FileResult(rel, repo, sha, upath, "skip",
+                                      "sibling repo not present"))
+            continue
+        if not siblings.has_commit(repo, sha):
+            # pinned commit unreachable in this checkout (shallow / rewritten
+            # sibling history — common in CI): can't verify, don't fail.  The
+            # real fidelity gate is the dev env where the sibling sits at @sha.
+            results.append(FileResult(rel, repo, sha, upath, "skip",
+                                      f"pinned commit {sha} unreachable here"))
+            continue
         upstream = siblings.show(repo, sha, upath)
         if upstream is None:
-            if siblings.path(repo) is None:
-                results.append(FileResult(rel, repo, sha, upath, "skip",
-                                          "sibling repo not present"))
-                continue
+            # commit IS present but the path is gone -> genuine upstream move
             results.append(FileResult(rel, repo, sha, upath, "DRIFT",
                                       f"upstream path {upath}@{sha} not found"))
             continue

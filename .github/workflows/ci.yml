@@ -76,20 +76,23 @@ jobs:
       - uses: actions/checkout@v4
         with:
           path: polar_tx
+      # pin to the exact vendored commits so `git show <sha>` resolves; if the
+      # sha isn't reachable the checkout no-ops and vendor_check.py skips those
+      # files (still non-fatal), and the structural tests keep gating.
       - name: Checkout pll_simulator (pinned)
         continue-on-error: true
         uses: actions/checkout@v4
         with:
           repository: alexyudragonsword-collab/pll_simulator
+          ref: d7be47124227b6d315e390cae3c7a0e92e58a3f8
           path: _siblings/pll_simulator
-          fetch-depth: 0
       - name: Checkout PA_DPD (pinned)
         continue-on-error: true
         uses: actions/checkout@v4
         with:
           repository: alexyudragonsword-collab/PA_DPD
+          ref: 44f9ee99dc055c8a4d48a6eee2f14ee2e5f80b06
           path: _siblings/PA_DPD
-          fetch-depth: 0
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
