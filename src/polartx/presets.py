@@ -259,6 +259,57 @@ def bench_wifi7_polar_degani24(dpd: bool = True) -> TxPreset:
                       eff=("scpa", 0.55, 0.35)))
 
 
+@dataclass
+class FIRTxPreset:
+    """A FIRDualTapTX plus its baseband waveform factory and the single-
+    tap baseline (for OOC-noise-suppression measurement)."""
+    fir_tx: object              # FIRDualTapTX
+    single_tx: PolarTX          # one tap alone (baseline)
+    fs_bb: float
+    make_waveform: Callable[..., Waveform]
+
+
+def bench_wifi7_mlo_fir_borokhovich26(bw: float = 40e6, *,
+                                      notch_offset_hz: float = 500e6,
+                                      osr: int = 50) -> FIRTxPreset:
+    """Borokhovich, Socher & Degani, RFIC 2026, Mo1C-3: "+28.5 dBm
+    5-7 GHz FIR and Doherty Polar DTX Achieving -155 dBc/Hz OOC Noise
+    for Wi-Fi MLO Applications" (14 nm FinFET, two DPA arrays + DTC
+    phase modulators, transformer-combined 2-tap mixed-domain FIR with
+    digital-Doherty load modulation).
+
+    Published: 40/80/160 MHz 802.11be, EVM -40.7/-41.7/-40.6 dB; the FIR
+    notch drops the OOC noise floor from ~-135 to -155 dBc/Hz (40/80) /
+    -145 (160) at a programmable offset; P_max +28.5 dBm, Doherty
+    efficiency bump at 6 dB backoff.
+
+    Returned as a FIRTxPreset: .fir_tx (dual-tap, notch at
+    notch_offset_hz), .single_tx (one tap, the -135 dBc/Hz baseline),
+    and make_waveform.  The baseband oversampling (osr) is deliberately
+    high so the notch offset (hundreds of MHz) sits inside the sim
+    Nyquist band."""
+    from .fir import FIRDualTapTX
+    # clean DPLL LO (the OOC floor is the DETERMINISTIC quantization/DPD
+    # residual, which the FIR notches; the random LO floor sits below it)
+    lo = OscConfig(f0=6.025e9, gain=1.0, pn_dbchz=-135.0, pn_foffset=1e6,
+                   pn_f1f3=200e3, pn_floor_dbchz=-178.0)
+    dpa = DPAConfig(n_bits=11, n_thermo=8, sigma_cell=0.0015,
+                    amam=("rapp", 2.5, 1.12), ampm_deg_poly=(0.0, 2.0, 3.0),
+                    eff=("doherty", 0.55, 0.35, 6.0))
+    base = wifi_dtc(bw=bw, qam=4096, fout=6.025e9, n_bits=13,
+                    jitter_rms_s=8e-15, lo_pn=lo, cfr_papr_db=8.0,
+                    dpd=True, dpa=dpa, oversampling=osr)
+    fir_tx = FIRDualTapTX(base.tx, notch_offset_hz=notch_offset_hz)
+
+    def make_waveform(n_symbols: int = 4, seed: int = 0) -> Waveform:
+        from .waveforms.ofdm import wifi_waveform
+        return wifi_waveform(bw, 4096, n_symbols=n_symbols,
+                             oversampling=osr, seed=seed)
+
+    return FIRTxPreset(fir_tx=fir_tx, single_tx=base.tx,
+                       fs_bb=base.fs_bb, make_waveform=make_waveform)
+
+
 def bench_wifi11n_polar() -> TxPreset:
     """802.11n-era 20 MHz digital polar (Intel-class, ~2010): published
     class EVM ~ -28 dB at 64-QAM (spec -25 dB).  9-bit DTC, 500 fs

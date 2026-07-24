@@ -44,6 +44,12 @@ def efficiency_curve(eff_spec, x: np.ndarray) -> np.ndarray:
     backoff rolloff (γ = 0.67 → 60% of peak at half amplitude); η_peak
     absorbs switch/matching losses.
     ("classb", eta_peak): η = η_peak · x (linear-PA comparison line).
+    ("doherty", gamma, eta_peak, bo_db): SCPA base law with a second
+    efficiency peak at bo_db backoff (load modulation) — the digital-
+    Doherty enhancement (Borokhovich, RFIC 2026): disabling half the
+    cells at backoff modulates the combiner load, holding efficiency up
+    near the backoff point.  Phenomenological (matches the measured
+    double-hump), not an ideal-class-B derivation.
     ("lut", x_pts, eta_pts): measured curve, interpolated.
     """
     x = np.asarray(x, dtype=float)
@@ -56,6 +62,17 @@ def efficiency_curve(eff_spec, x: np.ndarray) -> np.ndarray:
                                     where=den > 0)
     if kind == "classb":
         return eff_spec[1] * x
+    if kind == "doherty":
+        _, gamma, eta_peak, bo_db = eff_spec
+        x_bo = 10.0 ** (-bo_db / 20.0)              # backoff peak location
+        # below the backoff point: SCPA law rescaled to peak at x_bo
+        low = efficiency_curve(("scpa", gamma, eta_peak),
+                               np.clip(x / x_bo, 0.0, 1.0))
+        # above: load modulation holds efficiency up, classic Doherty dip
+        # (parabola: eta_peak at x_bo and at x=1, ~15% dip mid-way)
+        t = np.clip((x - x_bo) / (1.0 - x_bo), 0.0, 1.0)
+        high = eta_peak * (1.0 - 0.15 * 4.0 * t * (1.0 - t))
+        return np.where(x <= x_bo, low, high)
     if kind == "lut":
         _, xp, ep = eff_spec
         return np.interp(x, np.asarray(xp, float), np.asarray(ep, float))

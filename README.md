@@ -116,6 +116,7 @@ src/polartx/
 | `ex08_m4_dpd_mc_rtl.py` | ACP 搜索 skew 校准、整链 ILA-GMP 记忆 DPD、Monte Carlo 良率直方图、DPD LUT RTL 导出+iverilog |
 | `ex09_measured_dpa.py` | **OpenDPD 真实 DPA 实测数据**：AM-AM/AM-PM 提取、静态极坐标 NMSE（≈−20 dB，与含记忆 GMP 的 −39 dB 差距即器件记忆）、实测特性入链 + polar DPD（−32→−50 dB）。需 `git clone --depth 1 https://github.com/lab-emi/OpenDPD.git ../OpenDPD` |
 | `ex10_dpa_efficiency.py` | **效率——polar 存在的理由**：SCPA vs class-B 回退效率律、各预设调制平均效率（恒包络 85% → WiFi CFR8.5 43%）、CFR 深度的效率-EVM 权衡 |
-| `ex11_benchmarks.py` | 文献级对标（数字 polar TX 代际扫描 2005→2024）：Staszewski JSSC'05 EDGE（DEVM 2.0% vs ~2–3%）、Madoglio ISSCC'14 LTE-20（−31.1 vs ~−30 dB）、**Ben Bassat ISSCC/JSSC'20 Intel WiFi 6**（28nm，160 MHz 1024-QAM，裸 −28.6 / DPD −38 dB）、**Degani RFIC'24 Intel WiFi 7**（16nm FinFET，3.3V SC-DPA，320 MHz 4096-QAM/MCS13，EVM −37 属 −38 dB class，SCPA 峰值效率 34.7%）；802.11n 老对标保留为可导入历史锚点 |
+| `ex11_benchmarks.py` | 文献级对标（数字 polar TX 代际扫描 2005→2024）：Staszewski JSSC'05 EDGE（DEVM 2.0% vs ~2–3%）、Madoglio ISSCC'14 LTE-20（−31.1 vs ~−30 dB）、**Ben Bassat ISSCC/JSSC'20 Intel WiFi 6**（160 MHz 1024-QAM，裸 −28.6 / DPD −38 dB）、**Degani RFIC'24 Intel WiFi 7**（16nm FinFET，3.3V SC-DPA，320 MHz 4096-QAM/MCS13，EVM −37 属 −38 dB class，SCPA 峰值效率 34.7%）；802.11n 老对标保留为可导入历史锚点 |
+| `ex15_fir_notch_mlo.py` | **Borokhovich RFIC'26 Intel FIR+Doherty polar DTX（WiFi MLO）**：双抽头混合域 FIR 陷波器（`polartx.fir`，两条 DPA 链延迟合路，`H=1+e^{-jωD}`），陷波偏移可配（陷在共存 RX 信道抑制发射机带外噪声），实测机理——**FIR 只陷相关内容**故实际深度受随机噪底限制（确定性 ~25 dB，含随机噪底 ~9 dB）；恒 BW·Δf 律；数字 Doherty 6 dB 回退效率凸起（35% vs SCPA 23%） |
 | `ex12_supply_pushing.py` | 供电推压 AM→PM：6 dB/倍频程律、静态 LUT 与 ILA 均无法修复（GMP 基不表达纹波积分相位）、BLE 分数信道扫描（EVM 平坦） |
 | `ex13_packet_and_ramp.py` | EDR 整包（GFSK 头→guard→8DPSK 载荷分段指标）、功率 ramp 设计图（max-hold 瞬态 ACP：硬开关 −20 → 2 µs ramp −56 dBc） |
