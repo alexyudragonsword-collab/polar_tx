@@ -66,6 +66,41 @@ jobs:
       - name: RTL tests
         run: pytest tests/test_rtl_export.py -q
 
+  # Vendor drift: confirm src/polartx/vendor still matches pinned upstream.
+  # Cross-repo checkout of the siblings needs a token scoped to them; if that
+  # isn't available the sibling steps no-op and vendor_check.py skips those
+  # files (the structural header/manifest tests in the main matrix still gate).
+  vendor-drift:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: polar_tx
+      - name: Checkout pll_simulator (pinned)
+        continue-on-error: true
+        uses: actions/checkout@v4
+        with:
+          repository: alexyudragonsword-collab/pll_simulator
+          path: _siblings/pll_simulator
+          fetch-depth: 0
+      - name: Checkout PA_DPD (pinned)
+        continue-on-error: true
+        uses: actions/checkout@v4
+        with:
+          repository: alexyudragonsword-collab/PA_DPD
+          path: _siblings/PA_DPD
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Vendor drift check
+        working-directory: polar_tx
+        run: >
+          python tools/vendor_check.py
+          --siblings
+          pll_simulator=${{ github.workspace }}/_siblings/pll_simulator
+          PA_DPD=${{ github.workspace }}/_siblings/PA_DPD
+
   build:
     runs-on: ubuntu-latest
     steps:
