@@ -21,6 +21,22 @@ from .waveforms.base import Waveform
 
 
 @dataclass
+class SupplyConfig:
+    """DPA supply network and LO pushing: the polar-specific AM->PM.
+
+    The class-D DPA draws current ∝ envelope code; through the supply
+    impedance (1-pole R / tau decoupling model) that becomes a voltage
+    ripple, and LO/DCO supply pushing turns it into phase — an
+    envelope-correlated PM with memory that the static polar LUTs
+    cannot correct (test-locked; the Cartesian ILA partially can)."""
+
+    r_ohm: float = 0.15            # effective supply impedance
+    tau_s: float = 50e-9           # decoupling time constant
+    i_fs_a: float = 0.25           # DPA full-scale current draw
+    k_push_hz_v: float = 2e6       # LO/DCO pushing [Hz/V]
+
+
+@dataclass
 class ChainConfig:
     env_skew_s: float = 0.0        # AM-path delay relative to PM path (signed)
     cfr_papr_db: float | None = None
@@ -37,6 +53,7 @@ class ChainConfig:
     interleave: int = 1            # staggered DPA banks sharing f_dpa:
                                    # first amplitude image moves to
                                    # interleave * f_dpa (comb-filtered)
+    supply: SupplyConfig | None = None   # DPA supply pushing AM->PM
 
 
 @dataclass
@@ -135,8 +152,21 @@ class PolarTX:
         # phase path
         pm = self.phasemod.modulate(phase, wf.fs, noise=noise, seed=seed)
         info["phasemod"] = pm.diagnostics
+        phase_tx = pm.phase_out
 
-        y = np.mean([self.dpa(ck, pm.phase_out) for ck in codes],
+        # DPA supply pushing: envelope current -> ripple -> LO phase
+        if c.supply is not None:
+            from scipy.signal import lfilter
+            s = c.supply
+            i_dpa = s.i_fs_a * self.dpa.amp_table[code]
+            a1 = 1.0 / (1.0 + s.tau_s * wf.fs)      # 1-pole IIR
+            v = lfilter([a1], [1.0, -(1.0 - a1)], s.r_ohm * i_dpa)
+            v = v - v.mean()
+            dphi = 2.0 * np.pi * s.k_push_hz_v * np.cumsum(v) / wf.fs
+            phase_tx = phase_tx + dphi
+            info["supply_phase_rms_mrad"] = float(1e3 * np.std(dphi))
+
+        y = np.mean([self.dpa(ck, phase_tx) for ck in codes],
                     axis=0) * fs_scale
         if self.memory is not None:
             y = self.memory(y)

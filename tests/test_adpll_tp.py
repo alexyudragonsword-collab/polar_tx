@@ -49,6 +49,44 @@ def test_matched_evm_independent_of_loop_bw():
     assert max(e) < -80.0          # matched + noiseless = numerically exact
 
 
+def test_response_vs_event_psd_band_average():
+    """pllsim discipline at the spectrum level: the linearized response
+    engine and the cycle-accurate event engine must agree band-averaged
+    within 3 dB over the modulation band, not just on scalar EVM."""
+    import numpy as np
+
+    from polartx.vendor.padpd.metrics import psd
+
+    wf = ble_1m_adpll().make_waveform(n_bits=1500, seed=5)
+    ys = {}
+    for mode in ("response", "event"):
+        p = ble_1m_adpll(mode=mode)
+        ys[mode] = p.tx.run(wf, noise=True, seed=3).y
+    f_r, p_r = psd(ys["response"], 32e6, nfft=4096)
+    f_e, p_e = psd(ys["event"], 32e6, nfft=4096)
+    band = (np.abs(f_r) > 0.05e6) & (np.abs(f_r) < 8e6)
+    # band-average in ~octave bins to avoid bin-by-bin noise
+    edges = np.geomspace(0.05e6, 8e6, 10)
+    diffs = []
+    for lo, hi in zip(edges[:-1], edges[1:]):
+        m = band & (np.abs(f_r) >= lo) & (np.abs(f_r) < hi)
+        if m.sum() >= 4:
+            diffs.append(abs(p_r[m].mean() - p_e[m].mean()))
+    assert max(diffs) < 3.0
+
+
+def test_fractional_ble_channels():
+    """Real BLE hops 2.402-2.480 GHz: fractional FCW channels give the
+    same EVM as the integer-friendly 2.44 GHz preset (TDC-mode ADPLL
+    supports fractional FCW natively)."""
+    e = {}
+    for fout in (2.402e9, 2.440e9, 2.479e9):
+        p = ble_1m_adpll(fout=fout)
+        wf = p.make_waveform(n_bits=400, seed=5)
+        e[fout] = p.tx.run(wf, noise=True, seed=3).evm()["evm_db"]
+    assert max(e.values()) - min(e.values()) < 1.0
+
+
 def test_kdco_error_acts_as_dp_gain_error():
     """A Kdco estimate error scales the direct point by 1/(1+err) — same
     residual law as an explicit dp-gain error of the same size."""

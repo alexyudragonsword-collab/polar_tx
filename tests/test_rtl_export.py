@@ -40,3 +40,22 @@ def test_iverilog_golden(tmp_path):
     if out is None:
         pytest.skip("iverilog not installed")
     assert "PASS" in out and "FAIL" not in out
+
+
+def test_dtc_dither_rtl_matches_python_engine(tmp_path):
+    """The EFM1 dither Verilog is bit-exact against BOTH the integer
+    golden and the float engine's diff-of-floor-of-cumsum identity."""
+    from polartx.export.rtl import (efm1_int_golden, emit_dtc_dither_rtl,
+                                    verify_dither_with_iverilog)
+    from polartx.phasemod.dtc_openloop import _efm1_quantize
+    rng = np.random.default_rng(1)
+    xw = rng.integers(0, 1 << 19, 500)
+    g = efm1_int_golden(xw, 11, 8)
+    f = np.mod(_efm1_quantize(xw / 256.0), 1 << 11).astype(int)
+    assert np.array_equal(g, f)
+
+    emit_dtc_dither_rtl(str(tmp_path))
+    out = verify_dither_with_iverilog(str(tmp_path))
+    if out is None:
+        pytest.skip("iverilog not installed")
+    assert "PASS" in out and "FAIL" not in out
