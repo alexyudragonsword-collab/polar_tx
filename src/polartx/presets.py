@@ -55,15 +55,17 @@ def ble_adpll(rate: float = 1e6, *, mode: str = "response",
     return TxPreset(tx=tx, fs_bb=fref, make_waveform=make_waveform)
 
 
-def bt_edr_adpll(mode: str = "8dpsk", **kw) -> TxPreset:
+def bt_edr_adpll(dpsk: str = "8dpsk", **kw) -> TxPreset:
     """BT EDR2/EDR3 polar TX: same ADPLL two-point phase path as BLE, but
     the DPSK payload is NOT constant-envelope (SRRC, PAPR ~2-3 dB) — the
-    envelope path and DPA amplitude codes are genuinely exercised."""
+    envelope path and DPA amplitude codes are genuinely exercised.
+    dpsk selects the payload ("8dpsk"/"pi4dqpsk"); kw goes to ble_adpll
+    (mode= still selects the response/event phase-modulator engine)."""
     p = ble_adpll(**kw)
 
     def make_waveform(n_syms: int = 800, seed: int = 1) -> Waveform:
         from .waveforms.edr import edr_dpsk
-        return edr_dpsk(n_syms, p.fs_bb, mode=mode, seed=seed)
+        return edr_dpsk(n_syms, p.fs_bb, mode=dpsk, seed=seed)
 
     return TxPreset(tx=p.tx, fs_bb=p.fs_bb, make_waveform=make_waveform)
 
