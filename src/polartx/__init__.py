@@ -15,6 +15,8 @@ from .chain import ChainConfig, PolarResult, PolarTX
 from .dpa import DPA, DPAConfig
 from .phasemod import (ADPLLTwoPoint, DTCPhaseModulator, DTCPMConfig,
                        IdealPhaseModulator, PhaseModResult, PhaseModulator)
+from .cal.polar_dpd import PolarDPD
+from .montecarlo import MCResult, run_mc, wifi_chip_builder
 from .polar import bandwidth_expansion, polar_recombine, polar_split
 from .presets import (TxPreset, ble_1m_adpll, ble_2m_adpll, ble_adpll,
                       bt_edr_adpll, lte20_adpll, nr_dtc, wifi_dtc)
@@ -29,6 +31,7 @@ __all__ = [
     "PhaseModulator", "PhaseModResult", "IdealPhaseModulator",
     "ADPLLTwoPoint", "DTCPhaseModulator", "DTCPMConfig",
     "polar_split", "polar_recombine", "bandwidth_expansion",
+    "PolarDPD", "MCResult", "run_mc", "wifi_chip_builder",
     "TxPreset", "ble_adpll", "ble_1m_adpll", "ble_2m_adpll", "bt_edr_adpll",
     "lte20_adpll", "nr_dtc", "wifi_dtc",
     "Waveform", "edr_dpsk", "gfsk_ble", "lte_waveform", "nr_waveform",

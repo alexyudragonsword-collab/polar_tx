@@ -27,7 +27,12 @@ class ChainConfig:
     env_floor: float = 0.0         # hole-punch clamp, fraction of rms
     phase_slew_max_hz: float | None = None   # bound phase-path deviation
     phase_interp_win: int = 4      # interp widening around fast runs
+    phase_interp: str = "linear"   # "linear" | "smooth" transition shape
     env_headroom: float = 1.0      # full-scale = env_headroom * max envelope
+    fs_scale_fixed: float | None = None   # absolute full-scale (envelope
+                                   # units): makes the chain a STATIC
+                                   # system across runs — required for
+                                   # ILA/DPD fitting; None = per-run max
     f_dpa: float | None = None     # DPA amplitude update clock; None = fs_bb
     interleave: int = 1            # staggered DPA banks sharing f_dpa:
                                    # first amplitude image moves to
@@ -91,15 +96,17 @@ class PolarTX:
 
         env, phase, split_info = polar_split(
             x, c.env_floor, phase_slew_max_hz=c.phase_slew_max_hz,
-            fs=wf.fs, phase_interp_win=c.phase_interp_win)
+            fs=wf.fs, phase_interp_win=c.phase_interp_win,
+            phase_interp=c.phase_interp)
         info["split"] = split_info
 
         # envelope path: normalize to DPA full scale, skew, quantize.
         # env_cmd is the ideal DSP-side command (pre-skew) — the reference
         # a skew calibrator correlates against; the skew is an analog
         # path impairment applied on the way to the DPA.
-        fs_scale = c.env_headroom * float(env.max())
-        env_cmd = env / fs_scale
+        fs_scale = (c.fs_scale_fixed if c.fs_scale_fixed is not None
+                    else c.env_headroom * float(env.max()))
+        env_cmd = np.clip(env / fs_scale, 0.0, 1.0)
         env_path = env_cmd
         if self.dpd is not None:
             env_path, ph_corr = self.dpd.predistort(env_cmd)

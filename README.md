@@ -18,8 +18,11 @@ Waveform → [CFR] → polar split → 包络路径（量化/skew/DPA 幅度码�
 
 ```bash
 pip install -e .          # numpy / scipy / matplotlib
-pytest tests/             # 36 项测试：物理量断言 + 与 padpd 逐位回归
+pytest tests/             # 80+ 项测试：物理量断言 + 与 padpd 逐位回归
 python examples/ex01_ble_gfsk_adpll.py      # 图落在 examples/out/
+
+pip install -e .[gui]     # Streamlit 工作台
+streamlit run gui/Home.py
 ```
 
 ```python
@@ -84,7 +87,13 @@ src/polartx/
 
 - **M2 — 已完成**：LTE 20 MHz 全链路（fft/信道带宽解耦 numerology、E-UTRA ACLR1/2、风格化 SEM）、polar DPD（精确反演 + 测量拟合）、离线两点增益估计、直通 DAC 范围模型 + 矢量 hole punching、BT ACP、RX 频段噪声解析预算。
 - **M3 — 已完成**：5G NR FR1/FR2 链路（38.104 numerology、NR OBUE/ACLR）、开环 DTC 增益/INL LUT 校准（CW 训练两次迭代，INL 杂散 −47→−92 dBc，残差达量化地板）、两点增益**在线** sign-sign LMS（event 引擎逐周期挂钩，5% 误差收敛到 0.1% 内、EVM 回到匹配噪声底）、DPA 交织（首镜像梳齿抑制 >15 dB 并推到 N×f_dpa）、post-DPA 记忆效应挂钩（线性记忆被 per-tone 均衡吸收的教科书行为有测试固化）。
-- **M4 候选**：谱不对称 skew 估计、GMP 记忆 DPD（复用 vendored ILA）、相位轨迹平滑的进阶算法、Monte Carlo 良率、GUI、RTL 导出。
+- **M4 — 已完成**：
+  - **功率检波 skew 校准**（`estimate_skew_by_acp`）：只用带外功率观测的试探延迟搜索+抛物线细化，2.3 ns 注入恢复到 0.25 ns 内——芯片上只有功率检波器时的现实方案。
+  - **整链 ILA-GMP 记忆 DPD**（`cal/memory_dpd.py`，vendored ILA）：把整条极坐标链（压缩 DPA+AM-PM+线性/三次记忆）当黑盒 PA 拟合，EVM −19.8→**−68.8 dB**、ACLR −27.2→−54.2 dBc（52 系数）。关键发现：链路满量程必须固定（`fs_scale_fixed`），逐次归一化会让"PA"非静态、ILA 收益封顶在 ~4 dB（测试固化）。
+  - **相位插值形状研究**：固定斜率上限下 smoothstep 因窗口加宽 1.5× 反而比线性插值差（轨迹 EVM 与 ACP 双输）——诚实结论入测试。
+  - **Monte Carlo 良率**（`polartx.montecarlo`）：逐芯片种子抽取 DPA 失配/DTC 增益/skew；参考案例 40 芯片 skew σ=0.5 ns：良率 5% → 逐芯片 skew 校准后 **70%**。
+  - **Streamlit GUI**（`gui/`，`pip install -e .[gui]` 后 `streamlit run gui/Home.py`）：链路工作台/校准实验室/Monte Carlo 三页，计算全部在可脱离 GUI 测试的 `polartx.guiutil`。
+  - **RTL 导出**（`polartx.export.rtl`）：polar DPD 双 LUT（12b 幅度/14b 有符号相位）定点化 → `$readmemh` ROM Verilog + 自校验 testbench + 金向量 CSV，iverilog 零失配验证（256 向量）。
 - **暂缓**：GUI（Streamlit/Qt，姊妹库模式可直接照搬）、Monte Carlo 良率、RTL/AMS 导出。
 
 ## Examples
@@ -98,3 +107,4 @@ src/polartx/
 | `ex05_edr_pi_jump.py` | π 跳变问题：直通 DAC 范围 × 轨迹斜率限制对 DEVM/ACP/mask 的联合影响 |
 | `ex06_lte20_polar_chain.py` | LTE20 全链路：DPD on/off/拟合、两点校准、E-UTRA ACLR/SEM、RX 频段预算、DPA 特性反演 |
 | `ex07_nr_polar_and_cal.py` | NR FR1/FR2 链路与星座、DTC LUT 校准前后频谱、在线两点 LMS 收敛轨迹、DPA 交织镜像 |
+| `ex08_m4_dpd_mc_rtl.py` | ACP 搜索 skew 校准、整链 ILA-GMP 记忆 DPD、Monte Carlo 良率直方图、DPD LUT RTL 导出+iverilog |

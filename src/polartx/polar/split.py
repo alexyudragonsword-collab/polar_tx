@@ -15,7 +15,7 @@ TWOPI = 2.0 * np.pi
 
 def polar_split(x: np.ndarray, env_floor: float = 0.0,
                 phase_slew_max_hz: float | None = None, fs: float = 1.0,
-                phase_interp_win: int = 4
+                phase_interp_win: int = 4, phase_interp: str = "linear"
                 ) -> tuple[np.ndarray, np.ndarray, dict]:
     """Split x into (env, phase_unwrapped, info).
 
@@ -25,9 +25,16 @@ def polar_split(x: np.ndarray, env_floor: float = 0.0,
     phase_slew_max_hz (requires fs) bounds the phase-path slew — the
     direct-DAC tuning range a two-point ADPLL must cover: wherever the
     instantaneous deviation |dphi/dt|/2pi exceeds it (the pi-flips at
-    envelope nulls), the unwrapped phase is linearized over the
+    envelope nulls), the unwrapped phase is re-interpolated over the
     offending run widened by phase_interp_win samples each side, and the
     pass is iterated until the whole trajectory complies.
+
+    phase_interp selects the transition shape: "linear" (minimum peak
+    slew for a given window, but slope discontinuities at the window
+    edges) or "smooth" (smoothstep 3u^2-2u^3 S-curve: continuous
+    derivative, 1.5x the peak slew per window — the compliance loop
+    widens automatically, trading a longer transition for less spectral
+    splatter from the trajectory modification).
 
     info reports the EXACT EVM cost of the whole trajectory
     modification: mod_evm_db = |recombine(env', phase') - x|^2 / |x|^2.
@@ -62,8 +69,10 @@ def polar_split(x: np.ndarray, env_floor: float = 0.0,
                 i0, i1 = max(s, 0), min(e, phase.size - 1)
                 if i1 - i0 < 2:
                     continue
-                phase[i0:i1 + 1] = np.linspace(phase[i0], phase[i1],
-                                               i1 - i0 + 1)
+                u = np.linspace(0.0, 1.0, i1 - i0 + 1)
+                if phase_interp == "smooth":
+                    u = u * u * (3.0 - 2.0 * u)
+                phase[i0:i1 + 1] = phase[i0] + (phase[i1] - phase[i0]) * u
             info["n_interp_runs"] += int(starts.size)
             w *= 2
     if info["clamped_frac"] > 0.0 or info["n_interp_runs"] > 0:
