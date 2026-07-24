@@ -197,18 +197,25 @@ class ADPLL(PLLBase):
                  kdco_cal=None, tdc_cal=None, dtc_gain_init_error: float = 0.0,
                  mod_freq: np.ndarray | None = None, mod_dp_gain: float = 1.0,
                  dtc_gain_drift: np.ndarray | None = None,
-                 mod_freq_dp: np.ndarray | None = None) -> SimResult:
+                 mod_freq_dp: np.ndarray | None = None,
+                 dp_cal=None) -> SimResult:
         """mod_freq: two-point modulation frequency trajectory [Hz] on the
         fref grid (see pllsim.modulation); injected at the FCW (lowpass)
         and DCO (highpass) points.  mod_dp_gain scales the direct point:
         1.0 = matched, 1+eps models a direct-path gain error.  TDC mode.
         mod_freq_dp (polartx extension): separate trajectory for the
         direct point — models a range-limited direct-modulation DAC
-        (FCW path keeps the full trajectory).  None = use mod_freq."""
+        (FCW path keeps the full trajectory).  None = use mod_freq.
+        dp_cal (polartx extension): background two-point gain calibrator
+        (SignSignLMS-style .step(err, regressor)/.value): its value
+        REPLACES mod_dp_gain each cycle and is updated from the phase
+        error against the modulation regressor; trace recorded in
+        cal_traces['dp_gain']."""
         if self.cfg.mode == "tdc":
             return self._sim_tdc(n_cycles, noise, calibration, seed,
                                  f_start_offset, kdco_cal, tdc_cal,
-                                 mod_freq, mod_dp_gain, mod_freq_dp)
+                                 mod_freq, mod_dp_gain, mod_freq_dp,
+                                 dp_cal)
         return self._sim_bbpd(n_cycles, noise, calibration, seed,
                               f_start_offset, dtc_gain_init_error,
                               dtc_gain_drift)
@@ -222,9 +229,10 @@ class ADPLL(PLLBase):
 
     def _sim_tdc(self, n_cycles, noise, calibration, seed, f_start_offset,
                  kdco_cal, tdc_cal, mod_freq=None, mod_dp_gain=1.0,
-                 mod_freq_dp=None):
+                 mod_freq_dp=None, dp_cal=None):
         if mod_freq_dp is None:
             mod_freq_dp = mod_freq
+        dp_trace = np.empty(n_cycles) if dp_cal is not None else None
         c = self.cfg
         rng = np.random.default_rng(seed)
         tref = 1.0 / c.fref
@@ -291,8 +299,12 @@ class ADPLL(PLLBase):
                     iir_state[i] += lam * (x - iir_state[i])
                     x = iir_state[i]
                 otw = x * c.fref / kdco_hat + otw_center
+            if dp_cal is not None and calibration:
+                dp_cal.step(e_ui, mod_freq[n])
+                dp_trace[n] = dp_cal.value
             if mod_freq_dp is not None:              # highpass (direct) point
-                otw += mod_freq_dp[n] * mod_dp_gain / kdco_hat
+                g_dp = dp_cal.value if dp_cal is not None else mod_dp_gain
+                otw += mod_freq_dp[n] * g_dp / kdco_hat
             # DCO quantization with optional 1st-order dither
             if c.dco_dither_order > 0:
                 otw_q = np.floor(otw + qerr)
@@ -313,6 +325,8 @@ class ADPLL(PLLBase):
             sim.cal_traces["kdco_hat"] = np.asarray(kdco_cal.trace)
         if tdc_cal is not None:
             sim.cal_traces["tdc_cpp"] = np.asarray(tdc_cal.trace)
+        if dp_cal is not None:
+            sim.cal_traces["dp_gain"] = dp_trace
         return postprocess(sim, int_band=c.int_band)
 
     def _sim_bbpd(self, n_cycles, noise, calibration, seed, f_start_offset,

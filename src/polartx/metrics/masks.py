@@ -44,11 +44,28 @@ def lte_sem(bw: float = 20e6):
     ])
 
 
+def nr_sem(bw: float = 100e6):
+    """5G-NR-style OBUE template relative to peak PSD (stylized 38.101
+    general limits, offsets scaled with the channel BW)."""
+    e = bw / 2
+    return np.array([
+        (0.0, 0.0),
+        (e, 0.0),
+        (e + 0.05 * bw, -25.0),
+        (e + 0.25 * bw, -35.0),
+        (e + 0.50 * bw, -45.0),
+        (e + 2.00 * bw, -45.0),
+    ])
+
+
 def default_mask(wf: Waveform):
     if wf.kind == "gfsk":
         return ble_mask(wf.meta.get("rate", 1e6))
     if wf.kind == "dpsk":
         return ble_mask(1e6)      # BR/EDR channels share the 1 MHz raster
-    if wf.kind == "ofdm" and wf.meta.get("scs_hz") == 15e3:
+    scs = wf.meta.get("scs_hz")
+    if wf.kind == "ofdm" and scs == 15e3:
         return lte_sem(wf.bw)
+    if wf.kind == "ofdm" and scs in (30e3, 60e3, 120e3):
+        return nr_sem(wf.bw)
     return default_wifi_mask(wf.bw)

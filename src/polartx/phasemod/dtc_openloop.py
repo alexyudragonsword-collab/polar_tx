@@ -62,6 +62,12 @@ def _efm1_quantize(x: np.ndarray) -> np.ndarray:
 class DTCPhaseModulator(PhaseModulator):
     def __init__(self, cfg: DTCPMConfig):
         self.cfg = cfg
+        # calibration state (set by cal.dtc_cal.apply_dtc_correction):
+        # estimated gain error and a per-segment INL LUT [rad] vs
+        # normalized code, pre-subtracted from the command
+        self.gain_hat = 0.0
+        self.inl_lut_rad: np.ndarray | None = None
+        self.inl_lut_x: np.ndarray | None = None
 
     def _inl_rad(self, code: np.ndarray) -> np.ndarray:
         c = self.cfg
@@ -81,7 +87,13 @@ class DTCPhaseModulator(PhaseModulator):
         m = c.range_rad
         ph_w = np.mod(phase_cmd, m)
 
-        code_ideal = ph_w / c.lsb_rad
+        target = ph_w
+        if self.inl_lut_rad is not None:
+            target = target - np.interp(ph_w / m, self.inl_lut_x,
+                                        self.inl_lut_rad)
+        if self.gain_hat != 0.0:
+            target = target / (1.0 + self.gain_hat)
+        code_ideal = target / c.lsb_rad
         if c.dither:
             code = _efm1_quantize(code_ideal)
         else:

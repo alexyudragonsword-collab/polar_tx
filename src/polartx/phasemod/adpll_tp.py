@@ -49,6 +49,8 @@ class ADPLLTwoPoint(PhaseModulator):
         self.mode = mode
         self.settle_cycles = settle_cycles
         self.dp_range_hz = dp_range_hz
+        self.dp_cal = None      # background two-point gain calibrator
+                                # (SignSignLMS), event mode only
         self._ana = None
 
     # ----------------------------------------------------------- helpers
@@ -136,9 +138,11 @@ class ADPLLTwoPoint(PhaseModulator):
         if self.dp_range_hz is not None:
             mod_dp = np.clip(mod, -self.dp_range_hz, self.dp_range_hz)
             clip_frac = float(np.mean(mod_dp[settle:] != mod[settle:]))
+        if self.dp_cal is not None:
+            self.dp_cal.value = self.dp_gain     # start from the estimate
         sim = self.pll.simulate(mod.size, noise=noise, seed=seed,
                                 mod_freq=mod, mod_dp_gain=self.dp_gain,
-                                mod_freq_dp=mod_dp)
+                                mod_freq_dp=mod_dp, dp_cal=self.dp_cal)
         ideal = TWOPI * np.cumsum(mod) / c.fref
         actual = sim.phase_err_out
 

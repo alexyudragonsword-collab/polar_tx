@@ -20,12 +20,13 @@ def fractional_delay(x: np.ndarray, delay_samples: float) -> np.ndarray:
     return y.real if np.isrealobj(x) else y
 
 
-def zoh_hold(x: np.ndarray, hold: int) -> np.ndarray:
+def zoh_hold(x: np.ndarray, hold: int, offset: int = 0) -> np.ndarray:
     """Sample-and-hold every `hold`-th sample (DPA/phase update clock
     slower than the baseband grid) — produces the ZOH images at
-    multiples of fs/hold."""
+    multiples of fs/hold.  offset staggers the update instants
+    (interleaved DPA banks)."""
     if hold <= 1:
         return np.asarray(x).copy()
     x = np.asarray(x)
-    idx = (np.arange(x.size) // hold) * hold
-    return x[idx]
+    idx = ((np.arange(x.size) - offset) // hold) * hold + offset
+    return x[np.clip(idx, 0, x.size - 1)]

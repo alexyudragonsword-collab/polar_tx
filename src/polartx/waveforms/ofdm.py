@@ -83,6 +83,10 @@ def wifi_waveform(bw: float = 160e6, qam: int = 1024, *, n_symbols: int = 8,
 LTE_NUMEROLOGY = {1.4e6: (128, 6), 3e6: (256, 15), 5e6: (512, 25),
                   10e6: (1024, 50), 15e6: (1536, 75), 20e6: (2048, 100)}
 
+#: 5G NR (channel BW, SCS) -> (FFT size, resource blocks), 38.104-style
+NR_NUMEROLOGY = {(50e6, 30e3): (2048, 133), (100e6, 30e3): (4096, 273),
+                 (100e6, 120e3): (1024, 66), (200e6, 120e3): (2048, 132)}
+
 
 def lte_waveform(bw: float = 20e6, qam: int = 64, *, n_symbols: int = 28,
                  oversampling: int = 4, seed: int = 0) -> Waveform:
@@ -99,5 +103,23 @@ def lte_waveform(bw: float = 20e6, qam: int = 64, *, n_symbols: int = 28,
         cp_fraction=144 / 2048, window_fraction=1 / 64))
 
 
+def nr_waveform(bw: float = 100e6, scs: float = 30e3, qam: int = 256, *,
+                n_symbols: int = 8, oversampling: int = 4,
+                seed: int = 0) -> Waveform:
+    """5G-NR-style CP-OFDM channel: 38.104 FFT/RB table (100 MHz @ 30 kHz:
+    4096-FFT / 3276 tones; 200 MHz @ 120 kHz FR2: 2048-FFT / 1584 tones).
+    Stylized: data tones only, no DMRS/SSB."""
+    key = (bw, scs)
+    if key not in NR_NUMEROLOGY:
+        raise ValueError(f"(bw, scs) must be one of {sorted(NR_NUMEROLOGY)}")
+    fft, n_rb = NR_NUMEROLOGY[key]
+    return ofdm_waveform(GenOFDMConfig(
+        bandwidth_hz=bw, qam_order=qam, n_symbols=n_symbols,
+        oversampling=oversampling, seed=seed, scs_hz=scs,
+        fft_size_override=fft, n_active_tones=12 * n_rb,
+        cp_fraction=144 / 2048, window_fraction=1 / 64))
+
+
 __all__ = ["GenOFDMConfig", "OFDMWaveform", "demodulate_ofdm",
-           "ofdm_waveform", "papr_db", "wifi_waveform"]
+           "lte_waveform", "nr_waveform", "ofdm_waveform", "papr_db",
+           "wifi_waveform"]

@@ -44,6 +44,8 @@ print(res.evm().db, res.aclr())             # -39.6 dB, ACLR ~ -58 dBc
 | WiFi 6 80/160 MHz 1024-QAM | 11-bit dithered DTC + 10-bit DPA + CFR 8.5 dB | **−40.9 / −39.5 dB** | −54/−58 dBc，PASS |
 | WiFi 7 320 MHz 4096-QAM | 同上，WiFi-7 级锁定 LO | **−39.6 dB**（−38 达标） | −58 dBc，PASS |
 | LTE 20 MHz 64/256-QAM（M2） | ADPLL 两点 @122.88 MHz + 压缩性 DPA + polar DPD | **−53.3 dB**（无 DPD −37.2） | ACLR1 −62.6 dBc，SEM PASS |
+| 5G NR FR1 100 MHz 256-QAM（M3） | 开环 DTC @3.5 GHz，30 kHz SCS，491.52 MS/s | **−37.1 dB**（−29 达标） | ACLR1 −61.4 dBc，OBUE PASS |
+| 5G NR FR2 200 MHz 64-QAM（M3） | 开环 DTC @28 GHz，120 kHz SCS，983.04 MS/s，毫米波 LO 受限 | **−27.6 dB**（−22 达标） | ACLR1 −47.5 dBc，OBUE PASS |
 
 关键设计数据（examples 复现）：
 
@@ -81,7 +83,8 @@ src/polartx/
 ## 路线图
 
 - **M2 — 已完成**：LTE 20 MHz 全链路（fft/信道带宽解耦 numerology、E-UTRA ACLR1/2、风格化 SEM）、polar DPD（精确反演 + 测量拟合）、离线两点增益估计、直通 DAC 范围模型 + 矢量 hole punching、BT ACP、RX 频段噪声解析预算。
-- **M3 — 5G NR + 高级校准**：NR SCS 30/120 kHz @ 100/200 MHz、NR SEM/ACLR 口径、开环 DTC 增益/INL LUT 校准（复用 pllsim LUTCal）、两点增益**在线** sign-sign LMS（需 event 引擎逐周期挂钩）、DPA 交织与镜像研究、谱不对称 skew 估计、GMP 记忆效应包装。
+- **M3 — 已完成**：5G NR FR1/FR2 链路（38.104 numerology、NR OBUE/ACLR）、开环 DTC 增益/INL LUT 校准（CW 训练两次迭代，INL 杂散 −47→−92 dBc，残差达量化地板）、两点增益**在线** sign-sign LMS（event 引擎逐周期挂钩，5% 误差收敛到 0.1% 内、EVM 回到匹配噪声底）、DPA 交织（首镜像梳齿抑制 >15 dB 并推到 N×f_dpa）、post-DPA 记忆效应挂钩（线性记忆被 per-tone 均衡吸收的教科书行为有测试固化）。
+- **M4 候选**：谱不对称 skew 估计、GMP 记忆 DPD（复用 vendored ILA）、相位轨迹平滑的进阶算法、Monte Carlo 良率、GUI、RTL 导出。
 - **暂缓**：GUI（Streamlit/Qt，姊妹库模式可直接照搬）、Monte Carlo 良率、RTL/AMS 导出。
 
 ## Examples
@@ -94,3 +97,4 @@ src/polartx/
 | `ex04_wifi_polar_chain.py` | WiFi 80/160/320 EVM/ACLR/Mask 总表、星座图、CFR CCDF、skew 灵敏度与校准闭环 |
 | `ex05_edr_pi_jump.py` | π 跳变问题：直通 DAC 范围 × 轨迹斜率限制对 DEVM/ACP/mask 的联合影响 |
 | `ex06_lte20_polar_chain.py` | LTE20 全链路：DPD on/off/拟合、两点校准、E-UTRA ACLR/SEM、RX 频段预算、DPA 特性反演 |
+| `ex07_nr_polar_and_cal.py` | NR FR1/FR2 链路与星座、DTC LUT 校准前后频谱、在线两点 LMS 收敛轨迹、DPA 交织镜像 |

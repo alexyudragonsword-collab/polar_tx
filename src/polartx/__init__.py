@@ -17,9 +17,10 @@ from .phasemod import (ADPLLTwoPoint, DTCPhaseModulator, DTCPMConfig,
                        IdealPhaseModulator, PhaseModResult, PhaseModulator)
 from .polar import bandwidth_expansion, polar_recombine, polar_split
 from .presets import (TxPreset, ble_1m_adpll, ble_2m_adpll, ble_adpll,
-                      bt_edr_adpll, wifi_dtc)
+                      bt_edr_adpll, lte20_adpll, nr_dtc, wifi_dtc)
 from .waveforms import (Waveform, edr_dpsk, gfsk_ble, ofdm_waveform,
                         wifi_waveform)
+from .waveforms.ofdm import lte_waveform, nr_waveform
 
 __version__ = "0.1.0"
 
@@ -29,6 +30,7 @@ __all__ = [
     "ADPLLTwoPoint", "DTCPhaseModulator", "DTCPMConfig",
     "polar_split", "polar_recombine", "bandwidth_expansion",
     "TxPreset", "ble_adpll", "ble_1m_adpll", "ble_2m_adpll", "bt_edr_adpll",
-    "wifi_dtc",
-    "Waveform", "edr_dpsk", "gfsk_ble", "ofdm_waveform", "wifi_waveform",
+    "lte20_adpll", "nr_dtc", "wifi_dtc",
+    "Waveform", "edr_dpsk", "gfsk_ble", "lte_waveform", "nr_waveform",
+    "ofdm_waveform", "wifi_waveform",
 ]

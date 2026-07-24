@@ -29,6 +29,9 @@ class ChainConfig:
     phase_interp_win: int = 4      # interp widening around fast runs
     env_headroom: float = 1.0      # full-scale = env_headroom * max envelope
     f_dpa: float | None = None     # DPA amplitude update clock; None = fs_bb
+    interleave: int = 1            # staggered DPA banks sharing f_dpa:
+                                   # first amplitude image moves to
+                                   # interleave * f_dpa (comb-filtered)
 
 
 @dataclass
@@ -70,11 +73,12 @@ class PolarResult:
 
 class PolarTX:
     def __init__(self, cfg: ChainConfig, phasemod: PhaseModulator, dpa: DPA,
-                 dpd=None):
+                 dpd=None, memory=None):
         self.cfg = cfg
         self.phasemod = phasemod
         self.dpa = dpa
         self.dpd = dpd                 # PolarDPD or None
+        self.memory = memory           # post-DPA memory model: callable y->y
 
     def run(self, wf: Waveform, *, noise: bool = True, seed: int = 0
             ) -> PolarResult:
@@ -105,18 +109,27 @@ class PolarTX:
             env_path = np.clip(
                 fractional_delay(env_path, c.env_skew_s * wf.fs), 0.0, 1.0)
         code = self.dpa.encode(env_path)
+        codes = [code]
         if c.f_dpa is not None:
             hold = int(round(wf.fs / c.f_dpa))
             if abs(wf.fs / c.f_dpa - hold) > 1e-9:
                 raise ValueError("fs/f_dpa must be an integer")
-            code = zoh_hold(code, hold)
+            if hold % c.interleave:
+                raise ValueError("hold count must divide by interleave")
+            codes = [zoh_hold(code, hold, k * (hold // c.interleave))
+                     for k in range(c.interleave)]
             info["dpa_hold"] = hold
+            code = codes[0]
 
         # phase path
         pm = self.phasemod.modulate(phase, wf.fs, noise=noise, seed=seed)
         info["phasemod"] = pm.diagnostics
 
-        y = self.dpa(code, pm.phase_out) * fs_scale
+        y = np.mean([self.dpa(ck, pm.phase_out) for ck in codes],
+                    axis=0) * fs_scale
+        if self.memory is not None:
+            y = self.memory(y)
+            info["memory"] = True
         return PolarResult(y=y, fs=wf.fs, wf=wf, env_cmd=env_cmd,
                            env_code=code, phase_cmd=phase,
                            phase_out=pm.phase_out, info=info)

@@ -163,3 +163,29 @@ def wifi_dtc(bw: float = 160e6, qam: int = 1024, *, n_bits: int = 11,
                              oversampling=oversampling, seed=seed)
 
     return TxPreset(tx=tx, fs_bb=fs_bb, make_waveform=make_waveform)
+
+
+def nr_dtc(bw: float = 100e6, *, scs: float | None = None,
+           qam: int | None = None, fout: float | None = None,
+           lo_pn: OscConfig | None = None, **kw) -> TxPreset:
+    """5G NR wideband polar TX: open-loop DTC + DPA (wifi_dtc machinery).
+
+    Defaults by band: 100 MHz -> FR1 n78 (3.5 GHz, 30 kHz SCS, 256-QAM,
+    WiFi-7-class LO); 200 MHz -> FR2 n257 (28 GHz, 120 kHz SCS, 64-QAM,
+    -100 dBc/Hz @ 1 MHz mmWave LO).  NR EVM limits: 256-QAM 3.5%
+    (-29 dB), 64-QAM 8% (-22 dB)."""
+    fr2 = bw > 100e6
+    scs = scs or (120e3 if fr2 else 30e3)
+    qam = qam or (64 if fr2 else 256)
+    fout = fout or (28e9 if fr2 else 3.5e9)
+    if lo_pn is None and fr2:
+        lo_pn = OscConfig(f0=fout, gain=1.0, pn_dbchz=-100.0,
+                          pn_foffset=1e6, pn_f1f3=300e3,
+                          pn_floor_dbchz=-140.0)
+    p = wifi_dtc(bw=bw, qam=qam, fout=fout, lo_pn=lo_pn, **kw)
+
+    def make_waveform(n_symbols: int = 8, seed: int = 0) -> Waveform:
+        from .waveforms.ofdm import nr_waveform
+        return nr_waveform(bw, scs, qam, n_symbols=n_symbols, seed=seed)
+
+    return TxPreset(tx=p.tx, fs_bb=p.fs_bb, make_waveform=make_waveform)
