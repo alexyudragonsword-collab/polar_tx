@@ -40,6 +40,7 @@ print(res.evm().db, res.aclr())             # -39.6 dB, ACLR ~ -58 dBc
 |---|---|---|---|
 | BLE LE-1M | ADPLL 两点，环路 BW 100 kHz，−112 dBc/Hz DCO | 2.7%（相噪限制） | mask PASS |
 | BLE，直通点增益误差 5% | 同上（两点校准规格图见 ex01） | 6.4% | — |
+| BT EDR2 π/4-DQPSK / EDR3 8DPSK | 同一 ADPLL 相位路径 + **非恒包络** SRRC 包络路径（PAPR ~3.2 dB） | DEVM 1.8% / 1.8%（限值 20/13%） | mask PASS |
 | WiFi 6 80/160 MHz 1024-QAM | 11-bit dithered DTC + 10-bit DPA + CFR 8.5 dB | **−40.9 / −39.5 dB** | −54/−58 dBc，PASS |
 | WiFi 7 320 MHz 4096-QAM | 同上，WiFi-7 级锁定 LO | **−39.6 dB**（−38 达标） | −58 dBc，PASS |
 
@@ -55,14 +56,14 @@ print(res.evm().db, res.aclr())             # -39.6 dB, ACLR ~ -58 dBc
 ```
 src/polartx/
 ├── vendor/            # pllsim / padpd 改编移植子集（出处注释 + 单一接缝）
-├── waveforms/         # Waveform 容器；BLE GFSK；通用 OFDM（SCS 可配，WiFi 预设与 padpd 逐位一致）
+├── waveforms/         # Waveform 容器；BLE GFSK；BT EDR π/4-DQPSK/8DPSK（SRRC）；通用 OFDM（SCS 可配，WiFi 预设与 padpd 逐位一致）
 ├── polar/             # 极坐标分解/重构、hole punching、带宽扩展分析
 ├── phasemod/          # PhaseModulator ABC；ADPLLTwoPoint；DTCPhaseModulator
 ├── dpa/               # 温度计+二进制单元阵列失配（√N 律）、AM-AM(Rapp/LUT)/AM-PM、码表 DPA
 ├── chain.py           # ChainConfig + PolarTX + PolarResult（evm/aclr/psd/check_mask）
 ├── impairments.py     # 分数延迟 skew、ZOH
 ├── cal/               # AM/PM skew 估计（互谱相位斜率）与校正
-├── metrics/           # EVM/ACLR/Mask/CCDF/AM-AM（vendored）+ BLE Δf1/Δf2、BLE mask
+├── metrics/           # EVM/ACLR/Mask/CCDF/AM-AM（vendored）+ BLE Δf1/Δf2、EDR DEVM、BLE/BT mask
 ├── analysis/          # 解析对照：量化噪底、INL 杂散、ZOH 镜像、包络量化 EVM
 └── presets.py         # ble_1m/2m_adpll、wifi_dtc(80/160/320)
 ```
@@ -78,7 +79,7 @@ src/polartx/
 
 - **M2 — LTE 20 MHz 窄带 polar 全链路**：LTE numerology（fft_size 与信道带宽解耦）、E-UTRA ACLR/SEM、RX 频段噪声解析预算（NoisePath 合成）、polar DPD（AM-AM/AM-PM 逆 LUT，ILA 拟合）、两点增益 LMS 在线校准。
 - **M3 — 5G NR + 高级校准**：NR SCS 30/120 kHz @ 100/200 MHz、NR SEM/ACLR 口径、开环 DTC 增益/INL LUT 校准（复用 pllsim LUTCal）、DPA 交织与镜像研究、谱不对称 skew 估计、GMP 记忆效应包装。
-- **暂缓**：GUI（Streamlit/Qt，姊妹库模式可直接照搬）、Monte Carlo 良率、RTL/AMS 导出、BT EDR DPSK。
+- **暂缓**：GUI（Streamlit/Qt，姊妹库模式可直接照搬）、Monte Carlo 良率、RTL/AMS 导出。
 
 ## Examples
 

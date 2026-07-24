@@ -43,9 +43,12 @@ class PolarResult:
     # ------------------------------------------------------------ metrics
     def evm(self, equalize: str = "scalar"):
         """OFDM: constellation EVM vs the reference grid.  GFSK:
-        phase-trajectory EVM dict (vendored pllsim convention)."""
+        phase-trajectory EVM dict.  DPSK (EDR): differential EVM dict."""
         if self.wf.kind == "ofdm":
             return evm_of_signal(self.y, self.wf.ofdm_ref, equalize=equalize)
+        if self.wf.kind == "dpsk":
+            from .metrics.dpsk import devm
+            return devm(self.y, self.wf)
         from .metrics.ble_metrics import phase_evm
         return phase_evm(self.y, self.wf)
 

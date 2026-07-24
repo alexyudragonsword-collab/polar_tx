@@ -29,4 +29,6 @@ def ble_mask(rate: float = 1e6):
 def default_mask(wf: Waveform):
     if wf.kind == "gfsk":
         return ble_mask(wf.meta.get("rate", 1e6))
+    if wf.kind == "dpsk":
+        return ble_mask(1e6)      # BR/EDR channels share the 1 MHz raster
     return default_wifi_mask(wf.bw)
