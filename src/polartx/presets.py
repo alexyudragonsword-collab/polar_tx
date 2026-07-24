@@ -29,7 +29,8 @@ def ble_adpll(rate: float = 1e6, *, mode: str = "response",
               loop_bw: float = 100e3, fref: float = 32e6,
               fout: float = 2.440e9, dpa: DPAConfig | None = None,
               chain: ChainConfig | None = None,
-              settle_cycles: int = 40_000) -> TxPreset:
+              settle_cycles: int = 40_000,
+              dp_range_hz: float | None = None) -> TxPreset:
     """BLE LE-1M/LE-2M polar TX: ADPLL two-point PM + DPA at fixed code.
 
     Baseband runs on the fref grid (fs_bb = fref, 32/16 samples per
@@ -44,7 +45,7 @@ def ble_adpll(rate: float = 1e6, *, mode: str = "response",
         mode="tdc", tdc=TDCConfig(t_res=10e-12),
         kdco_est_error=kdco_est_error, int_band=(1e3, fref / 2)))
     pm = ADPLLTwoPoint(pll, dp_gain=dp_gain, mode=mode,
-                       settle_cycles=settle_cycles)
+                       settle_cycles=settle_cycles, dp_range_hz=dp_range_hz)
     dpa_ = DPA(dpa or DPAConfig(n_bits=8))
     tx = PolarTX(chain or ChainConfig(), pm, dpa_)
 

@@ -25,6 +25,8 @@ class ChainConfig:
     env_skew_s: float = 0.0        # AM-path delay relative to PM path (signed)
     cfr_papr_db: float | None = None
     env_floor: float = 0.0         # hole-punch clamp, fraction of rms
+    phase_slew_max_hz: float | None = None   # bound phase-path deviation
+    phase_interp_win: int = 4      # interp widening around fast runs
     env_headroom: float = 1.0      # full-scale = env_headroom * max envelope
     f_dpa: float | None = None     # DPA amplitude update clock; None = fs_bb
 
@@ -81,7 +83,9 @@ class PolarTX:
             x = cfr_clip_filter(x, c.cfr_papr_db, wf.fs, wf.bw)
             info["cfr_papr_db"] = c.cfr_papr_db
 
-        env, phase, split_info = polar_split(x, c.env_floor)
+        env, phase, split_info = polar_split(
+            x, c.env_floor, phase_slew_max_hz=c.phase_slew_max_hz,
+            fs=wf.fs, phase_interp_win=c.phase_interp_win)
         info["split"] = split_info
 
         # envelope path: normalize to DPA full scale, skew, quantize.

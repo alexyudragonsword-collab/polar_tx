@@ -196,15 +196,19 @@ class ADPLL(PLLBase):
                  seed: int = 0, f_start_offset: float = 0.0,
                  kdco_cal=None, tdc_cal=None, dtc_gain_init_error: float = 0.0,
                  mod_freq: np.ndarray | None = None, mod_dp_gain: float = 1.0,
-                 dtc_gain_drift: np.ndarray | None = None) -> SimResult:
+                 dtc_gain_drift: np.ndarray | None = None,
+                 mod_freq_dp: np.ndarray | None = None) -> SimResult:
         """mod_freq: two-point modulation frequency trajectory [Hz] on the
         fref grid (see pllsim.modulation); injected at the FCW (lowpass)
         and DCO (highpass) points.  mod_dp_gain scales the direct point:
-        1.0 = matched, 1+eps models a direct-path gain error.  TDC mode."""
+        1.0 = matched, 1+eps models a direct-path gain error.  TDC mode.
+        mod_freq_dp (polartx extension): separate trajectory for the
+        direct point — models a range-limited direct-modulation DAC
+        (FCW path keeps the full trajectory).  None = use mod_freq."""
         if self.cfg.mode == "tdc":
             return self._sim_tdc(n_cycles, noise, calibration, seed,
                                  f_start_offset, kdco_cal, tdc_cal,
-                                 mod_freq, mod_dp_gain)
+                                 mod_freq, mod_dp_gain, mod_freq_dp)
         return self._sim_bbpd(n_cycles, noise, calibration, seed,
                               f_start_offset, dtc_gain_init_error,
                               dtc_gain_drift)
@@ -217,7 +221,10 @@ class ADPLL(PLLBase):
         return synth_from_psd(src.psd, c.fref, n_cycles, rng) / (TWOPI * c.fref)
 
     def _sim_tdc(self, n_cycles, noise, calibration, seed, f_start_offset,
-                 kdco_cal, tdc_cal, mod_freq=None, mod_dp_gain=1.0):
+                 kdco_cal, tdc_cal, mod_freq=None, mod_dp_gain=1.0,
+                 mod_freq_dp=None):
+        if mod_freq_dp is None:
+            mod_freq_dp = mod_freq
         c = self.cfg
         rng = np.random.default_rng(seed)
         tref = 1.0 / c.fref
@@ -284,8 +291,8 @@ class ADPLL(PLLBase):
                     iir_state[i] += lam * (x - iir_state[i])
                     x = iir_state[i]
                 otw = x * c.fref / kdco_hat + otw_center
-            if mod_freq is not None:                 # highpass (direct) point
-                otw += mod_freq[n] * mod_dp_gain / kdco_hat
+            if mod_freq_dp is not None:              # highpass (direct) point
+                otw += mod_freq_dp[n] * mod_dp_gain / kdco_hat
             # DCO quantization with optional 1st-order dither
             if c.dco_dither_order > 0:
                 otw_q = np.floor(otw + qerr)

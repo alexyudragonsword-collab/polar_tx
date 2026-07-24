@@ -9,6 +9,10 @@ Each file carries a header naming its origin.  Copies are verbatim except:
 - ``pllsim/arch/frac.py``: FracConfig/frac_spur_offsets extracted from
   cppll.py; ``pllsim/arch/adpll.py`` imports them from there (one-line
   patch) so the analog charge-pump blocks are not needed.
+- ``pllsim/arch/adpll.py``: ``simulate(..., mod_freq_dp=None)`` extension
+  — an optional separate trajectory for the direct modulation point, so a
+  range-limited direct-modulation DAC can be modeled (the FCW path keeps
+  the full trajectory).  Default None reproduces upstream behavior.
 - ``padpd`` subpackage ``__init__`` files are reduced to the vendored
   subset (no OpenDPD compat / neural / dataset-IO modules).
 

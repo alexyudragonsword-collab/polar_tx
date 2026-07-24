@@ -20,6 +20,31 @@ def phase_evm(y: np.ndarray, wf: Waveform, skip: int = 0) -> dict:
     return _phase_evm(np.unwrap(np.angle(y)), wf.phase_ideal, skip=skip)
 
 
+def bt_acp(y: np.ndarray, fs: float, offsets_hz=(2e6, 3e6),
+           ch_bw: float = 1e6, nfft: int = 8192) -> dict:
+    """Bluetooth adjacent-channel power (stylized BR/EDR in-band spec):
+    power in ch_bw-wide channels at +/-offsets relative to the in-channel
+    power [dBc].  The BT limits are absolute dBm; relative to a 0-10 dBm
+    TX the -20/-40 dBm class limits map to ~-30/-50 dBc."""
+    from scipy import signal as sig
+    f, pxx = sig.welch(y, fs=fs, nperseg=min(nfft, len(y)),
+                       return_onesided=False, detrend=False)
+    order = np.argsort(f)
+    f, pxx = f[order], pxx[order]
+
+    def _band(fc):
+        m = (f >= fc - ch_bw / 2) & (f < fc + ch_bw / 2)
+        return float(pxx[m].sum())
+
+    p0 = _band(0.0)
+    out = {}
+    for off in offsets_hz:
+        for sgn, tag in ((1, "+"), (-1, "-")):
+            out[f"acp{tag}{off / 1e6:g}MHz_dbc"] = \
+                float(10 * np.log10(_band(sgn * off) / p0))
+    return out
+
+
 def freq_deviation(y: np.ndarray, wf: Waveform, discard_syms: int = 4) -> dict:
     """Per-symbol center frequency deviation statistics.
 

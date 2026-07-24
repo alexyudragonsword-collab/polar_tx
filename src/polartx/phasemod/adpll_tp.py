@@ -33,13 +33,22 @@ TWOPI = 2.0 * np.pi
 
 class ADPLLTwoPoint(PhaseModulator):
     def __init__(self, pll: ADPLL, *, dp_gain: float = 1.0,
-                 mode: str = "response", settle_cycles: int = 40_000):
+                 mode: str = "response", settle_cycles: int = 40_000,
+                 dp_range_hz: float | None = None):
+        """dp_range_hz: tuning range of the direct-modulation DAC (+/-).
+        Constant-envelope trajectories need ~ the peak deviation, but
+        polar phase paths slew hard at envelope nulls (a pi flip in one
+        sample = fs/2 instantaneous deviation) — a finite range clips
+        there and splatters the spectrum.  Modeled in event mode (the
+        clip is nonlinear); both modes report the required range in
+        diagnostics ['dp_required_range_hz']."""
         if mode not in ("response", "event"):
             raise ValueError("mode must be 'response' or 'event'")
         self.pll = pll
         self.dp_gain = dp_gain
         self.mode = mode
         self.settle_cycles = settle_cycles
+        self.dp_range_hz = dp_range_hz
         self._ana = None
 
     # ----------------------------------------------------------- helpers
@@ -96,7 +105,12 @@ class ADPLLTwoPoint(PhaseModulator):
         htp = np.ones(f.size, dtype=complex)
         htp[1:] = self.h_tp(f[1:])
         out = ramp + np.fft.irfft(spec * htp, n=n)
-        diag = {"mode": "response", "g_eff": self._g_eff}
+        f_dev = np.diff(phase_cmd) * fs_bb / TWOPI
+        diag = {"mode": "response", "g_eff": self._g_eff,
+                "dp_required_range_hz": float(np.abs(f_dev).max())}
+        if self.dp_range_hz is not None and \
+                diag["dp_required_range_hz"] > self.dp_range_hz:
+            diag["dp_range_exceeded"] = True   # linear model cannot clip
         if noise:
             rng = np.random.default_rng(seed)
             pn = synth_from_psd(self._noise_psd_interp(), fs_bb, n, rng)
@@ -117,8 +131,14 @@ class ADPLLTwoPoint(PhaseModulator):
         settle = self.settle_cycles
         mod = np.zeros(settle + n_mod + 4)
         mod[settle:settle + n_mod] = mod_ref
+        mod_dp = mod
+        clip_frac = 0.0
+        if self.dp_range_hz is not None:
+            mod_dp = np.clip(mod, -self.dp_range_hz, self.dp_range_hz)
+            clip_frac = float(np.mean(mod_dp[settle:] != mod[settle:]))
         sim = self.pll.simulate(mod.size, noise=noise, seed=seed,
-                                mod_freq=mod, mod_dp_gain=self.dp_gain)
+                                mod_freq=mod, mod_dp_gain=self.dp_gain,
+                                mod_freq_dp=mod_dp)
         ideal = TWOPI * np.cumsum(mod) / c.fref
         actual = sim.phase_err_out
 
@@ -146,4 +166,6 @@ class ADPLLTwoPoint(PhaseModulator):
             phase_out=out,
             diagnostics={"mode": "event", "lag": lag, "sim": sim,
                          "residual_rms_rad": best[0],
-                         "samples_per_ref_cycle": up})
+                         "samples_per_ref_cycle": up,
+                         "dp_required_range_hz": float(np.abs(mod).max()),
+                         "dp_clip_frac": clip_frac})
