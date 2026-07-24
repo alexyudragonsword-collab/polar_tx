@@ -19,6 +19,7 @@ from .cal.polar_dpd import PolarDPD
 from .montecarlo import MCResult, run_mc, wifi_chip_builder
 from .polar import bandwidth_expansion, polar_recombine, polar_split
 from .fir import FIRDualTapTX, delay_for_notch, notch_offsets
+from .selector import Requirement, SelectorReport, select
 from .presets import (FIRTxPreset, TxPreset, bench_edge_polar_staszewski05,
                       bench_lte20_polar_madoglio14,
                       bench_wifi6_polar_benbassat20,
@@ -44,6 +45,7 @@ __all__ = [
     "bench_wifi6_polar_benbassat20", "bench_wifi7_polar_degani24",
     "bench_wifi7_mlo_fir_borokhovich26", "bench_wifi11n_polar",
     "FIRTxPreset", "FIRDualTapTX", "delay_for_notch", "notch_offsets",
+    "Requirement", "SelectorReport", "select",
     "Waveform", "edr_dpsk", "gfsk_ble", "lte_waveform", "nr_waveform",
     "ofdm_waveform", "wifi_waveform",
 ]
