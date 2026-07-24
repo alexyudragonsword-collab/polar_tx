@@ -237,6 +237,28 @@ def bench_wifi6_polar_benbassat20(dpd: bool = True) -> TxPreset:
                       ampm_deg_poly=(0.0, 2.0, 3.5)))
 
 
+def bench_wifi7_polar_degani24(dpd: bool = True) -> TxPreset:
+    """Shay / Degani et al., RFIC 2024: "A Watt-level, 5-7 GHz all-
+    digital polar TX based on a 3.3 V switched-capacitor digital PA in
+    16 nm FinFET for Wi-Fi 7" (transistor stacking + capacitive feedback
+    so the SC-DPA runs directly off 3.3 V).  Published: 320 MHz /
+    4096-QAM (MCS13) at 5-7 GHz; P_max/PE 30.15 dBm / 34.7% at 5.2 GHz;
+    EVM -38 dB at 6.1 GHz, 9 dB backoff, meeting MCS13.
+
+    Modeled on the open-loop-DTC + SC-DPA wideband flavor at the 6.1 GHz
+    top band: watt-level SCPA efficiency law (34.7% peak), compressive
+    DPA linearized by the factory PolarDPD (dpd=True) into the -38 dB
+    class; at 320 MHz the last dB is LO-phase-noise-limited."""
+    lo = OscConfig(f0=6.1e9, gain=1.0, pn_dbchz=-123.0, pn_foffset=1e6,
+                   pn_f1f3=180e3, pn_floor_dbchz=-159.0)
+    return wifi_dtc(
+        bw=320e6, qam=4096, fout=6.1e9, n_bits=13, jitter_rms_s=25e-15,
+        lo_pn=lo, cfr_papr_db=8.0, dpd=dpd,
+        dpa=DPAConfig(n_bits=11, n_thermo=7, sigma_cell=0.0012,
+                      amam=("rapp", 2.5, 1.12), ampm_deg_poly=(0.0, 2.0, 3.0),
+                      eff=("scpa", 0.55, 0.35)))
+
+
 def bench_wifi11n_polar() -> TxPreset:
     """802.11n-era 20 MHz digital polar (Intel-class, ~2010): published
     class EVM ~ -28 dB at 64-QAM (spec -25 dB).  9-bit DTC, 500 fs

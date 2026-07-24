@@ -27,12 +27,15 @@ import numpy as np
 from polartx.metrics.aclr_ext import aclr_multi
 from polartx.presets import (bench_edge_polar_staszewski05,
                              bench_lte20_polar_madoglio14,
-                             bench_wifi6_polar_benbassat20)
+                             bench_wifi6_polar_benbassat20,
+                             bench_wifi7_polar_degani24)
 from polartx.waveforms.ofdm import demodulate_ofdm
 
 OUT = os.path.join(os.path.dirname(__file__), "out")
 os.makedirs(OUT, exist_ok=True)
-fig, ax = plt.subplots(1, 3, figsize=(15, 4.6))
+# generational sweep of digital polar TX: EDGE'05, LTE'14, WiFi6'20, WiFi7'24
+fig, axg = plt.subplots(2, 2, figsize=(11, 9))
+ax = axg.ravel()
 
 print("=== literature-class digital polar TX benchmarks ===")
 print(f"{'benchmark':>34s}{'simulated':>12s}{'published class':>18s}")
@@ -86,6 +89,25 @@ ax[2].plot(pts.real, pts.imag, ".", ms=0.6, alpha=0.3, color="tab:green")
 ax[2].set_aspect("equal")
 ax[2].set(title=f"Wi-Fi 6 160 MHz 1024-QAM (Intel'20)\n"
                 f"raw {r_raw.evm().db:.1f} → DPD {r.evm().db:.1f} dB",
+          xlabel="I", ylabel="Q")
+
+# ------------------- Intel Wi-Fi 7 320 MHz polar (Degani RFIC'24)
+p = bench_wifi7_polar_degani24()
+wf = p.make_waveform(n_symbols=6, seed=0)
+r = p.tx.run(wf, noise=True, seed=1)
+eff = r.avg_efficiency(p.tx.dpa)
+print(f"{'Degani RFIC24 WiFi7 320MHz EVM':>34s}{r.evm().db:10.1f} dB"
+      f"{'-38 dB class':>18s}")
+print(f"{'  avg eta (SCPA 34.7% peak)':>34s}{100 * eff['eta_avg']:9.1f}%"
+      f"{'@%.1fdB BO' % eff['backoff_db']:>18s}")
+rx = demodulate_ofdm(r.y, wf.ofdm_ref)
+g = np.vdot(wf.ofdm_ref.tx_symbols, rx) / np.vdot(wf.ofdm_ref.tx_symbols,
+                                                  wf.ofdm_ref.tx_symbols)
+pts = (rx / g).ravel()
+ax[3].plot(pts.real, pts.imag, ".", ms=0.4, alpha=0.25, color="tab:purple")
+ax[3].set_aspect("equal")
+ax[3].set(title=f"Wi-Fi 7 320 MHz 4096-QAM (Intel'24)\n"
+                f"EVM {r.evm().db:.1f} dB, avg η {100 * eff['eta_avg']:.0f}%",
           xlabel="I", ylabel="Q")
 
 print("\nassumption labels are in each preset docstring; '-class' means "

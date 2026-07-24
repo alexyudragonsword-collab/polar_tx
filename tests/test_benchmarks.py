@@ -5,16 +5,17 @@ from polartx.metrics.aclr_ext import aclr_multi
 from polartx.presets import (bench_edge_polar_staszewski05,
                              bench_lte20_polar_madoglio14,
                              bench_wifi6_polar_benbassat20,
+                             bench_wifi7_polar_degani24,
                              bench_wifi11n_polar)
 
 BENCH_PRESETS = ["Bench: Staszewski'05 EDGE", "Bench: Madoglio'14 LTE-20",
-                 "Bench: BenBassat'20 WiFi6"]
+                 "Bench: BenBassat'20 WiFi6", "Bench: Degani'24 WiFi7"]
 
 
 def test_benchmarks_are_registered_presets():
     for name in BENCH_PRESETS:
         assert name in PRESETS
-    assert len(PRESETS) == 13
+    assert len(PRESETS) == 14
 
 
 def test_benchmarks_exported_top_level():
@@ -71,6 +72,20 @@ def test_wifi6_polar_benbassat_class():
     r1 = p.tx.run(p.make_waveform(n_symbols=6, seed=0), noise=True, seed=1)
     assert r1.evm().db < -36.0               # -40 dB class (LO-limited @160)
     assert r1.evm().db < r0.evm().db - 6.0   # DPD clearly helps
+
+
+def test_wifi7_polar_degani_class():
+    """RFIC 2024 Intel Wi-Fi 7: 320 MHz 4096-QAM (MCS13), -38 dB class
+    with DPD, watt-level SCPA (34.7% peak efficiency)."""
+    p = bench_wifi7_polar_degani24()             # DPD on (default)
+    wf = p.make_waveform(n_symbols=6, seed=0)
+    r = p.tx.run(wf, noise=True, seed=1)
+    assert r.evm().db < -35.0                    # -38 dB class (LO-limited)
+    eff = r.avg_efficiency(p.tx.dpa)
+    assert 0.12 < eff["eta_avg"] < 0.30          # backoff efficiency
+    raw = bench_wifi7_polar_degani24(dpd=False)
+    r0 = raw.tx.run(wf, noise=True, seed=1)
+    assert r0.evm().db > r.evm().db + 6.0         # DPD clearly helps
 
 
 def test_wifi11n_polar_still_available():

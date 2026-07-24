@@ -28,6 +28,7 @@ def _registry():
         "Bench: Staszewski'05 EDGE": lambda **o: P.bench_edge_polar_staszewski05(),
         "Bench: Madoglio'14 LTE-20": lambda **o: P.bench_lte20_polar_madoglio14(),
         "Bench: BenBassat'20 WiFi6": lambda **o: P.bench_wifi6_polar_benbassat20(),
+        "Bench: Degani'24 WiFi7": lambda **o: P.bench_wifi7_polar_degani24(),
     }
 
 
