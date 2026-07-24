@@ -1,3 +1,5 @@
+<img src="docs/icon.png" width="120" align="right" alt="polartx icon">
+
 # polartx — 数字极坐标发射机（Digital Polar TX）行为级仿真
 
 面向 RFIC 系统设计的数字极坐标发射机 Python 行为仿真库，覆盖两种架构、一条可组合的信号链。
