@@ -215,12 +215,13 @@ def bench_lte20_polar_madoglio14() -> TxPreset:
 
 
 def bench_wifi6_polar_benbassat20(dpd: bool = True) -> TxPreset:
-    """Ben Bassat et al., ISSCC/JSSC 2020-class: a fully integrated
-    27 dBm dual-band all-digital polar TX supporting 160 MHz for Wi-Fi 6
-    (28 nm CMOS, switched-capacitor digital PA with transformer
-    combining).  Published class: 160 MHz MCS11 1024-QAM, raw EVM
-    ~ -30.5/-29 dB (low/high band) at 6 dB backoff, and EVM as low as
-    -40 dB with DPD at 7-8 dB backoff over 20-160 MHz.
+    """Ben Bassat et al.-class.  Conference: ISSCC 2020, 10.5.  Journal
+    (full version): "A Fully Integrated 27-dBm Dual-Band All-Digital
+    Polar Transmitter Supporting 160 MHz for Wi-Fi 6 Applications",
+    IEEE JSSC 2020 (28 nm CMOS, switched-capacitor digital PA with
+    transformer combining).  Published class: 160 MHz MCS11 1024-QAM,
+    raw EVM ~ -30.5/-29 dB (low/high band) at 6 dB backoff, and EVM as
+    low as -40 dB with DPD at 7-8 dB backoff over 20-160 MHz.
 
     Modeled here on the open-loop-DTC + SCPA wideband flavor at the
     5 GHz high band: a compressive Rapp DPA with AM-PM gives the ~-29 dB
@@ -241,7 +242,9 @@ def bench_wifi11n_polar() -> TxPreset:
     class EVM ~ -28 dB at 64-QAM (spec -25 dB).  9-bit DTC, 500 fs
     jitter, a -100 dBc/Hz-class 2000s-era LO, 8-bit DPA.  Kept as a
     historical anchor — see bench_wifi6_polar_benbassat20 for the modern
-    (ISSCC 2020) Intel Wi-Fi 6 result."""
+    (ISSCC/JSSC 2020) Intel Wi-Fi 6 result.  The follow-on 16 nm 4-core
+    +28 dBm Wi-Fi 6E work (Khamaisi et al.) is ISSCC 2022-only; no JSSC
+    extension is known, so it is not modeled as a preset."""
     return wifi_dtc(
         bw=20e6, qam=64, n_bits=9, jitter_rms_s=500e-15,
         lo_pn=OscConfig(f0=5.9e9, gain=1.0, pn_dbchz=-100.0,
