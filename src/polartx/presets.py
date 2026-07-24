@@ -79,6 +79,52 @@ def ble_2m_adpll(**kw) -> TxPreset:
     return ble_adpll(rate=2e6, **kw)
 
 
+def lte20_adpll(qam: int = 64, *, mode: str = "response",
+                dp_gain: float = 1.0, loop_bw: float = 1e6,
+                fref: float = 122.88e6, fout: float = 1.95e9,
+                dpa: DPAConfig | None = None,
+                chain: ChainConfig | None = None,
+                dpd: bool = True, oversampling: int = 4,
+                dp_range_hz: float | None = None,
+                settle_cycles: int = 60_000) -> TxPreset:
+    """LTE 20 MHz narrowband polar TX: ADPLL two-point + DPA.
+
+    Baseband = fref = 122.88 MS/s (30.72 M grid x4, 1:1 with the event
+    engine).  Cellular-class DCO (-121 dBc/Hz @ 1 MHz on 1.95 GHz, band-1
+    uplink), 1 ps TDC, ~1 MHz loop.  The envelope path runs a mildly
+    compressive 10-bit DPA; dpd=True pre-links the exact PolarDPD LUTs
+    (factory cal) - set False to see the raw DPA nonlinearity.
+    Default chain: 5% hole punching, NO phase-slew limit — unlike the
+    quasi-constant-envelope EDR case (ex05), OFDM polar phase slews at
+    several x the channel BW everywhere (LTE20: P99 = 39 MHz, tail to
+    fs/2), so the direct DAC must simply cover it; slew-limiting below
+    ~2x BW destroys the signal.  Use dp_range_hz to study the tradeoff."""
+    alpha, rho = design_adpll_dlf(fref, loop_bw, 60.0)
+    osc = OscConfig(f0=fout, gain=60e3, pn_dbchz=-121.0, pn_foffset=1e6,
+                    pn_f1f3=300e3, pn_floor_dbchz=-155.0)
+    pll = ADPLL(ADPLLConfig(
+        fref=fref, fout=fout, osc=osc, dlf=DLFConfig(alpha=alpha, rho=rho),
+        mode="tdc", tdc=TDCConfig(t_res=1e-12),
+        int_band=(1e3, fref / 2)))
+    pm = ADPLLTwoPoint(pll, dp_gain=dp_gain, mode=mode,
+                       settle_cycles=settle_cycles, dp_range_hz=dp_range_hz)
+    dpa_ = DPA(dpa or DPAConfig(n_bits=10, n_thermo=6, sigma_cell=0.002,
+                                amam=("rapp", 2.5, 1.1),
+                                ampm_deg_poly=(0.0, 2.0, 3.0)))
+    dpd_ = None
+    if dpd:
+        from .cal.polar_dpd import PolarDPD
+        dpd_ = PolarDPD.from_dpa(dpa_)
+    tx = PolarTX(chain or ChainConfig(env_floor=0.05), pm, dpa_, dpd=dpd_)
+
+    def make_waveform(n_symbols: int = 28, seed: int = 0) -> Waveform:
+        from .waveforms.ofdm import lte_waveform
+        return lte_waveform(20e6, qam, n_symbols=n_symbols,
+                            oversampling=oversampling, seed=seed)
+
+    return TxPreset(tx=tx, fs_bb=fref, make_waveform=make_waveform)
+
+
 def wifi_dtc(bw: float = 160e6, qam: int = 1024, *, n_bits: int = 11,
              range_ui: float = 1.0, fout: float = 5.9e9,
              oversampling: int = 4, dither: bool = True,

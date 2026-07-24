@@ -43,6 +43,7 @@ print(res.evm().db, res.aclr())             # -39.6 dB, ACLR ~ -58 dBc
 | BT EDR2 π/4-DQPSK / EDR3 8DPSK | 同一 ADPLL 相位路径 + **非恒包络** SRRC 包络路径（PAPR ~3.2 dB） | DEVM 1.8% / 1.8%（限值 20/13%） | mask PASS |
 | WiFi 6 80/160 MHz 1024-QAM | 11-bit dithered DTC + 10-bit DPA + CFR 8.5 dB | **−40.9 / −39.5 dB** | −54/−58 dBc，PASS |
 | WiFi 7 320 MHz 4096-QAM | 同上，WiFi-7 级锁定 LO | **−39.6 dB**（−38 达标） | −58 dBc，PASS |
+| LTE 20 MHz 64/256-QAM（M2） | ADPLL 两点 @122.88 MHz + 压缩性 DPA + polar DPD | **−53.3 dB**（无 DPD −37.2） | ACLR1 −62.6 dBc，SEM PASS |
 
 关键设计数据（examples 复现）：
 
@@ -50,6 +51,8 @@ print(res.evm().db, res.aclr())             # -39.6 dB, ACLR ~ -58 dBc
 - **DTC 分辨率设计图**（ex03）：相位量化 EVM 与解析式 `(2π/2^B)/√12·√(1/osr)` 差 <0.2 dB；4096-QAM 需 ~10 bit，一阶误差反馈 dither 省 ~1 bit；INL 正弦项杂散、ZOH 更新时钟镜像均与闭式预测吻合（1–2 dB 内，测试断言）。
 - **AM/PM skew**（ex04）：160 MHz 下 0.5 ns skew 即把 EVM 从 −39.5 打到 −21.8 dB；互谱相位斜率估计精度 0.05 采样，校正后完全恢复——极坐标架构最尖锐的损伤，就是这条链的核心卖点。
 - **带宽扩展**（ex02）：80 MHz OFDM 极坐标分解后包络/相位路径 99% 占用带宽 2.1×/3.2×；幅度域 hole punching 的 EVM 代价闭式可算（测试断言到 0.01 dB）。
+- **π 跳变与直通 DAC 范围**（ex05，M2）：8DPSK 裸相位轨迹需要 fs/2=16 MHz 直通范围；2 MHz DAC 只削 1% 采样但环路"宿醉"使 DEVM 崩到 40%、ACP 恶化 ~20 dB（粗 mask 反而仍 PASS——**ACP 才是敏感指标**）；轨迹侧 2 MHz 斜率限制（矢量 hole punching）以 −32 dB 轨迹代价换回 DEVM 2.4%/零削波。OFDM polar 相反：LTE20 相位斜率 P99≈2×BW，直通 DAC 必须整体覆盖（test_lte_chain 固化）。
+- **polar DPD 与两点校准**（ex06，M2）：AM-AM/AM-PM 逆 LUT 使 LTE EVM −37.2→−53.3 dB、ACLR1 −44.5→−62.6 dBc；由链路观测量拟合的 LUT 与精确模型反演只差 0.5 dB。离线两点增益估计一发命中（注入 3%，估计 3.00%，EVM 恢复到噪声极限）。RX 频段噪声解析预算 −143 dBc/Hz@45 MHz 量级。
 
 ## 包结构
 
@@ -77,8 +80,8 @@ src/polartx/
 
 ## 路线图
 
-- **M2 — LTE 20 MHz 窄带 polar 全链路**：LTE numerology（fft_size 与信道带宽解耦）、E-UTRA ACLR/SEM、RX 频段噪声解析预算（NoisePath 合成）、polar DPD（AM-AM/AM-PM 逆 LUT，ILA 拟合）、两点增益 LMS 在线校准。
-- **M3 — 5G NR + 高级校准**：NR SCS 30/120 kHz @ 100/200 MHz、NR SEM/ACLR 口径、开环 DTC 增益/INL LUT 校准（复用 pllsim LUTCal）、DPA 交织与镜像研究、谱不对称 skew 估计、GMP 记忆效应包装。
+- **M2 — 已完成**：LTE 20 MHz 全链路（fft/信道带宽解耦 numerology、E-UTRA ACLR1/2、风格化 SEM）、polar DPD（精确反演 + 测量拟合）、离线两点增益估计、直通 DAC 范围模型 + 矢量 hole punching、BT ACP、RX 频段噪声解析预算。
+- **M3 — 5G NR + 高级校准**：NR SCS 30/120 kHz @ 100/200 MHz、NR SEM/ACLR 口径、开环 DTC 增益/INL LUT 校准（复用 pllsim LUTCal）、两点增益**在线** sign-sign LMS（需 event 引擎逐周期挂钩）、DPA 交织与镜像研究、谱不对称 skew 估计、GMP 记忆效应包装。
 - **暂缓**：GUI（Streamlit/Qt，姊妹库模式可直接照搬）、Monte Carlo 良率、RTL/AMS 导出。
 
 ## Examples
@@ -89,3 +92,5 @@ src/polartx/
 | `ex02_polar_bandwidth_expansion.py` | 极坐标带宽扩展、包络零点、hole-punch 权衡 |
 | `ex03_dtc_phase_modulator.py` | DTC 分辨率设计图（含 dither）、INL 杂散 vs 预测、ZOH 镜像、LO 相噪贡献 |
 | `ex04_wifi_polar_chain.py` | WiFi 80/160/320 EVM/ACLR/Mask 总表、星座图、CFR CCDF、skew 灵敏度与校准闭环 |
+| `ex05_edr_pi_jump.py` | π 跳变问题：直通 DAC 范围 × 轨迹斜率限制对 DEVM/ACP/mask 的联合影响 |
+| `ex06_lte20_polar_chain.py` | LTE20 全链路：DPD on/off/拟合、两点校准、E-UTRA ACLR/SEM、RX 频段预算、DPA 特性反演 |

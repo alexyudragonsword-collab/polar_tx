@@ -34,13 +34,24 @@ class GenOFDMConfig(OFDMConfig):
 
     scs_hz: float = WIFI_SCS_HZ
     n_active_tones: int | None = None
+    fft_size_override: int | None = None    # decouple FFT grid from the
+                                            # channel BW (LTE/NR style)
 
     @property
     def fft_size(self) -> int:  # type: ignore[override]
+        if self.fft_size_override is not None:
+            return self.fft_size_override
         n = self.bandwidth_hz / self.scs_hz
         if abs(n - round(n)) > 1e-9:
-            raise ValueError("bandwidth must be a multiple of scs_hz")
+            raise ValueError("bandwidth must be a multiple of scs_hz "
+                             "(or set fft_size_override)")
         return int(round(n))
+
+    @property
+    def sample_rate_hz(self) -> float:  # type: ignore[override]
+        # the physical rate follows the FFT grid, not the channel BW
+        # (identical to the vendored bw*oversampling when fft = bw/scs)
+        return self.fft_size * self.scs_hz * self.oversampling
 
     @property
     def n_active(self) -> int:  # type: ignore[override]
@@ -66,6 +77,26 @@ def wifi_waveform(bw: float = 160e6, qam: int = 1024, *, n_symbols: int = 8,
     return ofdm_waveform(GenOFDMConfig(
         bandwidth_hz=bw, qam_order=qam, n_symbols=n_symbols,
         oversampling=oversampling, seed=seed))
+
+
+#: LTE channel BW -> (FFT size @ 15 kHz SCS, resource blocks)
+LTE_NUMEROLOGY = {1.4e6: (128, 6), 3e6: (256, 15), 5e6: (512, 25),
+                  10e6: (1024, 50), 15e6: (1536, 75), 20e6: (2048, 100)}
+
+
+def lte_waveform(bw: float = 20e6, qam: int = 64, *, n_symbols: int = 28,
+                 oversampling: int = 4, seed: int = 0) -> Waveform:
+    """E-UTRA-style downlink-grid channel: 15 kHz SCS, standard FFT/RB
+    table (20 MHz: 2048-FFT / 1200 tones, fs = 30.72 * os MS/s), normal-
+    CP-like 144/2048 guard.  Stylized: data tones only, no DMRS/PSS."""
+    if bw not in LTE_NUMEROLOGY:
+        raise ValueError(f"bw must be one of {sorted(LTE_NUMEROLOGY)}")
+    fft, n_rb = LTE_NUMEROLOGY[bw]
+    return ofdm_waveform(GenOFDMConfig(
+        bandwidth_hz=bw, qam_order=qam, n_symbols=n_symbols,
+        oversampling=oversampling, seed=seed, scs_hz=15e3,
+        fft_size_override=fft, n_active_tones=12 * n_rb,
+        cp_fraction=144 / 2048, window_fraction=1 / 64))
 
 
 __all__ = ["GenOFDMConfig", "OFDMWaveform", "demodulate_ofdm",

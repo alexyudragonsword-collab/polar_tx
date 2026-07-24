@@ -69,10 +69,12 @@ class PolarResult:
 
 
 class PolarTX:
-    def __init__(self, cfg: ChainConfig, phasemod: PhaseModulator, dpa: DPA):
+    def __init__(self, cfg: ChainConfig, phasemod: PhaseModulator, dpa: DPA,
+                 dpd=None):
         self.cfg = cfg
         self.phasemod = phasemod
         self.dpa = dpa
+        self.dpd = dpd                 # PolarDPD or None
 
     def run(self, wf: Waveform, *, noise: bool = True, seed: int = 0
             ) -> PolarResult:
@@ -95,9 +97,13 @@ class PolarTX:
         fs_scale = c.env_headroom * float(env.max())
         env_cmd = env / fs_scale
         env_path = env_cmd
+        if self.dpd is not None:
+            env_path, ph_corr = self.dpd.predistort(env_cmd)
+            phase = phase - ph_corr
+            info["dpd"] = True
         if c.env_skew_s:
             env_path = np.clip(
-                fractional_delay(env_cmd, c.env_skew_s * wf.fs), 0.0, 1.0)
+                fractional_delay(env_path, c.env_skew_s * wf.fs), 0.0, 1.0)
         code = self.dpa.encode(env_path)
         if c.f_dpa is not None:
             hold = int(round(wf.fs / c.f_dpa))
