@@ -22,3 +22,59 @@ def test_report_has_metrics_and_figure(name):
     assert rep["fig"] is not None
     import matplotlib.pyplot as plt
     plt.close(rep["fig"])
+
+
+def test_latest_benchmark_is_reachable():
+    """The 802.11n anchor joined the registry; the RFIC'26 FIR benchmark is
+    reachable through its own entry point (it returns a FIRTxPreset, which
+    run_chain_report's single-PolarTX shape cannot carry)."""
+    assert "Bench: 802.11n polar (~2010)" in PRESETS
+    from polartx.guiutil import run_fir_report
+    assert callable(run_fir_report)
+
+
+def test_fir_report_measures_the_notch():
+    from polartx.guiutil import run_fir_report
+    rep = run_fir_report(bw=40e6, notch_offset_hz=500e6, n_symbols=2)
+    m = rep["metrics"]
+    assert m["OOC suppression [dB]"] > 3.0        # the notch does something
+    assert m["tap delay tau [ps]"] == pytest.approx(1000.0, rel=1e-6)
+    assert m["EVM FIR [dB]"] < -20
+    import matplotlib.pyplot as plt
+    plt.close(rep["fig"])
+
+
+def test_selector_report_recommends_and_charts():
+    from polartx.guiutil import run_selector_report
+    wide = run_selector_report(bw_hz=320e6, evm_db_max=-38.0)
+    assert "dtc_open_loop" in wide["metrics"]["recommendation"] or \
+        "DTC" in wide["metrics"]["recommendation"]
+    assert wide["metrics"]["adpll_two_point"] == "excluded"
+    narrow = run_selector_report(bw_hz=10e6, evm_db_max=-30.0,
+                                 two_point_gain_match=2e-3)
+    assert "ADPLL" in narrow["metrics"]["recommendation"]
+    import matplotlib.pyplot as plt
+    plt.close(wide["fig"]); plt.close(narrow["fig"])
+
+
+def test_combiner_report_beats_single_core_on_efficiency():
+    from polartx.guiutil import run_combiner_report
+    rep = run_combiner_report(n_way=2, backoff_db=6.0, peaking="C")
+    m = rep["metrics"]
+    assert m["avg eff Doherty [%]"] > m["avg eff single-core SCPA [%]"]
+    # a balanced combiner has no handoff distortion
+    assert m["AM-AM ripple [dB]"] < 1e-6 and m["AM-PM pp [deg]"] < 1e-6
+    dirty = run_combiner_report(n_way=2, gain_imbalance_pct=10.0,
+                                phase_imbalance_deg=8.0)
+    assert dirty["metrics"]["AM-PM pp [deg]"] > 1.0
+    import matplotlib.pyplot as plt
+    plt.close(rep["fig"]); plt.close(dirty["fig"])
+
+
+def test_rtl_export_writes_datapath_and_ams(tmp_path):
+    from polartx.guiutil import run_rtl_export
+    rep = run_rtl_export(str(tmp_path), n_bits=8, n_thermo=5, verify=False)
+    for f in ("cfr_clip.v", "dtc_phase_acc.v", "dpa_thermo_decode.v",
+              "dpa_rnm.vams", "polar_dpd_lut.v"):
+        assert f in rep["files"]
+    assert "OK" in rep["checks"]["DPA RNM self-check"]

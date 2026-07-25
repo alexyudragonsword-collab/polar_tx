@@ -12,9 +12,11 @@ import sys
 from PySide6.QtWidgets import (QApplication, QHBoxLayout, QListWidget,
                                QMainWindow, QStackedWidget, QWidget)
 
-from .pages import CalibrationPage, ChainPage, MonteCarloPage
+from .pages import (CalibrationPage, ChainPage, FIRDohertyPage,
+                    MonteCarloPage, RTLPage, SelectorPage)
 
-PAGES = [ChainPage, CalibrationPage, MonteCarloPage]
+PAGES = [ChainPage, CalibrationPage, MonteCarloPage, FIRDohertyPage,
+         SelectorPage, RTLPage]
 
 
 class MainWindow(QMainWindow):

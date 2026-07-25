@@ -9,13 +9,34 @@ from polartx.presets import (bench_edge_polar_staszewski05,
                              bench_wifi11n_polar)
 
 BENCH_PRESETS = ["Bench: Staszewski'05 EDGE", "Bench: Madoglio'14 LTE-20",
-                 "Bench: BenBassat'20 WiFi6", "Bench: Degani'24 WiFi7"]
+                 "Bench: BenBassat'20 WiFi6", "Bench: Degani'24 WiFi7",
+                 "Bench: 802.11n polar (~2010)"]
+
+#: benchmarks that cannot be a registry entry: they do not return the
+#: single-PolarTX TxPreset shape the chain report layer runs.
+_NON_TXPRESET_BENCHES = {"bench_wifi7_mlo_fir_borokhovich26"}  # FIRTxPreset
 
 
 def test_benchmarks_are_registered_presets():
     for name in BENCH_PRESETS:
         assert name in PRESETS
-    assert len(PRESETS) == 14
+    assert len(PRESETS) == 10 + len(BENCH_PRESETS)   # 10 standard chains
+
+
+def test_every_benchmark_is_reachable_from_the_gui():
+    """Guards the failure mode where a new benchmark lands in presets.py
+    but never reaches the GUI: every exported bench_* factory must either
+    be a registry entry or have its own guiutil entry point."""
+    from polartx import guiutil
+    exported = {n for n in polartx.__all__ if n.startswith("bench_")}
+    registered = set()
+    for name in PRESETS:
+        if name.startswith("Bench:"):
+            registered.add(name)
+    # one registry entry per TxPreset-shaped benchmark
+    assert len(registered) == len(exported - _NON_TXPRESET_BENCHES)
+    # and the odd-shaped one is reachable through its dedicated report
+    assert hasattr(guiutil, "run_fir_report")
 
 
 def test_benchmarks_exported_top_level():

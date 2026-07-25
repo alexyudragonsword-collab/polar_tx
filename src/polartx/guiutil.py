@@ -29,6 +29,7 @@ def _registry():
         "Bench: Madoglio'14 LTE-20": lambda **o: P.bench_lte20_polar_madoglio14(),
         "Bench: BenBassat'20 WiFi6": lambda **o: P.bench_wifi6_polar_benbassat20(),
         "Bench: Degani'24 WiFi7": lambda **o: P.bench_wifi7_polar_degani24(),
+        "Bench: 802.11n polar (~2010)": lambda **o: P.bench_wifi11n_polar(),
     }
 
 
@@ -152,6 +153,220 @@ def run_setup(doc: dict) -> dict:
     """Execute a loaded setup through run_chain_report."""
     return run_chain_report(doc["preset"], seed=int(doc["seed"]),
                             noise=bool(doc["noise"]), **doc["overrides"])
+
+
+def run_fir_report(bw: float = 40e6, *, notch_offset_hz: float = 500e6,
+                   n_symbols: int = 3, seed: int = 0, noise: bool = True,
+                   osr: int = 50) -> dict:
+    """Borokhovich RFIC'26 2-tap FIR + digital-Doherty benchmark.
+
+    Kept out of ``_registry()`` on purpose: it returns a FIRTxPreset (two
+    DPA chains combined), not the single-PolarTX shape run_chain_report
+    expects.  Runs the dual-tap chain and its single-tap baseline so the
+    OOC-noise suppression at the notch is measured, not asserted.
+    """
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+
+    from .fir import ooc_noise_suppression_db
+    from .presets import bench_wifi7_mlo_fir_borokhovich26
+
+    p = bench_wifi7_mlo_fir_borokhovich26(bw=bw,
+                                          notch_offset_hz=notch_offset_hz,
+                                          osr=osr)
+    wf = p.make_waveform(n_symbols=n_symbols, seed=seed)
+    res = p.fir_tx.run(wf, noise=noise, seed=seed)
+    base = p.single_tx.run(wf, noise=noise, seed=seed)
+
+    # measure suppression in a band straddling the notch
+    band = (0.9 * notch_offset_hz, 1.1 * notch_offset_hz)
+    supp = ooc_noise_suppression_db(res, base, band)
+
+    metrics = {"EVM FIR [dB]": round(res.evm().db, 1),
+               "EVM single-tap [dB]": round(base.evm().db, 1),
+               "notch offset [MHz]": round(notch_offset_hz / 1e6, 1),
+               "tap delay tau [ps]": round(res.tau_s * 1e12, 1),
+               "OOC suppression [dB]": round(supp, 1)}
+
+    f1, p1 = base.psd(nfft=1 << 14)
+    f2, p2 = res.psd(nfft=1 << 14)
+    fig, ax = plt.subplots(1, 2, figsize=(11, 4.2))
+    ax[0].plot(f1 / 1e6, p1, lw=0.6, alpha=0.75, label="single tap")
+    ax[0].plot(f2 / 1e6, p2, lw=0.6, label="2-tap FIR")
+    for s in (-1, 1):
+        ax[0].axvline(s * notch_offset_hz / 1e6, color="r", ls=":", lw=1)
+    ax[0].set(xlabel="offset [MHz]", ylabel="dBr", ylim=(-160, 5),
+              title=f"OOC noise notch ({supp:.1f} dB at "
+                    f"{notch_offset_hz/1e6:.0f} MHz)")
+    ax[0].legend(fontsize=8)
+
+    # the FIR magnitude response that produces the notch
+    from .fir import fir_response
+    fx = np.linspace(-1.5 * notch_offset_hz, 1.5 * notch_offset_hz, 2000)
+    ax[1].plot(fx / 1e6, 20 * np.log10(np.abs(fir_response(fx, res.tau_s))
+                                       + 1e-12))
+    ax[1].set(xlabel="offset [MHz]", ylabel="|H| [dB]", ylim=(-60, 8),
+              title="2-tap FIR response  H = 1 + exp(-j2*pi*f*tau)")
+    ax[1].grid(True, alpha=0.3)
+    fig.tight_layout()
+    return {"metrics": metrics, "fig": fig, "result": res, "baseline": base}
+
+
+def run_selector_report(bw_hz: float = 80e6, *, standard: str = "custom",
+                        modulation: str = "ofdm", evm_db_max: float = -35.0,
+                        fout: float = 5.8e9, dtc_bits: int = 11,
+                        two_point_gain_match: float = 2e-3,
+                        constant_envelope: bool = False) -> dict:
+    """Architecture selector: rank ADPLL two-point vs open-loop DTC and
+    chart the EVM-vs-bandwidth crossover around the requested point."""
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+
+    from .selector import Requirement, select
+
+    req = Requirement(standard=standard, bw_hz=bw_hz, modulation=modulation,
+                      evm_db_max=evm_db_max, fout=fout, dtc_bits=dtc_bits,
+                      two_point_gain_match=two_point_gain_match,
+                      constant_envelope=constant_envelope)
+    rep = select(req)
+
+    rows = {}
+    for c in rep.candidates:
+        rows[c.arch] = ("excluded" if not c.feasible
+                        else f"{c.evm_db:.1f} dB")
+    rows["recommendation"] = rep.recommendation
+    rows["closest preset"] = rep.suggest_preset()
+
+    bws = np.logspace(6, np.log10(320e6), 40)
+    adpll, dtc = [], []
+    for b in bws:
+        r = select(Requirement(standard="s", bw_hz=b, modulation=modulation,
+                               evm_db_max=evm_db_max, fout=fout,
+                               dtc_bits=dtc_bits,
+                               two_point_gain_match=two_point_gain_match))
+        a = next(c for c in r.candidates if c.arch == "adpll_two_point")
+        d = next(c for c in r.candidates if c.arch == "dtc_open_loop")
+        adpll.append(a.evm_db if a.feasible else np.nan)
+        dtc.append(d.evm_db)
+
+    fig, ax = plt.subplots(figsize=(8, 4.6))
+    ax.semilogx(bws / 1e6, adpll, "-o", ms=3, label="ADPLL two-point")
+    ax.semilogx(bws / 1e6, dtc, "-^", ms=3, label="open-loop DTC")
+    ax.axvline(bw_hz / 1e6, color="k", ls=":", lw=1,
+               label=f"request {bw_hz/1e6:.0f} MHz")
+    ax.axhline(evm_db_max, color="r", ls="--", lw=1, label="EVM target")
+    ax.set(xlabel="signal bandwidth [MHz]", ylabel="estimated EVM [dB]",
+           title="architecture crossover (analytic)")
+    ax.grid(True, which="both", alpha=0.3)
+    ax.legend(fontsize=8)
+    fig.tight_layout()
+    return {"metrics": rows, "table": rep.table(), "fig": fig, "report": rep}
+
+
+def run_combiner_report(n_way: int = 2, *, backoff_db: float = 6.0,
+                        eta_peak: float = 0.85, peaking: str = "C",
+                        combiner_loss_db: float = 0.4,
+                        gain_imbalance_pct: float = 0.0,
+                        phase_imbalance_deg: float = 0.0) -> dict:
+    """Multi-core / Doherty combining: derived efficiency vs backoff and
+    the AM-AM/AM-PM handoff distortion from core-to-core imbalance."""
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+
+    from .dpa.characteristics import efficiency_curve
+    from .dpa.combiner import DohertyCombiner
+
+    gi = tuple([0.0] + [gain_imbalance_pct / 100.0] * (n_way - 1))
+    pi_ = tuple([0.0] + [phase_imbalance_deg] * (n_way - 1))
+    c = DohertyCombiner(n_way=n_way, backoff_db=backoff_db,
+                        eta_peak=eta_peak, peaking=peaking,
+                        combiner_loss_db=combiner_loss_db,
+                        gain_imbalance=gi, phase_imbalance_deg=pi_)
+    cur = c.am_curves()
+
+    x = np.linspace(0.02, 1.0, 400)
+    eta_d = c.efficiency(x)
+    eta_s = efficiency_curve(("scpa", 0.67, eta_peak), x)
+
+    # average efficiency over an OFDM-like (Rayleigh) envelope
+    rng = np.random.default_rng(0)
+    env = np.abs(rng.normal(size=100_000) + 1j * rng.normal(size=100_000))
+    env = np.clip(env / np.percentile(env, 99.9), 0, 1)
+    p_out = env ** 2
+
+    def _avg(eta_fn):
+        e = eta_fn(env)
+        on = e > 0
+        return float(p_out[on].sum() / (p_out[on] / e[on]).sum())
+
+    metrics = {
+        "avg eff Doherty [%]": round(100 * _avg(c.efficiency), 1),
+        "avg eff single-core SCPA [%]":
+            round(100 * _avg(lambda v: efficiency_curve(
+                ("scpa", 0.67, eta_peak), v)), 1),
+        "peak eff [%]": round(100 * float(eta_d.max()), 1),
+        "AM-AM ripple [dB]": round(cur["amam_ripple_db"], 3),
+        "AM-PM pp [deg]": round(cur["ampm_pp_deg"], 2),
+        "combining loss [dB]": round(c.combining_loss_db(), 2),
+    }
+
+    fig, ax = plt.subplots(1, 2, figsize=(11, 4.2))
+    bo = -20 * np.log10(x)
+    ax[0].plot(bo, 100 * eta_d, label=f"{n_way}-way Doherty (class-{peaking})")
+    ax[0].plot(bo, 100 * eta_s, "--", label="single-core SCPA")
+    ax[0].axvline(backoff_db, color="k", ls=":", lw=1, label="backoff point")
+    ax[0].set(xlabel="output backoff [dB]", ylabel="drain efficiency [%]",
+              title="load-modulated efficiency")
+    ax[0].set_xlim(18, 0)
+    ax[0].grid(True, alpha=0.3)
+    ax[0].legend(fontsize=8)
+
+    xs = np.clip(cur["x"], 1e-6, None)
+    ax[1].plot(cur["x"], 20 * np.log10(np.clip(cur["amam"], 1e-6, None) / xs),
+               label="AM-AM gain error [dB]")
+    ax[1].plot(cur["x"], np.rad2deg(cur["ampm_rad"]), label="AM-PM [deg]")
+    ax[1].axvline(10 ** (-backoff_db / 20), color="k", ls=":", lw=1,
+                  label="handoff")
+    ax[1].set(xlabel="input amplitude", title="core-imbalance distortion")
+    ax[1].grid(True, alpha=0.3)
+    ax[1].legend(fontsize=8)
+    fig.tight_layout()
+    return {"metrics": metrics, "fig": fig, "combiner": c}
+
+
+def run_rtl_export(outdir: str, *, n_bits: int = 10, n_thermo: int = 7,
+                   with_dpd: bool = True, verify: bool = True) -> dict:
+    """Emit the digital polar-TX datapath + Verilog-AMS PA model and (if
+    iverilog is installed) run every bit-true golden check."""
+    from .cal.polar_dpd import PolarDPD
+    from .dpa import DPA, DPAConfig
+    from .export import rtl
+
+    dpa = DPA(DPAConfig(n_bits=n_bits, n_thermo=n_thermo, sigma_cell=0.01,
+                        amam=("rapp", 2.5, 1.1), ampm_deg_poly=(0.0, 2.0, 3.0)))
+    dpd = PolarDPD.from_dpa(dpa) if with_dpd else None
+    paths = rtl.emit_datapath(dpa, outdir, dpd=dpd)
+
+    checks = {}
+    if verify:
+        for label, fn in (("CFR clip", rtl.verify_cfr_clip),
+                          ("DTC phase acc", rtl.verify_phase_acc),
+                          ("DPA thermo decoder", rtl.verify_thermo_decoder),
+                          ("polar DPD LUT", rtl.verify_with_iverilog)):
+            if label == "polar DPD LUT" and dpd is None:
+                continue
+            out = fn(outdir)
+            checks[label] = ("iverilog not installed" if out is None else
+                             next((ln for ln in out.splitlines()
+                                   if "PASS" in ln or "FAIL" in ln), "?"))
+    sc = rtl.dpa_rnm_selfcheck(dpa, outdir)
+    checks["DPA RNM self-check"] = (
+        f"{'OK' if sc['ok'] else 'FAIL'} (amp err {sc['amp_max_err']:.1e}, "
+        f"AM-PM err {sc['ph_max_err']:.1e} rad)")
+    return {"files": sorted(paths), "checks": checks, "outdir": outdir}
 
 
 def run_mc_report(n_chips: int = 30, *, bw: float = 160e6,

@@ -12,7 +12,10 @@ st.markdown("""
 
 左侧页面：**Chain Workbench**（预设链路 + 损伤旋钮 + EVM/ACLR/mask），
 **Calibration**（skew / 两点增益 / DTC LUT 校准演示），
-**Monte Carlo**（失配良率分析）。
+**Monte Carlo**（失配良率分析），
+**FIR + Doherty**（Borokhovich RFIC'26 双抽头 FIR 陷波 + 多核 Doherty 合路），
+**Architecture Selector**（窄带 ADPLL 两点 vs 宽带开环 DTC 排序推荐），
+**RTL / AMS Export**（数字数据通路 + Verilog-AMS 实数 PA 模型，iverilog 逐位校验）。
 """)
 
 st.info("所有计算都在 `polartx.guiutil`（纯 Python，可脱离 GUI 测试）；"

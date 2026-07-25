@@ -6,7 +6,9 @@ from PySide6.QtWidgets import (QCheckBox, QComboBox, QDoubleSpinBox,
                                QFormLayout, QGroupBox, QHBoxLayout, QLabel,
                                QPushButton, QSpinBox, QVBoxLayout)
 
-from ..guiutil import PRESETS, run_chain_report, run_mc_report
+from ..guiutil import (PRESETS, run_chain_report, run_combiner_report,
+                       run_fir_report, run_mc_report, run_rtl_export,
+                       run_selector_report)
 from .widgets import FigureBox, Page, metrics_table
 
 
@@ -282,3 +284,224 @@ class MonteCarloPage(Page):
             f"std {s['std']:.1f}, worst {s['worst']:.1f}, "
             f"best {s['best']:.1f} dB")
         self.figbox.set_figure(rep["fig"])
+
+
+class FIRDohertyPage(Page):
+    """Borokhovich RFIC'26: 2-tap FIR notch and multi-core Doherty
+    combining — the two halves of that paper, side by side."""
+
+    title = "FIR + Doherty"
+
+    def __init__(self):
+        super().__init__()
+        lay = QVBoxLayout(self)
+
+        fir_box = QGroupBox("2-tap FIR notch (dual DPA chains)")
+        ff = QFormLayout(fir_box)
+        self.fir_bw = QComboBox()
+        self.fir_bw.addItems(["40", "80", "160"])
+        self.notch = QSpinBox()
+        self.notch.setRange(100, 900)
+        self.notch.setValue(500)
+        self.notch.setSingleStep(50)
+        self.fir_syms = QSpinBox()
+        self.fir_syms.setRange(2, 8)
+        self.fir_syms.setValue(4)
+        ff.addRow("bandwidth [MHz]", self.fir_bw)
+        ff.addRow("notch offset [MHz]", self.notch)
+        ff.addRow("OFDM symbols", self.fir_syms)
+        self.fir_btn = QPushButton("Run FIR chain")
+        self.fir_btn.clicked.connect(self._go_fir)
+        ff.addRow("", self.fir_btn)
+
+        doh_box = QGroupBox("Doherty combiner (derived from load modulation)")
+        df = QFormLayout(doh_box)
+        self.n_way = QComboBox()
+        self.n_way.addItems(["2", "3"])
+        self.backoff = QDoubleSpinBox()
+        self.backoff.setRange(3.0, 12.0)
+        self.backoff.setValue(6.0)
+        self.backoff.setSingleStep(0.5)
+        self.peaking = QComboBox()
+        self.peaking.addItems(["C", "B"])
+        self.gain_imb = QDoubleSpinBox()
+        self.gain_imb.setRange(0.0, 20.0)
+        self.gain_imb.setSingleStep(1.0)
+        self.ph_imb = QDoubleSpinBox()
+        self.ph_imb.setRange(0.0, 20.0)
+        self.ph_imb.setSingleStep(1.0)
+        df.addRow("cores (n-way)", self.n_way)
+        df.addRow("backoff point [dB]", self.backoff)
+        df.addRow("peaking class", self.peaking)
+        df.addRow("gain imbalance [%]", self.gain_imb)
+        df.addRow("phase imbalance [deg]", self.ph_imb)
+        self.doh_btn = QPushButton("Run combiner")
+        self.doh_btn.clicked.connect(self._go_doherty)
+        df.addRow("", self.doh_btn)
+
+        top = QHBoxLayout()
+        top.addWidget(fir_box, 1)
+        top.addWidget(doh_box, 1)
+        lay.addLayout(top)
+        self.table_slot = QVBoxLayout()
+        lay.addLayout(self.table_slot)
+        self._table = None
+        self.figbox = FigureBox()
+        lay.addWidget(self.figbox, 1)
+
+    def _go_fir(self):
+        bw = float(self.fir_bw.currentText()) * 1e6
+        off = float(self.notch.value()) * 1e6
+        n = self.fir_syms.value()
+        self.run_async(
+            lambda: run_fir_report(bw=bw, notch_offset_hz=off, n_symbols=n),
+            self._show, self.fir_btn, self.doh_btn)
+
+    def _go_doherty(self):
+        n = int(self.n_way.currentText())
+        bo = self.backoff.value()
+        pk = self.peaking.currentText()
+        gi, pi_ = self.gain_imb.value(), self.ph_imb.value()
+        self.run_async(
+            lambda: run_combiner_report(n_way=n, backoff_db=bo, peaking=pk,
+                                        gain_imbalance_pct=gi,
+                                        phase_imbalance_deg=pi_),
+            self._show, self.fir_btn, self.doh_btn)
+
+    def _show(self, rep):
+        if self._table is not None:
+            self.table_slot.removeWidget(self._table)
+            self._table.deleteLater()
+        self._table = metrics_table(rep["metrics"])
+        self.table_slot.addWidget(self._table)
+        self.figbox.set_figure(rep["fig"])
+
+
+class SelectorPage(Page):
+    """Rank narrowband ADPLL two-point vs wideband open-loop DTC."""
+
+    title = "Architecture Selector"
+
+    def __init__(self):
+        super().__init__()
+        lay = QVBoxLayout(self)
+        box = QGroupBox("requirement")
+        form = QFormLayout(box)
+        self.bw = QSpinBox()
+        self.bw.setRange(1, 320)
+        self.bw.setValue(80)
+        self.evm = QSpinBox()
+        self.evm.setRange(-45, -20)
+        self.evm.setValue(-35)
+        self.fout = QComboBox()
+        self.fout.addItems(["2.44", "3.5", "5.8", "6.0"])
+        self.fout.setCurrentIndex(2)
+        self.dtc_bits = QSpinBox()
+        self.dtc_bits.setRange(8, 14)
+        self.dtc_bits.setValue(11)
+        self.match = QDoubleSpinBox()
+        self.match.setRange(0.1, 2.0)
+        self.match.setValue(0.2)
+        self.match.setSingleStep(0.1)
+        self.mod = QComboBox()
+        self.mod.addItems(["ofdm", "gfsk", "dpsk", "qam"])
+        self.const_env = QCheckBox("constant envelope")
+        form.addRow("bandwidth [MHz]", self.bw)
+        form.addRow("EVM target [dB]", self.evm)
+        form.addRow("carrier [GHz]", self.fout)
+        form.addRow("DTC bits", self.dtc_bits)
+        form.addRow("two-point match [%]", self.match)
+        form.addRow("modulation", self.mod)
+        form.addRow("", self.const_env)
+        self.btn = QPushButton("Rank architectures")
+        self.btn.clicked.connect(self._go)
+        top = QHBoxLayout()
+        top.addWidget(box, 1)
+        top.addWidget(self.btn)
+        lay.addLayout(top)
+        self.rec = QLabel("—")
+        self.rec.setWordWrap(True)
+        lay.addWidget(self.rec)
+        self.figbox = FigureBox()
+        lay.addWidget(self.figbox, 1)
+
+    def _go(self):
+        bw = float(self.bw.value()) * 1e6
+        evm = float(self.evm.value())
+        fo = float(self.fout.currentText()) * 1e9
+        bits = self.dtc_bits.value()
+        match = self.match.value() / 100.0
+        mod = self.mod.currentText()
+        ce = self.const_env.isChecked()
+        self.run_async(
+            lambda: run_selector_report(bw_hz=bw, evm_db_max=evm, fout=fo,
+                                        dtc_bits=bits, modulation=mod,
+                                        two_point_gain_match=match,
+                                        constant_envelope=ce),
+            self._show, self.btn)
+
+    def _show(self, rep):
+        m = rep["metrics"]
+        self.rec.setText(f"{m['recommendation']}\n\nclosest preset: "
+                         f"{m['closest preset']}")
+        self.figbox.set_figure(rep["fig"])
+
+
+class RTLPage(Page):
+    """Emit the digital datapath + Verilog-AMS PA model, verify bit-true."""
+
+    title = "RTL / AMS Export"
+
+    def __init__(self):
+        super().__init__()
+        import os
+        import tempfile
+        lay = QVBoxLayout(self)
+        box = QGroupBox("datapath")
+        form = QFormLayout(box)
+        self.n_bits = QSpinBox()
+        self.n_bits.setRange(6, 12)
+        self.n_bits.setValue(10)
+        self.n_thermo = QSpinBox()
+        self.n_thermo.setRange(0, 12)
+        self.n_thermo.setValue(7)
+        self.with_dpd = QCheckBox("include polar-DPD dual LUT")
+        self.with_dpd.setChecked(True)
+        self.verify = QCheckBox("run iverilog golden checks")
+        self.verify.setChecked(True)
+        form.addRow("DPA bits", self.n_bits)
+        form.addRow("thermometer MSBs", self.n_thermo)
+        form.addRow("", self.with_dpd)
+        form.addRow("", self.verify)
+        self._outdir = os.path.join(tempfile.gettempdir(), "polartx_rtl")
+        form.addRow("output dir", QLabel(self._outdir))
+        self.btn = QPushButton("Emit RTL")
+        self.btn.clicked.connect(self._go)
+        top = QHBoxLayout()
+        top.addWidget(box, 1)
+        top.addWidget(self.btn)
+        lay.addLayout(top)
+        self.table_slot = QVBoxLayout()
+        lay.addLayout(self.table_slot)
+        self._table = None
+        self.files = QLabel("—")
+        self.files.setWordWrap(True)
+        lay.addWidget(self.files, 1)
+
+    def _go(self):
+        nb, nt = self.n_bits.value(), self.n_thermo.value()
+        dpd, ver = self.with_dpd.isChecked(), self.verify.isChecked()
+        self.run_async(
+            lambda: run_rtl_export(self._outdir, n_bits=nb,
+                                   n_thermo=min(nt, nb), with_dpd=dpd,
+                                   verify=ver),
+            self._show, self.btn)
+
+    def _show(self, rep):
+        if self._table is not None:
+            self.table_slot.removeWidget(self._table)
+            self._table.deleteLater()
+        self._table = metrics_table(rep["checks"])
+        self.table_slot.addWidget(self._table)
+        self.files.setText(f"{len(rep['files'])} files in {rep['outdir']}:\n"
+                           + ", ".join(rep["files"]))
