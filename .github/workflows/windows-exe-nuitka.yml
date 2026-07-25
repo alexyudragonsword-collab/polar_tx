@@ -41,6 +41,7 @@ jobs:
           python -m nuitka packaging/launch_qt.py
           --onefile --assume-yes-for-downloads --msvc=latest
           --windows-console-mode=disable
+          --windows-icon-from-ico=packaging/icon.ico
           --enable-plugin=pyside6
           --include-package=polartx
           --include-package-data=polartx
@@ -88,6 +89,7 @@ jobs:
         run: >
           python -m nuitka packaging/launch_web.py
           --onefile --assume-yes-for-downloads --msvc=latest
+          --windows-icon-from-ico=packaging/icon.ico
           --include-package=streamlit
           --include-package-data=streamlit
           --include-distribution-metadata=streamlit

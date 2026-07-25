@@ -34,6 +34,7 @@ jobs:
       - name: Build desktop exe (onefile, windowed)
         run: >
           pyinstaller --onefile --windowed --name polartx-gui-qt
+          --icon packaging/icon.ico
           --collect-all PySide6 --collect-submodules polartx
           packaging/launch_qt.py
       - name: Smoke desktop exe (open, render, auto-quit)
@@ -71,6 +72,7 @@ jobs:
       - name: Build web exe (onefile, console = server log)
         run: >
           pyinstaller --onefile --name polartx-gui-web
+          --icon packaging/icon.ico
           --add-data "gui;gui"
           --collect-all streamlit --copy-metadata streamlit
           --collect-submodules polartx
