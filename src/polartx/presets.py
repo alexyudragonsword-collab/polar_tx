@@ -262,11 +262,20 @@ def bench_wifi7_polar_degani24(dpd: bool = True) -> TxPreset:
 @dataclass
 class FIRTxPreset:
     """A FIRDualTapTX plus its baseband waveform factory and the single-
-    tap baseline (for OOC-noise-suppression measurement)."""
+    tap baseline (for OOC-noise-suppression measurement).
+
+    ``.tx`` aliases the dual-tap chain so this preset is interchangeable
+    with TxPreset anywhere the ordinary chain/report layer is used (the
+    GUI preset registry included); ``.single_tx`` stays available for the
+    baseline the OOC-suppression measurement needs."""
     fir_tx: object              # FIRDualTapTX
     single_tx: PolarTX          # one tap alone (baseline)
     fs_bb: float
     make_waveform: Callable[..., Waveform]
+
+    @property
+    def tx(self):
+        return self.fir_tx
 
 
 def bench_wifi7_mlo_fir_borokhovich26(bw: float = 40e6, *,

@@ -10,11 +10,8 @@ from polartx.presets import (bench_edge_polar_staszewski05,
 
 BENCH_PRESETS = ["Bench: Staszewski'05 EDGE", "Bench: Madoglio'14 LTE-20",
                  "Bench: BenBassat'20 WiFi6", "Bench: Degani'24 WiFi7",
+                 "Bench: Borokhovich'26 WiFi7 MLO (FIR)",
                  "Bench: 802.11n polar (~2010)"]
-
-#: benchmarks that cannot be a registry entry: they do not return the
-#: single-PolarTX TxPreset shape the chain report layer runs.
-_NON_TXPRESET_BENCHES = {"bench_wifi7_mlo_fir_borokhovich26"}  # FIRTxPreset
 
 
 def test_benchmarks_are_registered_presets():
@@ -25,18 +22,28 @@ def test_benchmarks_are_registered_presets():
 
 def test_every_benchmark_is_reachable_from_the_gui():
     """Guards the failure mode where a new benchmark lands in presets.py
-    but never reaches the GUI: every exported bench_* factory must either
-    be a registry entry or have its own guiutil entry point."""
-    from polartx import guiutil
+    but never reaches the GUI. EVERY exported bench_* factory is a preset
+    registry entry — including the dual-tap FIR one, which qualifies via
+    FIRTxPreset.tx aliasing the combined chain."""
     exported = {n for n in polartx.__all__ if n.startswith("bench_")}
-    registered = set()
-    for name in PRESETS:
-        if name.startswith("Bench:"):
-            registered.add(name)
-    # one registry entry per TxPreset-shaped benchmark
-    assert len(registered) == len(exported - _NON_TXPRESET_BENCHES)
-    # and the odd-shaped one is reachable through its dedicated report
-    assert hasattr(guiutil, "run_fir_report")
+    registered = {n for n in PRESETS if n.startswith("Bench:")}
+    assert len(registered) == len(exported), (
+        f"{len(exported)} bench_* factories but {len(registered)} registry "
+        f"entries — a benchmark is unreachable from the GUI")
+
+
+def test_fir_preset_is_interchangeable_with_txpreset():
+    """FIRTxPreset carries the dual-tap chain through the ordinary report
+    layer: .tx runs, and the combined result answers the full metric set
+    (EVM/ACLR/mask), not just EVM."""
+    from polartx.presets import bench_wifi7_mlo_fir_borokhovich26
+    p = bench_wifi7_mlo_fir_borokhovich26()
+    assert p.tx is p.fir_tx
+    res = p.tx.run(p.make_waveform(n_symbols=2), noise=True, seed=1)
+    assert res.evm().db < -20
+    assert res.aclr()["upper_dbc"] < -30
+    f, pdb = res.psd(nfft=4096)
+    assert len(f) == len(pdb)
 
 
 def test_benchmarks_exported_top_level():

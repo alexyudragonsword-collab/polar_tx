@@ -25,12 +25,24 @@ def test_report_has_metrics_and_figure(name):
 
 
 def test_latest_benchmark_is_reachable():
-    """The 802.11n anchor joined the registry; the RFIC'26 FIR benchmark is
-    reachable through its own entry point (it returns a FIRTxPreset, which
-    run_chain_report's single-PolarTX shape cannot carry)."""
+    """The newest benchmark (Borokhovich RFIC'26) is selectable like any
+    other preset AND has its own richer page; the 802.11n anchor is in the
+    registry too."""
+    assert "Bench: Borokhovich'26 WiFi7 MLO (FIR)" in PRESETS
     assert "Bench: 802.11n polar (~2010)" in PRESETS
     from polartx.guiutil import run_fir_report
     assert callable(run_fir_report)
+
+
+def test_fir_benchmark_runs_through_the_chain_report():
+    """The dual-tap preset scores the full metric set through the ordinary
+    report path — the thing that used to be impossible."""
+    rep = run_chain_report("Bench: Borokhovich'26 WiFi7 MLO (FIR)", seed=1)
+    m = rep["metrics"]
+    assert m["EVM [dB]"] < -25 and m["mask"] in ("PASS", "FAIL")
+    assert "ACLR upper [dBc]" in m
+    import matplotlib.pyplot as plt
+    plt.close(rep["fig"])
 
 
 def test_fir_report_measures_the_notch():

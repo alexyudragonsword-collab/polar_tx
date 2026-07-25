@@ -64,10 +64,33 @@ class FIRResult:
     tau_s: float
     taps: tuple            # (PolarResult tap1, PolarResult tap2)
 
+    def _as_polar(self):
+        """Tap 1's PolarResult carrying the COMBINED output.
+
+        Every per-run tap (env_code, phase, waveform) is identical between
+        the two taps — only the noise draw and the tap-2 delay differ — so
+        substituting the combined y gives the metric layer a result object
+        that is correct for the combined signal.  This is what lets the
+        dual-tap chain reuse the ordinary PolarResult metrics."""
+        return replace(self.taps[0], y=self.y)
+
     def evm(self, equalize: str = "per_tone", **kw):
         # the 2-tap combine adds a known group delay + in-band tilt that
         # a real receiver equalizes, so score EVM per-tone by default
-        return replace(self.taps[0], y=self.y).evm(equalize=equalize, **kw)
+        return self._as_polar().evm(equalize=equalize, **kw)
+
+    def aclr(self, *a, **kw):
+        return self._as_polar().aclr(*a, **kw)
+
+    def check_mask(self, *a, **kw):
+        return self._as_polar().check_mask(*a, **kw)
+
+    def avg_efficiency(self, dpa):
+        """Combined-chain average efficiency.  Both cores burn DC, so the
+        two taps' consumption adds while the combiner sums their voltages
+        — reported per-core (the single-core number the DPA model gives),
+        which is the meaningful efficiency of each identical tap."""
+        return self._as_polar().avg_efficiency(dpa)
 
     def psd(self, nfft: int = 8192):
         from .vendor.padpd.metrics import psd

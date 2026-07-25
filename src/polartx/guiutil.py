@@ -29,6 +29,12 @@ def _registry():
         "Bench: Madoglio'14 LTE-20": lambda **o: P.bench_lte20_polar_madoglio14(),
         "Bench: BenBassat'20 WiFi6": lambda **o: P.bench_wifi6_polar_benbassat20(),
         "Bench: Degani'24 WiFi7": lambda **o: P.bench_wifi7_polar_degani24(),
+        # dual-tap FIR chain: a FIRTxPreset, interchangeable here via its
+        # .tx alias.  The OOC-noise notch — the paper's headline — needs
+        # the single-tap baseline to measure against, so the dedicated
+        # page (run_fir_report) is still the fuller view.
+        "Bench: Borokhovich'26 WiFi7 MLO (FIR)":
+            lambda **o: P.bench_wifi7_mlo_fir_borokhovich26(),
         "Bench: 802.11n polar (~2010)": lambda **o: P.bench_wifi11n_polar(),
     }
 
