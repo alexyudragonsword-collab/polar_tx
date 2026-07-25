@@ -90,3 +90,38 @@ def test_rtl_export_writes_datapath_and_ams(tmp_path):
               "dpa_rnm.vams", "polar_dpd_lut.v"):
         assert f in rep["files"]
     assert "OK" in rep["checks"]["DPA RNM self-check"]
+
+
+def test_sc_fdma_constellation_is_de_precoded():
+    """SC-FDMA regression: the frequency-domain symbols are DFT-precoded and
+    form a Gaussian blob; the QAM lattice only exists after the receiver's
+    inverse DFT.  The report used to plot the precoded grid, which showed a
+    meaningless cloud for every LTE preset."""
+    import numpy as np
+    from polartx.presets import lte20_adpll
+    p = lte20_adpll(qam=64)
+    wf = p.make_waveform(n_symbols=8, seed=0)
+    assert wf.meta["dft_precode"] is True
+    # precoded grid: many levels (a cloud).  De-precoded: a 64-QAM lattice.
+    precoded = wf.ofdm_ref.tx_symbols
+    assert len(np.unique(np.round(precoded.real, 3))) > 100
+    assert len(np.unique(np.round(wf.meta["qam_symbols"].real, 3))) == 8
+
+    rep = run_chain_report("LTE 20 MHz", seed=1)
+    assert "de-precoded" in rep["fig"].axes[1].get_title()
+    # and the plotted cloud must actually be the lattice
+    pts = rep["fig"].axes[1].get_lines()[0].get_xdata()
+    assert len(np.unique(np.round(pts, 1))) <= 12    # 8 levels + rounding
+    import matplotlib.pyplot as plt
+    plt.close(rep["fig"])
+
+
+def test_report_flags_why_a_constellation_is_fuzzy():
+    """A fuzzy picture has two different causes; the report must say which."""
+    clean = run_chain_report("WiFi 160 MHz", seed=1)
+    assert clean["metrics"]["constellation"] == "resolved"
+    dense = run_chain_report("Bench: Degani'24 WiFi7", seed=1)
+    # 4096-QAM at its published -37 dB class: clouds genuinely overlap
+    assert "overlap" in dense["metrics"]["constellation"]
+    import matplotlib.pyplot as plt
+    plt.close(clean["fig"]); plt.close(dense["fig"])

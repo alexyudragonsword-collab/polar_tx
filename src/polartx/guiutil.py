@@ -117,13 +117,63 @@ def run_chain_report(name: str, *, seed: int = 1, noise: bool = True,
                  / (np.abs(tx_s) ** 2).sum(axis=0))
         else:
             g = np.vdot(tx_s, rx) / np.vdot(tx_s, tx_s)
-        pts = (rx / g).ravel()
+        eq_grid = rx / g
+        label = f"{eq} eq."
+        qam_ref = wf.meta.get("qam_symbols")
+        if wf.meta.get("dft_precode") and qam_ref is not None \
+                and eq_grid.ndim == 2:
+            # SC-FDMA: the frequency-domain symbols are DFT-precoded and
+            # look like a Gaussian cloud — the QAM constellation only
+            # exists after the receiver's inverse DFT across the
+            # allocation.  Plotting the precoded grid shows a blob that
+            # says nothing about link quality.
+            n_act = eq_grid.shape[1]
+            eq_grid = np.fft.ifft(eq_grid, axis=1) * np.sqrt(n_act)
+            eq_grid = eq_grid[-qam_ref.shape[0]:]      # drop preamble rows
+            label += ", DFT de-precoded"
+        pts = eq_grid.ravel()
+        ref_pts = np.asarray(qam_ref if qam_ref is not None else tx_s)
+        n_lvl = len(np.unique(np.round(ref_pts.real, 3)))
+        # Why a constellation looks fuzzy has two distinct causes, and the
+        # user cannot tell them apart by eye: either the error clouds are
+        # genuinely wider than the lattice spacing (a link at its EVM
+        # limit), or too few symbols were run to populate M sites. Say
+        # which, so a legitimately marginal picture is not read as a bug.
+        m_order = n_lvl ** 2
+        if m_order > 1 and hasattr(e, "percent"):
+            sep = (np.sqrt(6.0 / (m_order - 1)) / 2) / max(e.percent / 100, 1e-12)
+            hits = ref_pts.size / m_order
+            metrics["constellation"] = (
+                "resolved" if sep > 3 else
+                "marginal" if sep > 2 else "clouds overlap at this EVM")
+            if hits < 4:
+                metrics["constellation"] += f" (only {hits:.1f} pts/symbol site)"
         ax[1].plot(pts.real, pts.imag, ".", ms=1, alpha=0.4)
-        ax[1].set_title(f"constellation ({eq} eq.)")
+        if n_lvl >= 32:
+            # 1024-QAM and denser: the full square is a solid wall of points
+            # at any usable marker size.  Zoom to the centre sub-lattice so
+            # the individual clouds — and whether they still separate at this
+            # EVM — are actually visible.
+            span = 4.5 * np.ptp(np.unique(np.round(ref_pts.real, 3)))/ (n_lvl - 1)
+            ax[1].set_xlim(-span, span)
+            ax[1].set_ylim(-span, span)
+            label += f", centre zoom ({n_lvl}^2-QAM)"
+        ax[1].set_title(f"constellation ({label})")
     elif wf.kind == "dpsk":
         z = e["symbols_rx"][20:-20]
         ax[1].plot(z.real, z.imag, ".", ms=2, alpha=0.5)
-        ax[1].set_title("DPSK symbols")
+        if wf.meta.get("pulse_taps") is not None:
+            # EDGE 3pi/8-8PSK on the linearized-GMSK C0 pulse: C0 is
+            # deliberately NOT Nyquist, so the symbol-instant samples carry
+            # ISI by construction and never form tight clusters.  That is
+            # why the DEVM for this pulse is scored against the ideal
+            # waveform, not against these samples — the spread below is
+            # the pulse, not a broken link.
+            ax[1].set_title("8PSK symbols — linearized-GMSK C0\n"
+                            "(non-Nyquist: ISI by design; DEVM uses the "
+                            "ideal-waveform ref)", fontsize=8)
+        else:
+            ax[1].set_title(f"{wf.meta.get('mode', 'DPSK')} symbols")
     else:
         y = res.y / np.abs(res.y).max()
         ax[1].plot(y.real[2000:12000], y.imag[2000:12000], lw=0.3, alpha=0.6)
