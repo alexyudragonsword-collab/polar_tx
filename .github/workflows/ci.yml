@@ -32,7 +32,9 @@ jobs:
         # clone; GUI tests skip without PySide6; RTL golden tests skip
         # without iverilog (dedicated jobs below exercise those).
 
-  # Linux job with the Qt runtime so the PySide6 GUI tests actually run
+  # Linux job with the Qt runtime + streamlit so BOTH GUI frontends are
+  # actually exercised (Qt offscreen; the web pages via streamlit AppTest,
+  # which executes each page script and clicks every button).
   test-gui:
     runs-on: ubuntu-latest
     env:
@@ -46,9 +48,9 @@ jobs:
       - name: Qt runtime libs
         run: sudo apt-get update && sudo apt-get install -y libegl1 libopengl0 libxkbcommon0
       - name: Install
-        run: pip install -e .[test,guiqt]
-      - name: GUI tests
-        run: pytest tests/test_gui_qt.py tests/test_guiutil.py -q
+        run: pip install -e .[test,guiqt,gui]
+      - name: GUI tests (Qt + web + headless compute layer)
+        run: pytest tests/test_gui_qt.py tests/test_gui_web.py tests/test_guiutil.py -q
 
   # Linux job with iverilog so the RTL bit-true golden tests actually run
   test-rtl:

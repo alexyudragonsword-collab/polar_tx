@@ -32,5 +32,8 @@ if st.button("Run", type="primary"):
     with st.spinner("simulating..."):
         rep = run_chain_report(name, seed=int(seed), noise=noise,
                                **overrides)
-    st.table(rep["metrics"])
+    # stringify: the metrics dict mixes floats with the "PASS"/"FAIL" mask
+    # verdict, and Arrow rejects that mixed column (Streamlit recovers, but
+    # logs a serialization traceback each run)
+    st.table({k: str(v) for k, v in rep["metrics"].items()})
     st.pyplot(rep["fig"])
