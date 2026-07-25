@@ -16,7 +16,9 @@ with tab_fir:
     c1, c2, c3 = st.columns(3)
     bw = c1.selectbox("bandwidth [MHz]", [40, 80, 160], index=0)
     notch = c2.slider("notch offset [MHz]", 100, 900, 500, 50)
-    nsym = c3.slider("OFDM symbols", 2, 8, 4)
+    nsym = c3.slider("OFDM symbols", 4, 48, 16,
+                     help="EVM here is CFR-clipping-limited and bursty; "
+                          "short records swing many dB seed to seed")
     noise = st.checkbox("noise on", True)
 
     if st.button("Run FIR chain", type="primary", key="fir"):

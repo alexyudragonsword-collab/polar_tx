@@ -67,6 +67,12 @@ class PolarResult:
     phase_out: np.ndarray          # phase-modulator output [rad]
     info: dict = field(default_factory=dict)
 
+    #: EVM equalization this result is scored with by default.  Deliberately
+    #: NOT a dataclass field — the report layer reads it so the constellation
+    #: it draws uses the same equalizer as the EVM it prints (a plot drawn
+    #: with a different convention silently contradicts the number).
+    evm_equalize_default = "scalar"
+
     # ------------------------------------------------------------ metrics
     def evm(self, equalize: str = "scalar"):
         """OFDM: constellation EVM vs the reference grid.  GFSK:

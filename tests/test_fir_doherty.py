@@ -59,12 +59,32 @@ def test_notch_is_configurable():
 def test_fir_does_not_degrade_evm(preset):
     """Paper: no EVM degradation with FIR (a receiver equalizes the
     2-tap group delay)."""
-    wf = preset.make_waveform(n_symbols=3, seed=0)
+    wf = preset.make_waveform(seed=0)
     e_fir = preset.fir_tx.run(wf, noise=True, seed=1).evm().db
     e_one = preset.single_tx.run(wf, noise=True, seed=1).evm(
         equalize="per_tone").db
-    assert e_fir < -30.0
+    assert e_fir < -35.0
     assert e_fir < e_one + 2.0
+
+
+def test_lands_in_the_published_evm_class(preset):
+    """Published: -40.7 dB at 40 MHz.  Pinned as a class (not a loose
+    '< -30') because this chain's EVM is set by the CFR clipping residual
+    — identical with noise on and off — so an over-aggressive CFR target
+    silently drops it several dB below the paper, which a loose bound
+    would never catch (it did exactly that at cfr_papr_db=8.0)."""
+    wf = preset.make_waveform(seed=0)
+    e = preset.fir_tx.run(wf, noise=True, seed=1).evm().db
+    assert -47.0 < e < -38.0, f"EVM {e:.1f} dB is outside the -40.7 dB class"
+
+
+def test_evm_is_cfr_limited_not_noise_limited(preset):
+    """The property the class pin rests on: turning the random impairments
+    off barely moves the EVM, because clipping distortion dominates."""
+    wf = preset.make_waveform(seed=0)
+    on = preset.fir_tx.run(wf, noise=True, seed=1).evm().db
+    off = preset.fir_tx.run(wf, noise=False, seed=1).evm().db
+    assert abs(on - off) < 1.0
 
 
 # ------------------------------------------------- Doherty efficiency

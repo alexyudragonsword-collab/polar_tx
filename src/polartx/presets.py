@@ -306,11 +306,20 @@ def bench_wifi7_mlo_fir_borokhovich26(bw: float = 40e6, *,
                     amam=("rapp", 2.5, 1.12), ampm_deg_poly=(0.0, 2.0, 3.0),
                     eff=("doherty", 0.55, 0.35, 6.0))
     base = wifi_dtc(bw=bw, qam=4096, fout=6.025e9, n_bits=13,
-                    jitter_rms_s=8e-15, lo_pn=lo, cfr_papr_db=8.0,
+                    # 9 dB, not the 8 dB the other WiFi benchmarks use: at
+                    # 4096-QAM the CFR clipping residual IS the EVM floor
+                    # (identical with noise on and off), and 8 dB clips the
+                    # chain to ~-35 dB, 5 dB below this paper's published
+                    # class.  9 dB lands at -40.6 dB vs the published -40.7.
+                    jitter_rms_s=8e-15, lo_pn=lo, cfr_papr_db=9.0,
                     dpd=True, dpa=dpa, oversampling=osr)
     fir_tx = FIRDualTapTX(base.tx, notch_offset_hz=notch_offset_hz)
 
-    def make_waveform(n_symbols: int = 4, seed: int = 0) -> Waveform:
+    # 16 symbols, not 4: the EVM here is CFR-clipping-limited, and clipping
+    # events are bursty, so a 4-symbol record swings ~15 dB seed to seed.
+    # 16 settles to ~4 dB spread around the published class (and still
+    # runs in ~1 s despite osr=50).
+    def make_waveform(n_symbols: int = 16, seed: int = 0) -> Waveform:
         from .waveforms.ofdm import wifi_waveform
         return wifi_waveform(bw, 4096, n_symbols=n_symbols,
                              oversampling=osr, seed=seed)

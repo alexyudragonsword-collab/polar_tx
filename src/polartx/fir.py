@@ -64,6 +64,10 @@ class FIRResult:
     tau_s: float
     taps: tuple            # (PolarResult tap1, PolarResult tap2)
 
+    #: the 2-tap combine imposes a known group delay (tau/2) that a real
+    #: receiver equalizes, so this chain is scored — and drawn — per tone
+    evm_equalize_default = "per_tone"
+
     def _as_polar(self):
         """Tap 1's PolarResult carrying the COMBINED output.
 

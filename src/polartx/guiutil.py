@@ -80,6 +80,9 @@ def run_chain_report(name: str, *, seed: int = 1, noise: bool = True,
     wf = p.make_waveform(**_size_kwargs(p.make_waveform, n_units))
     res = p.tx.run(wf, noise=noise, seed=seed)
 
+    # one equalization convention for BOTH the number and the picture
+    eq = getattr(res, "evm_equalize_default", "scalar")
+
     metrics = {}
     e = res.evm()
     if hasattr(e, "db"):
@@ -107,10 +110,16 @@ def run_chain_report(name: str, *, seed: int = 1, noise: bool = True,
         from .waveforms.ofdm import demodulate_ofdm
         rx = demodulate_ofdm(res.y, wf.ofdm_ref)
         tx_s = wf.ofdm_ref.tx_symbols
-        g = np.vdot(tx_s, rx) / np.vdot(tx_s, tx_s)
+        if eq == "per_tone" and rx.ndim == 2:
+            # per-subcarrier channel estimate, exactly like the EVM metric:
+            # removes the linear phase ramp (group delay) a receiver equalizes
+            g = ((np.conj(tx_s) * rx).sum(axis=0)
+                 / (np.abs(tx_s) ** 2).sum(axis=0))
+        else:
+            g = np.vdot(tx_s, rx) / np.vdot(tx_s, tx_s)
         pts = (rx / g).ravel()
         ax[1].plot(pts.real, pts.imag, ".", ms=1, alpha=0.4)
-        ax[1].set_title("constellation")
+        ax[1].set_title(f"constellation ({eq} eq.)")
     elif wf.kind == "dpsk":
         z = e["symbols_rx"][20:-20]
         ax[1].plot(z.real, z.imag, ".", ms=2, alpha=0.5)
@@ -162,14 +171,14 @@ def run_setup(doc: dict) -> dict:
 
 
 def run_fir_report(bw: float = 40e6, *, notch_offset_hz: float = 500e6,
-                   n_symbols: int = 3, seed: int = 0, noise: bool = True,
+                   n_symbols: int = 16, seed: int = 0, noise: bool = True,
                    osr: int = 50) -> dict:
     """Borokhovich RFIC'26 2-tap FIR + digital-Doherty benchmark.
 
-    Kept out of ``_registry()`` on purpose: it returns a FIRTxPreset (two
-    DPA chains combined), not the single-PolarTX shape run_chain_report
-    expects.  Runs the dual-tap chain and its single-tap baseline so the
-    OOC-noise suppression at the notch is measured, not asserted.
+    The preset is also a plain registry entry (the chain workbench scores
+    it like any other).  This fuller view additionally runs the SINGLE-TAP
+    baseline, which the headline OOC-noise suppression must be measured
+    against — a lone dual-tap run cannot show what the notch bought.
     """
     import matplotlib
     matplotlib.use("Agg")
