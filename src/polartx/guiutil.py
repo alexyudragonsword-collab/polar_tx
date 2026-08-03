@@ -119,6 +119,26 @@ def run_chain_report(name: str, *, seed: int = 1, noise: bool = True,
             g = np.vdot(tx_s, rx) / np.vdot(tx_s, tx_s)
         eq_grid = rx / g
         label = f"{eq} eq."
+        # Neither scalar nor per_tone equalization removes COMMON PHASE
+        # ERROR: per_tone averages along the symbol axis, so a per-symbol
+        # phase rotation survives it.  A real receiver tracks CPE off the
+        # pilots, so the convention matters when comparing to measured
+        # numbers — report the residual instead of leaving it implicit.
+        # (These presets run a PLL-locked LO whose noise is high-pass
+        # shaped above the symbol rate, so CPE is normally ~0.1 deg and
+        # what phase noise remains is fast, i.e. ICI that CPE tracking
+        # cannot fix either.)
+        if eq_grid.ndim == 2 and eq_grid.shape[0] > 1:
+            _cpe = np.angle((eq_grid * np.conj(tx_s)).sum(axis=1,
+                                                          keepdims=True))
+            _res = eq_grid * np.exp(-1j * _cpe)
+            _e0 = np.sqrt((np.abs(eq_grid - tx_s) ** 2).mean())
+            _e1 = np.sqrt((np.abs(_res - tx_s) ** 2).mean())
+            metrics["CPE rms [deg]"] = round(float(np.rad2deg(_cpe.std())), 2)
+            _gain = 20 * np.log10(max(_e0, 1e-30) / max(_e1, 1e-30))
+            if _gain > 0.5:
+                metrics["EVM if CPE tracked [dB]"] = round(
+                    metrics.get("EVM [dB]", 0.0) - _gain, 1)
         qam_ref = wf.meta.get("qam_symbols")
         if wf.meta.get("dft_precode") and qam_ref is not None \
                 and eq_grid.ndim == 2:

@@ -125,3 +125,51 @@ def test_report_flags_why_a_constellation_is_fuzzy():
     assert "overlap" in dense["metrics"]["constellation"]
     import matplotlib.pyplot as plt
     plt.close(clean["fig"]); plt.close(dense["fig"])
+
+
+def test_cpe_is_reported_and_negligible_for_the_wideband_presets():
+    """Neither scalar nor per_tone equalization removes common phase error
+    (per_tone averages ALONG the symbol axis), so the report states the
+    residual rather than leaving the convention implicit.
+
+    It is ~0.1 deg here because these presets run a PLL-locked LO whose
+    noise is high-pass shaped above the OFDM symbol rate: little energy
+    lands in the common-phase term, and what remains is fast (ICI), which
+    pilot CPE tracking could not remove either."""
+    import matplotlib.pyplot as plt
+    for name in ("WiFi 160 MHz", "Bench: Degani'24 WiFi7"):
+        rep = run_chain_report(name, seed=1)
+        assert rep["metrics"]["CPE rms [deg]"] < 0.5
+        # negligible -> no "would be better with CPE tracking" line
+        assert "EVM if CPE tracked [dB]" not in rep["metrics"]
+        plt.close(rep["fig"])
+
+
+def test_cpe_detector_catches_an_injected_common_phase():
+    """Guards the above: a CPE report that always says ~0 would be
+    indistinguishable from a broken detector.  Stamp a known per-symbol
+    common phase on the chain output and require it to be seen."""
+    import numpy as np
+    import matplotlib.pyplot as plt
+    from polartx.presets import wifi_dtc
+    from polartx.waveforms.ofdm import demodulate_ofdm
+    p = wifi_dtc(bw=80e6)
+    wf = p.make_waveform()
+    res = p.tx.run(wf, noise=True, seed=1)
+    y = res.y.copy()
+    nsym = wf.ofdm_ref.tx_symbols.shape[0]
+    seg = len(y) // nsym
+    rng = np.random.default_rng(3)
+    ph = np.deg2rad(rng.normal(0.0, 3.0, nsym))
+    for i in range(nsym):
+        y[i * seg:(i + 1) * seg] *= np.exp(1j * ph[i])
+    rx = demodulate_ofdm(y, wf.ofdm_ref)
+    tx = wf.ofdm_ref.tx_symbols
+    g = (np.conj(tx) * rx).sum(axis=0) / (np.abs(tx) ** 2).sum(axis=0)
+    eq = rx / g
+    cpe = np.angle((eq * np.conj(tx)).sum(axis=1, keepdims=True))
+    assert np.rad2deg(cpe.std()) > 2.0            # the injection is seen
+    e0 = np.sqrt((np.abs(eq - tx) ** 2).mean())
+    e1 = np.sqrt((np.abs(eq * np.exp(-1j * cpe) - tx) ** 2).mean())
+    assert 20 * np.log10(e0 / e1) > 5.0           # removing it recovers EVM
+    plt.close("all")
