@@ -43,7 +43,7 @@ class ChainPage(Page):
         form.addRow("seed", self.seed)
         form.addRow("", self.noise)
         form.addRow("DTC bits (WiFi/NR)", self.dtc_bits)
-        form.addRow("AM/PM skew [ns] (WiFi/NR)", self.skew_ns)
+        form.addRow("AM/PM skew [ns] (all but BLE)", self.skew_ns)
         form.addRow("two-point gain err [%] (BLE/EDR/LTE)", self.dp_err_pct)
         form.addRow("", self.dpd)
         self.btn = QPushButton("Run")
@@ -77,8 +77,16 @@ class ChainPage(Page):
         elif "LTE" in name:
             ov["dpd"] = self.dpd.isChecked()
             ov["dp_gain"] = 1.0 + self.dp_err_pct.value() / 100.0
+            # AM/PM skew is an ENVELOPE-path impairment, so it applies to
+            # every chain whose payload has envelope variation — the
+            # narrowband OFDM chain very much included (1 ns fails the
+            # mask).  It is not a wideband-only knob.
+            ov["env_skew_s"] = self.skew_ns.value() * 1e-9
         else:                       # BLE / EDR
             ov["dp_gain"] = 1.0 + self.dp_err_pct.value() / 100.0
+            # BLE GFSK is constant-envelope and provably unaffected; EDR
+            # DPSK is quasi-constant (10 ns ~ 0.13% DEVM) but non-zero.
+            ov["env_skew_s"] = self.skew_ns.value() * 1e-9
         return ov
 
     def _go(self):

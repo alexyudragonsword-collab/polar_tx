@@ -29,6 +29,7 @@ def ble_adpll(rate: float = 1e6, *, mode: str = "response",
               loop_bw: float = 100e3, fref: float = 32e6,
               fout: float = 2.440e9, dpa: DPAConfig | None = None,
               chain: ChainConfig | None = None,
+              env_skew_s: float = 0.0,
               settle_cycles: int = 40_000,
               dp_range_hz: float | None = None) -> TxPreset:
     """BLE LE-1M/LE-2M polar TX: ADPLL two-point PM + DPA at fixed code.
@@ -36,6 +37,13 @@ def ble_adpll(rate: float = 1e6, *, mode: str = "response",
     Baseband runs on the fref grid (fs_bb = fref, 32/16 samples per
     symbol) so event mode needs no resampling.  BLE-class DCO
     (-112 dBc/Hz @ 1 MHz on 2.44 GHz), 10 ps TDC, loop BW ~100 kHz.
+
+    env_skew_s is accepted for interface symmetry with the other presets,
+    but GFSK is constant-envelope: the envelope path is a constant, so
+    skewing it against the phase path changes nothing at all (verified
+    bit-identical out to 20 ns).  It only bites once the payload has
+    envelope variation — see bt_edr_adpll (quasi-constant: 10 ns costs
+    0.13% DEVM) and lte20_adpll (OFDM: 1 ns already fails the mask).
     """
     alpha, rho = design_adpll_dlf(fref, loop_bw, 60.0)
     osc = OscConfig(f0=fout, gain=20e3, pn_dbchz=-112.0, pn_foffset=1e6,
@@ -47,7 +55,7 @@ def ble_adpll(rate: float = 1e6, *, mode: str = "response",
     pm = ADPLLTwoPoint(pll, dp_gain=dp_gain, mode=mode,
                        settle_cycles=settle_cycles, dp_range_hz=dp_range_hz)
     dpa_ = DPA(dpa or DPAConfig(n_bits=8))
-    tx = PolarTX(chain or ChainConfig(), pm, dpa_)
+    tx = PolarTX(chain or ChainConfig(env_skew_s=env_skew_s), pm, dpa_)
 
     def make_waveform(n_bits: int = 800, pattern: str = "prbs",
                       seed: int = 1) -> Waveform:
@@ -84,6 +92,7 @@ def lte20_adpll(qam: int = 64, *, mode: str = "response",
                 fref: float = 122.88e6, fout: float = 1.95e9,
                 dpa: DPAConfig | None = None,
                 chain: ChainConfig | None = None,
+                env_skew_s: float = 0.0,
                 dpd: bool = True, oversampling: int = 4,
                 dp_range_hz: float | None = None,
                 settle_cycles: int = 60_000) -> TxPreset:
@@ -94,6 +103,13 @@ def lte20_adpll(qam: int = 64, *, mode: str = "response",
     uplink), 1 ps TDC, ~1 MHz loop.  The envelope path runs a mildly
     compressive 10-bit DPA; dpd=True pre-links the exact PolarDPD LUTs
     (factory cal) - set False to see the raw DPA nonlinearity.
+    AM/PM path skew matters here despite the narrow channel — the OFDM
+    envelope is what makes a polar TX skew-sensitive, not the phase path.
+    It is simply ~8x more tolerant than the 160 MHz wideband chain, in
+    proportion to bandwidth: 1 ns already fails the spectral mask
+    (EVM -53.3 -> -34.7 dB, ACLR -62 -> -42 dBc), where WiFi 160 MHz
+    fails at 0.2 ns.  Constant-envelope BLE is immune outright.
+
     Default chain: 5% hole punching, NO phase-slew limit — unlike the
     quasi-constant-envelope EDR case (ex05), OFDM polar phase slews at
     several x the channel BW everywhere (LTE20: P99 = 39 MHz, tail to
@@ -115,7 +131,9 @@ def lte20_adpll(qam: int = 64, *, mode: str = "response",
     if dpd:
         from .cal.polar_dpd import PolarDPD
         dpd_ = PolarDPD.from_dpa(dpa_)
-    tx = PolarTX(chain or ChainConfig(env_floor=0.05), pm, dpa_, dpd=dpd_)
+    tx = PolarTX(chain or ChainConfig(env_floor=0.05,
+                                      env_skew_s=env_skew_s),
+                 pm, dpa_, dpd=dpd_)
 
     def make_waveform(n_symbols: int = 28, seed: int = 0,
                       sc_fdma: bool = True) -> Waveform:

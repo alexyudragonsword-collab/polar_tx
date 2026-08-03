@@ -23,10 +23,19 @@ elif "LTE" in name:
     overrides["dpd"] = col.checkbox("polar DPD", True)
     overrides["dp_gain"] = 1.0 + col.slider("two-point gain error [%]",
                                             -10.0, 10.0, 0.0, 0.5) / 100
+    # skew is an ENVELOPE-path impairment: the narrowband OFDM chain is
+    # ~8x more tolerant than 160 MHz WiFi (in proportion to bandwidth),
+    # not immune — 1 ns already fails the mask.
+    overrides["env_skew_s"] = col.slider("AM/PM skew [ns]", -4.0, 4.0,
+                                         0.0, 0.1) * 1e-9
 elif "BLE" in name or "EDR" in name:
     overrides["dp_gain"] = 1.0 + col.slider("two-point gain error [%]",
                                             -10.0, 10.0, 0.0, 0.5) / 100
     overrides["loop_bw"] = col.slider("loop BW [kHz]", 50, 400, 100) * 1e3
+    overrides["env_skew_s"] = col.slider(
+        "AM/PM skew [ns]", -20.0, 20.0, 0.0, 0.5,
+        help="GFSK is constant-envelope and provably immune; EDR DPSK is "
+             "quasi-constant, so 10 ns costs only ~0.13% DEVM") * 1e-9
 
 if st.button("Run", type="primary"):
     with st.spinner("simulating..."):

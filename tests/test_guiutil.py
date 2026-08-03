@@ -248,3 +248,43 @@ def test_power_domain_catches_skew_before_evm_does():
     # ...but the power-domain measurement has already failed hard
     assert not ok2 and a2 > a0 + 15.0
     plt.close("all")
+
+
+def test_every_preset_accepts_am_pm_skew():
+    """AM/PM skew is an envelope-path impairment and the chain applies it
+    architecture-agnostically, but only the wideband presets used to
+    expose it — the narrowband ones raised TypeError, so the GUI could
+    never sweep skew on LTE/EDR/BLE."""
+    import matplotlib.pyplot as plt
+    for name in ("BLE LE-1M", "BT EDR3 8DPSK", "LTE 20 MHz",
+                 "WiFi 160 MHz", "NR FR1 100 MHz"):
+        rep = run_chain_report(name, seed=1, env_skew_s=1e-9)
+        assert rep["metrics"]["mask"] in ("PASS", "FAIL")
+        plt.close(rep["fig"])
+
+
+def test_skew_sensitivity_follows_the_envelope_not_the_architecture():
+    """The narrowband ADPLL chain is NOT skew-immune: what makes a polar
+    TX skew-sensitive is envelope variation, so LTE's OFDM payload is hit
+    hard (just ~8x more tolerantly than 160 MHz WiFi, in proportion to
+    bandwidth), while constant-envelope BLE is immune outright."""
+    import numpy as np
+    import matplotlib.pyplot as plt
+    from polartx.chain import ChainConfig
+    from polartx.presets import ble_1m_adpll, lte20_adpll
+
+    # BLE GFSK: env == 1, so skew is mathematically a no-op.  Compare the
+    # chain output itself, not a rounded metric.
+    y0 = ble_1m_adpll(env_skew_s=0.0).tx.run(
+        ble_1m_adpll().make_waveform(n_bits=200), noise=False, seed=1).y
+    y1 = ble_1m_adpll(env_skew_s=20e-9).tx.run(
+        ble_1m_adpll().make_waveform(n_bits=200), noise=False, seed=1).y
+    assert np.allclose(y0, y1, atol=1e-12)
+
+    # LTE OFDM: genuinely degrades, and the mask goes first (power domain)
+    clean = run_chain_report("LTE 20 MHz", seed=1)
+    skewed = run_chain_report("LTE 20 MHz", seed=1, env_skew_s=1e-9)
+    assert clean["metrics"]["mask"] == "PASS"
+    assert skewed["metrics"]["mask"] == "FAIL"
+    assert skewed["metrics"]["EVM [dB]"] > clean["metrics"]["EVM [dB]"] + 10
+    plt.close("all")
