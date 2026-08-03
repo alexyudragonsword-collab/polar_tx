@@ -139,6 +139,22 @@ def run_chain_report(name: str, *, seed: int = 1, noise: bool = True,
             if _gain > 0.5:
                 metrics["EVM if CPE tracked [dB]"] = round(
                     metrics.get("EVM [dB]", 0.0) - _gain, 1)
+
+        # The bigger convention effect is the LINEAR one.  Impairments like
+        # AM/PM path skew produce a frequency-dependent response as well as
+        # data-dependent distortion; scalar EVM (the default here, so that
+        # memory distortion stays visible) counts the frequency response as
+        # error, while a real receiver's per-tone equalizer removes it.  At
+        # 0.5 ns of skew that split is ~5 dB — far larger than CPE — so
+        # report it whenever it matters.
+        if eq == "scalar" and rx.ndim == 2 and rx.shape[0] > 1:
+            _gt = ((np.conj(tx_s) * rx).sum(axis=0)
+                   / (np.abs(tx_s) ** 2).sum(axis=0))
+            _et = np.sqrt((np.abs(rx / _gt - tx_s) ** 2).mean()
+                          / (np.abs(tx_s) ** 2).mean())
+            _etdb = float(20 * np.log10(max(_et, 1e-30)))
+            if metrics.get("EVM [dB]", 0.0) - _etdb > 1.0:
+                metrics["EVM per-tone eq [dB]"] = round(_etdb, 1)
         qam_ref = wf.meta.get("qam_symbols")
         if wf.meta.get("dft_precode") and qam_ref is not None \
                 and eq_grid.ndim == 2:

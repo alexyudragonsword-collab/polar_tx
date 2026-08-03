@@ -173,3 +173,41 @@ def test_cpe_detector_catches_an_injected_common_phase():
     e1 = np.sqrt((np.abs(eq * np.exp(-1j * cpe) - tx) ** 2).mean())
     assert 20 * np.log10(e0 / e1) > 5.0           # removing it recovers EVM
     plt.close("all")
+
+
+def test_skew_damage_is_not_common_phase():
+    """AM/PM path skew wrecks EVM fast, but NOT via CPE.
+
+    Skewing the envelope against the phase gives y = x * a(t-tau)/a(t), a
+    real, data-dependent, broadband gain — spread distortion (ICI), not a
+    per-symbol common rotation.  So CPE tracking buys nothing no matter
+    how bad the skew gets, while the EVM collapses."""
+    import numpy as np
+    import matplotlib.pyplot as plt
+    prev = 0.0
+    for sk_ns in (0.0, 0.5, 2.0):
+        rep = run_chain_report("WiFi 160 MHz", seed=1,
+                               env_skew_s=sk_ns * 1e-9)
+        m = rep["metrics"]
+        assert m["CPE rms [deg]"] < 0.5           # CPE stays negligible
+        assert "EVM if CPE tracked [dB]" not in m  # tracking would buy <0.5 dB
+        if sk_ns:
+            assert m["EVM [dB]"] > prev + 5.0      # yet EVM collapses fast
+        prev = m["EVM [dB]"]
+        plt.close(rep["fig"])
+
+
+def test_skew_damage_is_partly_equalizable():
+    """The part of the skew damage a receiver DOES remove is the linear
+    frequency response, not CPE — several dB at 0.5 ns, which is why the
+    report surfaces the per-tone number once it matters."""
+    import matplotlib.pyplot as plt
+    clean = run_chain_report("WiFi 160 MHz", seed=1)
+    assert "EVM per-tone eq [dB]" not in clean["metrics"]
+    skewed = run_chain_report("WiFi 160 MHz", seed=1, env_skew_s=0.5e-9)
+    m = skewed["metrics"]
+    assert "EVM per-tone eq [dB]" in m
+    # equalizable part is several dB, and does NOT rescue the link
+    assert m["EVM per-tone eq [dB]"] - m["EVM [dB]"] < -3.0
+    assert m["EVM per-tone eq [dB]"] > -35.0
+    plt.close(clean["fig"]); plt.close(skewed["fig"])
