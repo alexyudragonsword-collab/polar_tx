@@ -91,6 +91,8 @@ src/polartx/
 - `ADPLLTwoPoint` response 模式是线性化模型（无 TDC 回绕、dither×调制耦合）；杂散类结论以 event 模式与解析预测背书。event 模式逐参考周期（Python 循环 ~1–2 Mcycles/s），长帧验证用短段。
 - 幅度域 hole punching 钳制包络动态范围与包络带宽，但相位路径保留 π 翻转（DTC 按 mod 2π 处理）；相位轨迹平滑是后续里程碑。
 - LO 相噪用"环内平坦"锁定近似（`lo_loop_bw`）。
+- **EVM 均衡口径 ↔ 实测仪器的对应**（比对论文/上测试仪时先看这条）。链路默认用 **scalar** EVM，好让频率相关（记忆型）失真保持可见；真实矢量信号分析仪按标准做**逐子载波均衡**（802.11 用前导 LTF 信道估计，3GPP 用参考信号 FDE），对应本库的 **per-tone**。两者只在存在频率响应的损伤上分叉：AM/PM skew 0.5 ns 时 scalar −21.8 dB vs per-tone −27.5 dB（差 5.6 dB），所以报告在该差值 >1 dB 时会自动补一行 `EVM per-tone eq [dB]`。干净链路上两者只差 ~0.5 dB，文献对标不受影响。**CPE 两种口径都不去除**，但实测这些预设 CPE 仅 0.01–0.6°（LO 锁相后相噪被高通整形到符号率以上），报告直接给出 `CPE rms [deg]`。
+- **频谱仪口径不存在任何补偿**：ACLR/mask 是功率域测量，没有均衡器可言，因此 skew 的频谱再生**完全暴露**——且比 EVM 更早报警。WiFi 160 MHz 实测：0.2 ns skew 时 per-tone EVM 还有 −34.4 dB（1024-QAM 勉强可用），mask 已经 **FAIL**、ACLR 从 −58 掉到 −37.3 dB。这与 ex05 在 EDR 上得到的结论一致——**能骗人的是 EVM，说实话的是 ACP**。
 
 ## 路线图
 

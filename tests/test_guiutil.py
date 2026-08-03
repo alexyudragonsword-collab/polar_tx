@@ -211,3 +211,40 @@ def test_skew_damage_is_partly_equalizable():
     assert m["EVM per-tone eq [dB]"] - m["EVM [dB]"] < -3.0
     assert m["EVM per-tone eq [dB]"] > -35.0
     plt.close(clean["fig"]); plt.close(skewed["fig"])
+
+
+def test_power_domain_catches_skew_before_evm_does():
+    """Instrument correspondence, pinned.
+
+    A spectrum analyser has no equalizer, so AM/PM skew's spectral
+    regrowth is fully exposed there — and it alarms EARLIER than the
+    VSA-convention (per-tone) EVM does.  This is the ex05 lesson in the
+    OFDM setting: EVM can look survivable while ACP/mask already fail."""
+    import numpy as np
+    import matplotlib.pyplot as plt
+    from polartx.metrics import check_mask
+    from polartx.metrics.masks import default_mask
+    from polartx.presets import wifi_dtc
+    from polartx.waveforms.ofdm import demodulate_ofdm
+
+    def run(sk_ns):
+        p = wifi_dtc(bw=160e6, env_skew_s=sk_ns * 1e-9)
+        wf = p.make_waveform(n_symbols=8, seed=0)
+        res = p.tx.run(wf, noise=True, seed=1)
+        rx = demodulate_ofdm(res.y, wf.ofdm_ref)
+        tx = wf.ofdm_ref.tx_symbols
+        g = (np.conj(tx) * rx).sum(axis=0) / (np.abs(tx) ** 2).sum(axis=0)
+        evm = 20 * np.log10(np.sqrt((np.abs(rx / g - tx) ** 2).mean()
+                                    / (np.abs(tx) ** 2).mean()))
+        f, pdb = res.psd(nfft=8192)
+        ok, _, _ = check_mask(f, pdb, default_mask(wf))
+        return evm, res.aclr()["upper_dbc"], ok
+
+    e0, a0, ok0 = run(0.0)
+    assert ok0 and a0 < -50                    # clean chain passes both
+    e2, a2, ok2 = run(0.2)
+    # at 0.2 ns the instrument-convention EVM is still usable for 1024-QAM
+    assert e2 < -33.0
+    # ...but the power-domain measurement has already failed hard
+    assert not ok2 and a2 > a0 + 15.0
+    plt.close("all")
