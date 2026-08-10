@@ -196,7 +196,11 @@ def run_chain_report(name: str, *, seed: int = 1, noise: bool = True,
             label += f", centre zoom ({n_lvl}^2-QAM)"
         ax[1].set_title(f"constellation ({label})")
     elif wf.kind == "dpsk":
-        z = e["symbols_rx"][20:-20]
+        # trim the pulse-shaping edge transient, but scale the trim to the
+        # burst: a fixed [20:-20] silently produced an EMPTY plot for any
+        # burst under ~41 symbols
+        _t = min(20, max(0, (e["symbols_rx"].size - 8) // 2))
+        z = e["symbols_rx"][_t:-_t] if _t else e["symbols_rx"]
         ax[1].plot(z.real, z.imag, ".", ms=2, alpha=0.5)
         if wf.meta.get("pulse_taps") is not None:
             # EDGE 3pi/8-8PSK on the linearized-GMSK C0 pulse: C0 is

@@ -55,9 +55,16 @@ def test_benchmarks_exported_top_level():
 def test_benchmarks_run_through_report_layer():
     """The GUI/report path builds and scores each benchmark, dispatching
     the right burst-length kwarg via signature inspection (EDGE uses
-    n_syms, the others n_symbols)."""
+    n_syms, the others n_symbols).
+
+    48 units, not 200: this test checks the DISPATCH and the metric keys,
+    never a metric value, so a long burst buys nothing — and at 200 the
+    two 4096-QAM chains (one of which runs at 50x oversampling, twice)
+    alone cost ~35 s, which was most of the whole suite's runtime.
+    (48 is the floor: EDGE's 16-symbol pulse span trims both ends.)
+    """
     for name in BENCH_PRESETS:
-        rep = run_chain_report(name, seed=1, noise=True, n_units=200)
+        rep = run_chain_report(name, seed=1, noise=True, n_units=48)
         assert rep["fig"] is not None
         m = rep["metrics"]
         assert ("EVM [dB]" in m) or ("DEVM [%]" in m)
@@ -98,7 +105,11 @@ def test_wifi6_polar_benbassat_class():
     assert -32.0 < r0.evm().db < -26.0       # published raw ~-29/-30.5
     p = bench_wifi6_polar_benbassat20()      # DPD on (default)
     r1 = p.tx.run(p.make_waveform(n_symbols=6, seed=0), noise=True, seed=1)
-    assert r1.evm().db < -36.0               # -40 dB class (LO-limited @160)
+    # two-sided: a one-sided "< -36" would also pass if a future change
+    # silently switched an impairment off and made the model
+    # unrealistically good — which is how an over-aggressive CFR once hid
+    # in the RFIC'26 preset behind a loose "< -30".
+    assert -42.0 < r1.evm().db < -36.0       # -38/-40 dB class (LO-limited)
     assert r1.evm().db < r0.evm().db - 6.0   # DPD clearly helps
 
 
@@ -108,7 +119,7 @@ def test_wifi7_polar_degani_class():
     p = bench_wifi7_polar_degani24()             # DPD on (default)
     wf = p.make_waveform(n_symbols=6, seed=0)
     r = p.tx.run(wf, noise=True, seed=1)
-    assert r.evm().db < -35.0                    # -38 dB class (LO-limited)
+    assert -41.0 < r.evm().db < -35.0            # -38 dB class, two-sided
     eff = r.avg_efficiency(p.tx.dpa)
     assert 0.12 < eff["eta_avg"] < 0.30          # backoff efficiency
     raw = bench_wifi7_polar_degani24(dpd=False)
@@ -117,7 +128,7 @@ def test_wifi7_polar_degani_class():
 
 
 def test_wifi11n_polar_still_available():
-    """Historical anchor, importable but no longer in the GUI registry."""
+    """Historical anchor (802.11n-era), in the registry alongside the rest."""
     p = bench_wifi11n_polar()
     r = p.tx.run(p.make_waveform(n_symbols=6, seed=0), noise=True, seed=1)
     assert -32.0 < r.evm().db < -25.0        # class ~-28, spec -25

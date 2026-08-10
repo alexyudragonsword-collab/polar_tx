@@ -92,7 +92,8 @@ def lte20_adpll(qam: int = 64, *, mode: str = "response",
                 fref: float = 122.88e6, fout: float = 1.95e9,
                 dpa: DPAConfig | None = None,
                 chain: ChainConfig | None = None,
-                env_skew_s: float = 0.0,
+                env_skew_s: float = 0.0, env_floor: float = 0.05,
+                cfr_papr_db: float | None = None,
                 dpd: bool = True, oversampling: int = 4,
                 dp_range_hz: float | None = None,
                 settle_cycles: int = 60_000) -> TxPreset:
@@ -131,8 +132,9 @@ def lte20_adpll(qam: int = 64, *, mode: str = "response",
     if dpd:
         from .cal.polar_dpd import PolarDPD
         dpd_ = PolarDPD.from_dpa(dpa_)
-    tx = PolarTX(chain or ChainConfig(env_floor=0.05,
-                                      env_skew_s=env_skew_s),
+    tx = PolarTX(chain or ChainConfig(env_floor=env_floor,
+                                      env_skew_s=env_skew_s,
+                                      cfr_papr_db=cfr_papr_db),
                  pm, dpa_, dpd=dpd_)
 
     def make_waveform(n_symbols: int = 28, seed: int = 0,

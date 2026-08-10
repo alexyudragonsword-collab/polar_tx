@@ -33,3 +33,23 @@ def test_devm_within_spec_limits(mode, limit_pct):
     d = res.evm()
     assert d["devm_pct"] < 0.5 * limit_pct     # comfortable margin
     assert res.check_mask()[0]
+
+
+def test_short_burst_refuses_instead_of_returning_nan():
+    """Regression: devm trims `span` symbols off each end for the pulse
+    edge transient. A burst shorter than both trims left an EMPTY slice,
+    whose mean is NaN — so the metric silently returned nan% and carried
+    it into reports and the GUI as "nan%" with nothing naming the cause.
+    Refusing is the honest failure; NaN propagates."""
+    from polartx.presets import bench_edge_polar_staszewski05
+    p = bench_edge_polar_staszewski05()
+    span = p.make_waveform(64, seed=1).meta["span"]
+
+    with pytest.raises(ValueError, match="too short"):
+        wf = p.make_waveform(2 * span, seed=1)
+        p.tx.run(wf, noise=True, seed=1).evm()
+
+    # just past the floor it scores normally, and finitely
+    wf = p.make_waveform(2 * span + 8, seed=1)
+    d = p.tx.run(wf, noise=True, seed=1).evm()["devm_pct"]
+    assert np.isfinite(d) and 0.0 < d < 10.0

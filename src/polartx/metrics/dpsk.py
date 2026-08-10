@@ -28,6 +28,16 @@ def devm(y: np.ndarray, wf: Waveform) -> dict:
     ref_a, r_a, info = align_delay(ref, r, max_lag=4 * sps)
 
     z = r_a[::sps] / info["gain"]
+    # Drop `span` symbols at each end: those carry the pulse-shaping edge
+    # transient.  Guard it — a burst shorter than the two trims leaves an
+    # EMPTY slice, whose mean is NaN, and a metric that silently returns
+    # NaN is worse than one that refuses: it propagates into reports and
+    # GUIs as "nan%" with nothing pointing at the cause.
+    if span and z.size <= 2 * span:
+        raise ValueError(
+            f"burst too short to score: {z.size} symbols with a {span}-symbol "
+            f"pulse span leaves nothing after trimming both edges "
+            f"(need > {2 * span}); lengthen the burst or shorten the pulse")
     s = slice(span, -span if span else None)
 
     if "pulse_taps" in m:

@@ -106,6 +106,31 @@ jobs:
           pll_simulator=${{ github.workspace }}/_siblings/pll_simulator
           PA_DPD=${{ github.workspace }}/_siblings/PA_DPD
 
+  # The 18 examples are the library's worked documentation, and nothing
+  # else exercised them — an API change could rot every one of them
+  # silently. They cost ~60 s in total, so there is no reason not to.
+  examples:
+    runs-on: ubuntu-latest
+    env:
+      MPLBACKEND: Agg
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - name: Install
+        run: pip install -e .
+      - name: Run every example
+        run: |
+          fail=0
+          for f in examples/ex*.py; do
+            echo "::group::$f"
+            if python "$f"; then echo "OK $f"; else echo "FAILED $f"; fail=1; fi
+            echo "::endgroup::"
+          done
+          exit $fail
+
   build:
     runs-on: ubuntu-latest
     steps:
