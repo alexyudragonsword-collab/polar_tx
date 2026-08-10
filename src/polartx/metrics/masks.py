@@ -69,3 +69,27 @@ def default_mask(wf: Waveform):
     if wf.kind == "ofdm" and scs in (30e3, 60e3, 120e3):
         return nr_sem(wf.bw)
     return default_wifi_mask(wf.bw)
+
+
+#: measurement bandwidth each template's limits are written against.  A SEM
+#: limit is power integrated in this bandwidth, not the height of one FFT
+#: bin — see polartx.metrics.sem.check_sem.
+_RBW_HZ = {"ble": 100e3, "lte": 1e6, "nr": 1e6, "wifi": 100e3}
+
+
+def default_mask_spec(wf: Waveform):
+    """``default_mask`` plus how it is meant to be measured and where it
+    came from.  Every template shipped here is ``source="stylized"`` — an
+    engineering approximation, NOT a conformance clause.  Substitute a real
+    table by building a MaskSpec with basis="dBm_in_rbw" and a source
+    naming the clause."""
+    from .sem import MaskSpec
+    pts = default_mask(wf)
+    if wf.kind in ("gfsk", "dpsk"):
+        kind = "ble"
+    else:
+        scs = wf.meta.get("scs_hz")
+        kind = ("lte" if scs == 15e3
+                else "nr" if scs in (30e3, 60e3, 120e3) else "wifi")
+    return MaskSpec(points=pts, rbw_hz=_RBW_HZ[kind], basis="dBr_peak",
+                    source="stylized", channel_bw_hz=wf.bw)

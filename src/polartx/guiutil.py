@@ -100,6 +100,17 @@ def run_chain_report(name: str, *, seed: int = 1, noise: bool = True,
     f, pdb = res.psd(nfft=8192)
     ok, margin, mask_db = check_mask(f, pdb, default_mask(wf))
     metrics["mask"] = "PASS" if ok else "FAIL"
+    # The plain margin is pinned at 0.00 dB whenever the signal passes (the
+    # mask is 0 dBr in-channel and the PSD is peak-normalized, so the worst
+    # point is the carrier tangency). Report the OUT-OF-BAND margin, which
+    # is the number that actually moves with the design, measured the way a
+    # spectrum analyser does — integrated in the mask's resolution
+    # bandwidth rather than per FFT bin.
+    from .metrics.masks import default_mask_spec
+    from .metrics.sem import check_sem
+    _sem = check_sem(f, pdb, default_mask_spec(wf), channel_bw_hz=wf.bw)
+    if "oob_margin_db" in _sem:
+        metrics["mask OOB margin [dB]"] = round(_sem["oob_margin_db"], 1)
 
     fig, ax = plt.subplots(1, 2, figsize=(11, 4.2))
     ax[0].plot(f / 1e6, pdb, lw=0.7)

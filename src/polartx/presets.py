@@ -64,13 +64,21 @@ def ble_adpll(rate: float = 1e6, *, mode: str = "response",
     return TxPreset(tx=tx, fs_bb=fref, make_waveform=make_waveform)
 
 
-def bt_edr_adpll(dpsk: str = "8dpsk", **kw) -> TxPreset:
+def bt_edr_adpll(dpsk: str = "8dpsk", *, mode: str = "response",
+                 dp_gain: float = 1.0, loop_bw: float = 100e3,
+                 env_skew_s: float = 0.0, dpa: DPAConfig | None = None,
+                 dp_range_hz: float | None = None,
+                 settle_cycles: int = 40_000, **kw) -> TxPreset:
     """BT EDR2/EDR3 polar TX: same ADPLL two-point phase path as BLE, but
     the DPSK payload is NOT constant-envelope (SRRC, PAPR ~2-3 dB) — the
     envelope path and DPA amplitude codes are genuinely exercised.
-    dpsk selects the payload ("8dpsk"/"pi4dqpsk"); kw goes to ble_adpll
-    (mode= still selects the response/event phase-modulator engine)."""
-    p = ble_adpll(**kw)
+
+    dpsk selects the payload ("8dpsk"/"pi4dqpsk").  The commonly swept
+    knobs are named explicitly (mode= still selects the response/event
+    phase-modulator engine); ``**kw`` forwards the rest to ble_adpll."""
+    p = ble_adpll(mode=mode, dp_gain=dp_gain, loop_bw=loop_bw,
+                  env_skew_s=env_skew_s, dpa=dpa, dp_range_hz=dp_range_hz,
+                  settle_cycles=settle_cycles, **kw)
 
     def make_waveform(n_syms: int = 800, seed: int = 1) -> Waveform:
         from .waveforms.edr import edr_dpsk
@@ -366,13 +374,23 @@ def bench_wifi11n_polar() -> TxPreset:
 
 def nr_dtc(bw: float = 100e6, *, scs: float | None = None,
            qam: int | None = None, fout: float | None = None,
-           lo_pn: OscConfig | None = None, **kw) -> TxPreset:
+           lo_pn: OscConfig | None = None,
+           n_bits: int = 11, oversampling: int = 4,
+           jitter_rms_s: float = 50e-15,
+           cfr_papr_db: float | None = 8.5, env_floor: float = 0.02,
+           env_skew_s: float = 0.0, dpa: DPAConfig | None = None,
+           dpd: bool = False, **kw) -> TxPreset:
     """5G NR wideband polar TX: open-loop DTC + DPA (wifi_dtc machinery).
 
     Defaults by band: 100 MHz -> FR1 n78 (3.5 GHz, 30 kHz SCS, 256-QAM,
     WiFi-7-class LO); 200 MHz -> FR2 n257 (28 GHz, 120 kHz SCS, 64-QAM,
     -100 dBc/Hz @ 1 MHz mmWave LO).  NR EVM limits: 256-QAM 3.5%
-    (-29 dB), 64-QAM 8% (-22 dB)."""
+    (-29 dB), 64-QAM 8% (-22 dB).
+
+    The commonly swept knobs are named explicitly (so the signature is
+    self-documenting and completes in an editor); ``**kw`` remains an
+    escape hatch onto the rest of wifi_dtc's parameters.  Defaults here
+    mirror wifi_dtc's — test_preset_forwarding pins that."""
     fr2 = bw > 100e6
     scs = scs or (120e3 if fr2 else 30e3)
     qam = qam or (64 if fr2 else 256)
@@ -381,7 +399,10 @@ def nr_dtc(bw: float = 100e6, *, scs: float | None = None,
         lo_pn = OscConfig(f0=fout, gain=1.0, pn_dbchz=-100.0,
                           pn_foffset=1e6, pn_f1f3=300e3,
                           pn_floor_dbchz=-140.0)
-    p = wifi_dtc(bw=bw, qam=qam, fout=fout, lo_pn=lo_pn, **kw)
+    p = wifi_dtc(bw=bw, qam=qam, fout=fout, lo_pn=lo_pn, n_bits=n_bits,
+                 oversampling=oversampling, jitter_rms_s=jitter_rms_s,
+                 cfr_papr_db=cfr_papr_db, env_floor=env_floor,
+                 env_skew_s=env_skew_s, dpa=dpa, dpd=dpd, **kw)
 
     def make_waveform(n_symbols: int = 8, seed: int = 0) -> Waveform:
         from .waveforms.ofdm import nr_waveform

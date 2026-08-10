@@ -94,3 +94,45 @@ def test_kdco_error_acts_as_dp_gain_error():
     e_k = _evm_db(ble_1m_adpll(kdco_est_error=0.05), wf, noise=False)
     e_g = _evm_db(ble_1m_adpll(dp_gain=1.0 / 1.05), wf, noise=False)
     assert abs(e_k - e_g) < 0.5
+
+
+def test_event_mode_guards_its_validity_domain():
+    """The event engine closes its loop once per reference edge, so it can
+    only follow a trajectory advancing much less than one UI per cycle.
+
+    Measured agreement against the linearized response engine tracks that
+    metric directly: BLE 0.8-1.6% UI agrees to <1 dB and EDR 4.2% to ~5 dB,
+    but LTE-20 OFDM advances 29% of a UI per cycle (its phase slews to
+    +/-2x the channel bandwidth) and the two engines then disagree by ~22
+    dB. Returning that number silently would present a modelling limit as
+    a device result, so wide modulation must warn.
+    """
+    import warnings
+
+    from polartx.presets import bt_edr_adpll, lte20_adpll
+
+    # inside the domain: no warning, and the metric is small
+    with warnings.catch_warnings(record=True) as w:
+        warnings.simplefilter("always")
+        p = ble_1m_adpll(mode="event")
+        r = p.tx.run(p.make_waveform(n_bits=400, seed=5), noise=False, seed=1)
+        assert not [x for x in w if issubclass(x.category, RuntimeWarning)]
+    assert r.info["phasemod"]["ui_per_ref_cycle_p99"] < 0.05
+
+    # EDR's isolated pi-jumps are large but rare: P99 stays inside
+    with warnings.catch_warnings(record=True) as w:
+        warnings.simplefilter("always")
+        q = bt_edr_adpll("8dpsk", mode="event")
+        rq = q.tx.run(q.make_waveform(n_syms=300, seed=1), noise=False, seed=1)
+        assert not [x for x in w if issubclass(x.category, RuntimeWarning)]
+    assert rq.info["phasemod"]["ui_per_ref_cycle_p99"] < 0.10
+
+    # outside the domain: LTE-20 OFDM must warn
+    with warnings.catch_warnings(record=True) as w:
+        warnings.simplefilter("always")
+        t = lte20_adpll(mode="event", dpd=False)
+        rt = t.tx.run(t.make_waveform(n_symbols=4, seed=0), noise=False, seed=1)
+        msgs = [str(x.message) for x in w
+                if issubclass(x.category, RuntimeWarning)]
+    assert any("validity domain" in m for m in msgs), msgs
+    assert rt.info["phasemod"]["ui_per_ref_cycle_p99"] > 0.20

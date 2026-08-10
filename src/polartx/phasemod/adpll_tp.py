@@ -129,6 +129,28 @@ class ADPLLTwoPoint(PhaseModulator):
                              "for event mode")
         f_dev = np.diff(phase_cmd, prepend=phase_cmd[:1]) * fs_bb / TWOPI
         mod_ref = f_dev if up == 1 else resample_poly(f_dev, up, 1)
+
+        # Validity guard.  The cycle-accurate loop closes once per reference
+        # edge, so it can only track a trajectory whose phase advances by
+        # much less than one UI per reference cycle — the TDC measures into
+        # a window of about one DCO period.  Push past that and the loop
+        # simply cannot follow: measured agreement with the linearized
+        # response engine is <1 dB for BLE (0.8-1.6% UI) and ~5 dB for EDR
+        # (4.2% UI), but collapses to ~22 dB for LTE-20 OFDM (29% UI), whose
+        # phase slews to +/-2x its channel bandwidth.  Warn rather than
+        # return a confidently wrong number.
+        ui = np.abs(mod_ref) / c.fref
+        ui99 = float(np.percentile(ui, 99)) if ui.size else 0.0
+        if ui99 > 0.10:
+            import warnings
+            warnings.warn(
+                f"event mode outside its validity domain: the phase advances "
+                f"{100 * ui99:.0f}% of a UI per reference cycle (P99) — the "
+                f"cycle-accurate loop cannot track that, and the result will "
+                f"be far pessimistic (LTE-20 reads -15 dB against the "
+                f"response engine's -37 dB). Use mode='response' for "
+                f"modulation this wide, or raise fref.",
+                RuntimeWarning, stacklevel=3)
         n_mod = mod_ref.size
         settle = self.settle_cycles
         mod = np.zeros(settle + n_mod + 4)
@@ -171,5 +193,8 @@ class ADPLLTwoPoint(PhaseModulator):
             diagnostics={"mode": "event", "lag": lag, "sim": sim,
                          "residual_rms_rad": best[0],
                          "samples_per_ref_cycle": up,
+                         # phase advance per reference cycle: the event
+                         # engine's validity metric (see the guard above)
+                         "ui_per_ref_cycle_p99": ui99,
                          "dp_required_range_hz": float(np.abs(mod).max()),
                          "dp_clip_frac": clip_frac})
