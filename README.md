@@ -12,6 +12,8 @@
 | [`docs/index.html`](docs/index.html) | 想**理解**设计取舍 | 图文设计指南，13 节，中英双语 |
 | [`docs/architecture.md`](docs/architecture.md) | 想**改**这个库 | 模块地图、数据流三个对象、实现要点、"加东西改哪里" |
 | [`CONTRIBUTING.md`](CONTRIBUTING.md) | 要**提交**改动 | 测试/vendor/GUI/口径的约定——每条都有测试或 CI job 背书 |
+| [`CHANGELOG.md`](CHANGELOG.md) | 想知道**怎么走到这一步** | 按开发轮次的变更记录，含被推翻的结论 |
+| [`CLAUDE.md`](CLAUDE.md) | 用 Claude Code 开发 | 仓库级 agent 指引：命令、分支规矩、最容易破坏的七条 |
 | `examples/ex01`–`ex18` | 想看**可执行的例子** | 18 个成套脚本，CI 每次 push 全部跑一遍 |
 
 ```
@@ -161,5 +163,5 @@ MIT（见 [`LICENSE`](LICENSE)）。`src/polartx/vendor/` 下是两个姊妹仓�
 逐文件注明来源 commit 与路径，沿用其上游条款；`tools/vendor_check.py` 记录了
 拷贝了什么、本地改了什么、为什么改，CI 的 `vendor-drift` job 每次 push 校验。
 
-版本历史见上面的里程碑小节（Step 0–3 / M2–M6 / T1–T3 / F1–F4 / 五项评审补强），
-按完成顺序记录了每一轮做了什么以及为什么。
+版本历史见 [`CHANGELOG.md`](CHANGELOG.md)：按开发轮次记录每一轮做了什么、为什么，
+以及几处结论被推翻的地方（上面的路线图小节给的是现状，CHANGELOG 给的是到达路径）。
