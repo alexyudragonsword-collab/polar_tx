@@ -13,6 +13,7 @@
 | [`docs/architecture.md`](docs/architecture.md) | 想**改**这个库 | 模块地图、数据流三个对象、实现要点、"加东西改哪里" |
 | [`CONTRIBUTING.md`](CONTRIBUTING.md) | 要**提交**改动 | 测试/vendor/GUI/口径的约定——每条都有测试或 CI job 背书 |
 | [`CHANGELOG.md`](CHANGELOG.md) | 想知道**怎么走到这一步** | 按开发轮次的变更记录，含被推翻的结论 |
+| [`ROADMAP.md`](ROADMAP.md) | 想知道**还差什么** | 只写未完成项：被外部阻塞的、已知模型缺口、明确不做的 |
 | [`CLAUDE.md`](CLAUDE.md) | 用 Claude Code 开发 | 仓库级 agent 指引：命令、分支规矩、最容易破坏的七条 |
 | `examples/ex01`–`ex18` | 想看**可执行的例子** | 18 个成套脚本，CI 每次 push 全部跑一遍 |
 
@@ -109,13 +110,16 @@ src/polartx/
 
 - 波形保真度（F1–F4 升级后）：numerology 全部正确且逐位回归；**LTE 预设默认 SC-FDMA 真实上行**（PAPR 低 1.7 dB，平均效率 35.9→41.4%）；**EDGE 用数值提取的线性化 GMSK C0 脉冲**（提取 NMSE 自检，真实 GMSK 频谱裙，EVM 按规范对理想波形参考）；**BLE Δf2max 符号内最大值/99.9% 判据/漂移指标**齐备，调制指数容差窗有测试；OFDM 可选**导频 + 前导**与接收机式 EVM（`metrics.ofdm_rx.evm_rx`，确定性 CPE 完全恢复有证明；对快相噪已量化口径差 <1 dB）。**信道编码刻意排除**：TX 损伤链路上没有任何指标在比特映射之后测量。mask 仍为工程化模板。
 - `ADPLLTwoPoint` response 模式是线性化模型（无 TDC 回绕、dither×调制耦合）；杂散类结论以 event 模式与解析预测背书。event 模式逐参考周期（Python 循环 ~1–2 Mcycles/s），长帧验证用短段。
-- 幅度域 hole punching 钳制包络动态范围与包络带宽，但相位路径保留 π 翻转（DTC 按 mod 2π 处理）；相位轨迹平滑是后续里程碑。
+- 幅度域 hole punching 钳制包络动态范围与包络带宽，但相位路径保留 π 翻转（DTC 按 mod 2π 处理）。相位轨迹平滑已实现（`phase_interp="linear"|"smooth"` + `phase_slew_max_hz`），结论是**固定斜率上限下 smoothstep 因窗口加宽 1.5× 反而输给线性插值**（轨迹 EVM 与 ACP 双输，测试固化），故默认 `linear`。
 - LO 相噪用"环内平坦"锁定近似（`lo_loop_bw`）。
 - **mask 口径**（`metrics/sem.py`）：内置模板全部标记 `source="stylized"`，`is_conformance=False`——**工程近似，不是认证条款**（本仓无法访问 3GPP/IEEE 原文，不臆造限值）。但测量口径已按仪器惯例实现：限值按 mask 声明的 **RBW 积分**（LTE/NR 1 MHz、BLE/WiFi 100 kHz）而非逐 FFT bin 比较，因此裁决不再随 `nfft` 漂移；并**分开报告带内/带外裕量**——带内相切会把总裕量恒钉在 0.00 dB（18.6 dB 余量与 4.9 dB 余量读数相同），`mask OOB margin [dB]` 才是随设计变化的数。要做合规预判：用 `MaskSpec(basis="dBm_in_rbw", source="<条款号>")` 填入真实表格即可，`is_conformance` 会自动转真。
 - **EVM 均衡口径 ↔ 实测仪器的对应**（比对论文/上测试仪时先看这条）。链路默认用 **scalar** EVM，好让频率相关（记忆型）失真保持可见；真实矢量信号分析仪按标准做**逐子载波均衡**（802.11 用前导 LTF 信道估计，3GPP 用参考信号 FDE），对应本库的 **per-tone**。两者只在存在频率响应的损伤上分叉：AM/PM skew 0.5 ns 时 scalar −21.8 dB vs per-tone −27.5 dB（差 5.6 dB），所以报告在该差值 >1 dB 时会自动补一行 `EVM per-tone eq [dB]`。干净链路上两者只差 ~0.5 dB，文献对标不受影响。**CPE 两种口径都不去除**，但实测这些预设 CPE 仅 0.01–0.6°（LO 锁相后相噪被高通整形到符号率以上），报告直接给出 `CPE rms [deg]`。
 - **频谱仪口径不存在任何补偿**：ACLR/mask 是功率域测量，没有均衡器可言，因此 skew 的频谱再生**完全暴露**——且比 EVM 更早报警。WiFi 160 MHz 实测：0.2 ns skew 时 per-tone EVM 还有 −34.4 dB（1024-QAM 勉强可用），mask 已经 **FAIL**、ACLR 从 −58 掉到 −37.3 dB。这与 ex05 在 EDR 上得到的结论一致——**能骗人的是 EVM，说实话的是 ACP**。
 
-## 路线图
+## 里程碑（均已完成）
+
+> 这一节是**已完成**能力的清单。还没做的事在 [`ROADMAP.md`](ROADMAP.md)，
+> 完整的开发过程在 [`CHANGELOG.md`](CHANGELOG.md)。
 
 - **M2 — 已完成**：LTE 20 MHz 全链路（fft/信道带宽解耦 numerology、E-UTRA ACLR1/2、风格化 SEM）、polar DPD（精确反演 + 测量拟合）、离线两点增益估计、直通 DAC 范围模型 + 矢量 hole punching、BT ACP、RX 频段噪声解析预算。
 - **M3 — 已完成**：5G NR FR1/FR2 链路（38.104 numerology、NR OBUE/ACLR）、开环 DTC 增益/INL LUT 校准（CW 训练两次迭代，INL 杂散 −47→−92 dBc，残差达量化地板）、两点增益**在线** sign-sign LMS（event 引擎逐周期挂钩，5% 误差收敛到 0.1% 内、EVM 回到匹配噪声底）、DPA 交织（首镜像梳齿抑制 >15 dB 并推到 N×f_dpa）、post-DPA 记忆效应挂钩（线性记忆被 per-tone 均衡吸收的教科书行为有测试固化）。
