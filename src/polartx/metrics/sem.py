@@ -65,6 +65,8 @@ class MaskSpec:
         return self.source != "stylized"
 
     def at(self, freqs: np.ndarray) -> np.ndarray:
+        """Limit at each offset frequency (piecewise linear, held flat past
+        the last breakpoint)."""
         return np.interp(np.abs(np.asarray(freqs, float)),
                          self.points[:, 0], self.points[:, 1],
                          right=self.points[-1, 1])

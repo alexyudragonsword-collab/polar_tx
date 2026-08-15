@@ -18,6 +18,32 @@ from .mismatch import code_amplitude_table, inl_dnl
 
 @dataclass
 class DPAConfig:
+    """Digital PA unit-cell array, its nonlinearity and its efficiency law.
+
+    n_bits / n_thermo
+        Array segmentation: the top ``n_thermo`` bits are thermometer
+        coded (one cell per code step, so the amplitude is monotonic
+        there), the rest binary.  Thermometer coding buys monotonicity
+        and DNL at the cost of decoder area — the tradeoff the RTL
+        exporter's thermometer decoder makes concrete.
+    sigma_cell / gradient
+        Relative random unit mismatch and a systematic tilt across the
+        array.  INL grows as sqrt(N) in the random term (test-pinned),
+        which is why mismatch is an array-sizing question, not a
+        calibration question.
+    amam / ampm_deg_poly / ampm_lut
+        Static nonlinearity vs code.  These are exactly what a polar DPD
+        inverts, so a chain configured with them and then predistorted
+        should return to the quantization floor.  ``ampm_lut`` takes a
+        measured curve and overrides the polynomial.
+    eff
+        Drain-efficiency law vs code; ``("scpa", eta_peak, exponent)`` is
+        the class-D switched-capacitor form.  This is where polar's case
+        is made or lost: it feeds ``PolarResult.avg_efficiency``, the
+        modulated average over the actual code stream, not the peak
+        number a datasheet quotes.
+    """
+
     n_bits: int = 10
     n_thermo: int = 7               # thermometer MSBs, rest binary LSBs
     sigma_cell: float = 0.0         # relative random unit mismatch
@@ -30,10 +56,21 @@ class DPAConfig:
 
     @property
     def n_codes(self) -> int:
+        """Number of distinct amplitude codes, ``2**n_bits``."""
         return 1 << self.n_bits
 
 
 class DPA:
+    """A configured digital PA: code -> (amplitude, AM-PM phase) tables.
+
+    The array, its mismatch, the AM-AM law and the AM-PM curve are folded
+    into two lookup tables of length ``n_codes`` once at construction, so
+    the sample path is a vectorized gather rather than a per-sample model
+    evaluation.  ``amp_table`` and ``phase_table`` are public: read them
+    to plot the realized AM-AM/AM-PM, and note that a DPD fitted against
+    them is fitting the same tables the chain runs.
+    """
+
     def __init__(self, cfg: DPAConfig):
         self.cfg = cfg
         rng = np.random.default_rng(cfg.seed)

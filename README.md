@@ -6,6 +6,14 @@
 
 **图文设计指南**（中英双语）：浏览器打开 [`docs/index.html`](docs/index.html)——设计原理、九个成套示例的图文解读、经验教训、复现方法。
 
+| 文档 | 读者 | 内容 |
+|---|---|---|
+| 本文件 | 想**用**这个库 | 快速开始、架构对照、结果表、路线图 |
+| [`docs/index.html`](docs/index.html) | 想**理解**设计取舍 | 图文设计指南，13 节，中英双语 |
+| [`docs/architecture.md`](docs/architecture.md) | 想**改**这个库 | 模块地图、数据流三个对象、实现要点、"加东西改哪里" |
+| [`CONTRIBUTING.md`](CONTRIBUTING.md) | 要**提交**改动 | 测试/vendor/GUI/口径的约定——每条都有测试或 CI job 背书 |
+| `examples/ex01`–`ex18` | 想看**可执行的例子** | 18 个成套脚本，CI 每次 push 全部跑一遍 |
+
 ```
 Waveform → [CFR] → polar split → 包络路径（量化/skew/DPA 幅度码）─┐
                               └ 相位路径（PhaseModulator）────────┤→ DPA 重构 → EVM/ACLR/Mask/PSD
@@ -22,7 +30,7 @@ Waveform → [CFR] → polar split → 包络路径（量化/skew/DPA 幅度码�
 
 ```bash
 pip install -e .          # numpy / scipy / matplotlib
-pytest tests/             # 80+ 项测试：物理量断言 + 与 padpd 逐位回归
+pytest tests/             # 230+ 项测试：物理量断言 + 与 padpd 逐位回归
 python examples/ex01_ble_gfsk_adpll.py      # 图落在 examples/out/
 
 pip install -e .[gui]     # Streamlit 网页工作台
@@ -73,17 +81,27 @@ print(res.evm().db, res.aclr())             # -39.6 dB, ACLR ~ -58 dBc
 ```
 src/polartx/
 ├── vendor/            # pllsim / padpd 改编移植子集（出处注释 + 单一接缝）
-├── waveforms/         # Waveform 容器；BLE GFSK；BT EDR π/4-DQPSK/8DPSK（SRRC）；通用 OFDM（SCS 可配，WiFi 预设与 padpd 逐位一致）
+├── waveforms/         # Waveform 容器；BLE GFSK；BT EDR/EDGE（SRRC、线性化 GMSK C0）；通用 OFDM（SCS 可配，含 SC-FDMA/导频/前导）
 ├── polar/             # 极坐标分解/重构、hole punching、带宽扩展分析
-├── phasemod/          # PhaseModulator ABC；ADPLLTwoPoint；DTCPhaseModulator
-├── dpa/               # 温度计+二进制单元阵列失配（√N 律）、AM-AM(Rapp/LUT)/AM-PM、码表 DPA
-├── chain.py           # ChainConfig + PolarTX + PolarResult（evm/aclr/psd/check_mask）
-├── impairments.py     # 分数延迟 skew、ZOH
-├── cal/               # AM/PM skew 估计（互谱相位斜率）与校正
-├── metrics/           # EVM/ACLR/Mask/CCDF/AM-AM（vendored）+ BLE Δf1/Δf2、EDR DEVM、BLE/BT mask
-├── analysis/          # 解析对照：量化噪底、INL 杂散、ZOH 镜像、包络量化 EVM
-└── presets.py         # ble_1m/2m_adpll、wifi_dtc(80/160/320)
+├── phasemod/          # ★ PhaseModulator ABC；ADPLLTwoPoint（双引擎）；DTCPhaseModulator
+├── dpa/               # 单元阵列失配（√N 律）、AM-AM/AM-PM、码表 DPA、Doherty/多核合路
+├── chain.py           # ★ ChainConfig + PolarTX + PolarResult
+├── fir.py             # 双抽头混合域 FIR TX（RFIC'26 类 MLO 陷波），与主链同口径
+├── impairments.py     # 分数延迟 skew、ZOH、包络量化
+├── cal/               # skew / 两点增益（含在线 LMS）/ DTC LUT / polar DPD / GMP 记忆 DPD
+├── metrics/           # EVM/ACLR/PSD/mask/SEM/BLE Δf/EDR DEVM/接收机式 EVM/RX 频段噪声
+├── analysis/          # 解析对照：环路响应、量化噪底、INL 杂散、ZOH 镜像、噪声预算
+├── measured.py        # 实测数据通路（OpenDPD 格式）→ 测量定标 DPA
+├── montecarlo.py      # 良率分析（spec 化、进程池并行）
+├── export/rtl.py      # 定点化 + Verilog / Verilog-AMS 导出 + 金向量
+├── selector.py        # 架构选择器（解析打分，DTC vs ADPLL）
+├── presets.py         # ★ 端到端预设（标准链路 + 文献对标）
+├── guiutil.py         # ★ 两个 GUI 共用的全部计算（可脱离 GUI 测试）
+└── guiqt/             # PySide6 桌面 GUI（网页版在仓库根的 gui/）
 ```
+
+带 ★ 的是新人最先要读的五个文件；逐模块说明与"加东西改哪里"见
+[`docs/architecture.md`](docs/architecture.md)。
 
 ## 建模口径与已知边界
 
@@ -136,3 +154,12 @@ src/polartx/
 | `ex16_architecture_selector.py` | **架构选择器**：目标制式决策表（BLE/LTE→ADPLL，WiFi/NR→DTC）+ EVM-带宽交叉图（校准两点 vs 未校准 ADPLL 曲线、~50 MHz 覆盖封顶） |
 | `ex17_rtl_ams_datapath.py` | **更全 RTL/AMS 导出**：CFR 削波 + DTC 相位累加器 + DPA 温度计译码器（iverilog 零失配）+ DPA Verilog-AMS `wreal` RNM 模型（数字↔模拟协仿桥，LUT 自校验） |
 | `ex18_doherty_combining.py` | **多核/Doherty 合路**：效率-回退（单核 vs 2/3 路、理想-B vs class-C）、核间失配交接拐点 + 蒙卡良率、Doherty-DPA 入 WiFi 链（平均效率 43%→58% @ 同 EVM） |
+
+## 许可 / License
+
+MIT（见 [`LICENSE`](LICENSE)）。`src/polartx/vendor/` 下是两个姊妹仓库的改编副本，
+逐文件注明来源 commit 与路径，沿用其上游条款；`tools/vendor_check.py` 记录了
+拷贝了什么、本地改了什么、为什么改，CI 的 `vendor-drift` job 每次 push 校验。
+
+版本历史见上面的里程碑小节（Step 0–3 / M2–M6 / T1–T3 / F1–F4 / 五项评审补强），
+按完成顺序记录了每一轮做了什么以及为什么。

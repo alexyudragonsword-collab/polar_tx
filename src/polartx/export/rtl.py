@@ -195,6 +195,10 @@ endmodule
 
 
 def verify_dither_with_iverilog(outdir: str) -> str | None:
+    """Run the DTC dither testbench under iverilog; None if unavailable.
+
+    This is the three-way identity the RTL export rests on: Verilog ==
+    integer golden vectors == the floating-point engine."""
     import shutil
     import subprocess
     if shutil.which("iverilog") is None:
@@ -596,15 +600,21 @@ def _iverilog_run(outdir: str, sources: list[str], top_vvp: str) -> str | None:
 
 
 def verify_thermo_decoder(outdir: str) -> str | None:
+    """Run the thermometer-decoder testbench under iverilog; None if
+    iverilog is unavailable.  The bench compares the RTL against the
+    Python golden vectors bit for bit."""
     return _iverilog_run(outdir, ["dpa_thermo_decode.v",
                                   "tb_dpa_thermo_decode.v"], "tb_thermo.vvp")
 
 
 def verify_cfr_clip(outdir: str) -> str | None:
+    """Run the CFR-clip testbench under iverilog; None if unavailable."""
     return _iverilog_run(outdir, ["cfr_clip.v", "tb_cfr_clip.v"], "tb_cfr.vvp")
 
 
 def verify_phase_acc(outdir: str) -> str | None:
+    """Run the DTC phase-accumulator testbench under iverilog; None if
+    unavailable."""
     return _iverilog_run(outdir, ["dtc_phase_acc.v", "tb_dtc_phase_acc.v"],
                          "tb_phase_acc.vvp")
 

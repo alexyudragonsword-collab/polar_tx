@@ -27,4 +27,5 @@ class Waveform:
 
     @property
     def n(self) -> int:
+        """Number of baseband samples in the burst."""
         return self.x.size

@@ -16,6 +16,15 @@ import numpy as np
 
 @dataclass
 class MCResult:
+    """Metric-per-chip across a Monte Carlo population, plus its limit.
+
+    Keeps the raw ``values`` and their ``seeds`` so an outlier chip can be
+    rebuilt and debugged rather than only counted.  ``yield_frac`` is the
+    headline number; ``summary()`` adds the distribution, because a design
+    that passes at 95% yield with a 0.2 dB p95 margin is a different
+    design from one that passes with 6 dB.
+    """
+
     values: np.ndarray             # metric per chip (e.g. EVM dB)
     limit: float
     seeds: np.ndarray
@@ -23,9 +32,11 @@ class MCResult:
 
     @property
     def yield_frac(self) -> float:
+        """Fraction of chips meeting the limit (metrics are pass-if-below)."""
         return float(np.mean(self.values <= self.limit))
 
     def summary(self) -> dict:
+        """Distribution digest: n, mean, std, p95, worst, best, limit, yield."""
         v = self.values
         return {"n": v.size, "mean": float(v.mean()),
                 "std": float(v.std()),

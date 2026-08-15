@@ -38,6 +38,38 @@ class SupplyConfig:
 
 @dataclass
 class ChainConfig:
+    """Everything about the chain that is not the phase modulator or the PA.
+
+    Impairments and processing options are architecture-agnostic: the same
+    ChainConfig drives the narrowband ADPLL and the wideband DTC flavors,
+    which is what makes their results directly comparable.
+
+    The knobs that most often matter:
+
+    env_skew_s
+        AM-path delay relative to the PM path — the polar architecture's
+        sharpest impairment.  It is an ENVELOPE-path effect, so it scales
+        with envelope variation, not with the architecture: WiFi 160 MHz
+        fails its mask at 0.2 ns, LTE-20 at 1 ns (about 8x more tolerant,
+        in proportion to bandwidth), and constant-envelope BLE is immune.
+    env_floor
+        Hole-punch clamp as a fraction of rms.  Bounds the envelope's
+        dynamic range and its bandwidth, at a computable EVM cost.
+    cfr_papr_db
+        Crest-factor-reduction target.  None disables it.  On a high-order
+        QAM chain the clipping residual can BE the EVM floor (identical
+        with noise on and off), so this trades EVM for efficiency directly.
+    fs_scale_fixed
+        Pin the full-scale in absolute envelope units instead of taking a
+        per-run maximum.  Required for ILA/DPD fitting: without it the
+        chain is not a static system across runs and the fit's benefit
+        caps out.
+    phase_slew_max_hz
+        Bound the phase-path deviation (vector hole punching).  Useful for
+        quasi-constant-envelope payloads; destructive for OFDM, whose
+        phase slews to several times the channel bandwidth everywhere.
+    """
+
     env_skew_s: float = 0.0        # AM-path delay relative to PM path (signed)
     cfr_papr_db: float | None = None
     env_floor: float = 0.0         # hole-punch clamp, fraction of rms
@@ -58,6 +90,26 @@ class ChainConfig:
 
 @dataclass
 class PolarResult:
+    """One chain run: the output plus every intermediate tap.
+
+    Nothing is thrown away, so a stage can be examined on its own —
+    ``env_cmd`` vs ``env_code`` shows the amplitude quantization,
+    ``phase_cmd`` vs ``phase_out`` isolates the phase modulator, and
+    ``info`` carries each stage's diagnostics (including the phase
+    modulator's, under ``info["phasemod"]``).
+
+    The metric methods dispatch on the waveform kind: ``evm()`` returns an
+    EVMResult for OFDM, a differential-EVM dict for DPSK, and a
+    phase-trajectory dict for GFSK.
+
+    A note on the EVM convention: ``evm_equalize_default`` names the
+    equalization this result is scored with ("scalar" here, "per_tone" for
+    the dual-tap FIR chain).  The report layer reads it so the
+    constellation it draws uses the same equalizer as the number it
+    prints — a plot drawn under a different convention silently
+    contradicts the metric.
+    """
+
     y: np.ndarray                  # chain output, complex baseband @ fs
     fs: float
     wf: Waveform
@@ -86,12 +138,23 @@ class PolarResult:
         return phase_evm(self.y, self.wf)
 
     def aclr(self):
+        """Adjacent-channel leakage vs this waveform's channel bandwidth."""
         return aclr(self.y, self.fs, self.wf.bw)
 
     def psd(self, nfft: int = 4096):
+        """Welch PSD ``(f, p_db)`` of the chain output."""
         return psd(self.y, self.fs, nfft=nfft)
 
     def check_mask(self, mask=None, nfft: int = 4096):
+        """Per-bin comparison against a spectral template (default: this
+        waveform's).
+
+        This is the legacy per-bin check, kept because it is cheap and
+        matches the vendored format.  For a verdict that is independent
+        of ``nfft`` and separates in-band tangency from the informative
+        out-of-band margin, use ``polartx.metrics.sem.check_sem`` with
+        ``default_mask_spec(wf)`` instead.
+        """
         from .metrics.masks import default_mask
         if mask is None:
             mask = default_mask(self.wf)
@@ -104,6 +167,41 @@ class PolarResult:
 
 
 class PolarTX:
+    """A complete digital polar transmitter: config + phase path + digital PA.
+
+    The architecture lives entirely in ``phasemod``.  Swap an
+    ``ADPLLTwoPoint`` for a ``DTCPhaseModulator`` and the same chain
+    becomes the wideband transmitter — every other stage, impairment and
+    metric is shared, so narrowband and wideband results are measured the
+    same way and can be compared without a caveat.
+
+        from polartx import wifi_dtc
+        p = wifi_dtc(bw=160e6, qam=1024)
+        res = p.tx.run(p.make_waveform(), seed=1)
+        print(res.evm().db, res.aclr(), res.check_mask()[0])
+
+    Most users should start from ``polartx.presets`` rather than building
+    this by hand; the presets fix a coherent frequency plan, DPA and LO
+    class per standard.
+
+    Parameters
+    ----------
+    cfg : ChainConfig
+        Impairments and processing (skew, CFR, hole punching, DPA clock).
+    phasemod : PhaseModulator
+        The phase path — this is what selects the architecture.
+    dpa : DPA
+        The digital PA: unit-cell array, AM-AM/AM-PM, efficiency law.
+    dpd : PolarDPD, optional
+        Polar predistortion (AM-AM inverse + AM-PM correction LUTs).
+    memory : optional
+        Post-DPA memory model, for studying effects the static polar LUTs
+        cannot correct.
+
+    ``run()`` returns a :class:`PolarResult` carrying every intermediate
+    tap, so any stage can be inspected or scored on its own.
+    """
+
     def __init__(self, cfg: ChainConfig, phasemod: PhaseModulator, dpa: DPA,
                  dpd=None, memory=None):
         self.cfg = cfg
@@ -114,6 +212,18 @@ class PolarTX:
 
     def run(self, wf: Waveform, *, noise: bool = True, seed: int = 0
             ) -> PolarResult:
+        """Run one burst end to end and return every tap.
+
+        ``noise=False`` gates only the RANDOM impairments (phase noise,
+        jitter, mismatch draws are fixed at construction); deterministic
+        ones — quantization, INL, AM-AM/AM-PM, skew — always apply.  The
+        pair therefore separates "how much of this EVM is noise" from
+        "how much is the datapath", which is the first question to ask of
+        any result here.
+
+        ``seed`` feeds the phase modulator's noise synthesis, so two runs
+        with the same seed are comparable sample for sample.
+        """
         c = self.cfg
         info: dict = {}
         x = wf.x

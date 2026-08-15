@@ -83,6 +83,10 @@ def polar_split(x: np.ndarray, env_floor: float = 0.0,
 
 
 def polar_recombine(env: np.ndarray, phase: np.ndarray) -> np.ndarray:
+    """Envelope and phase back to complex baseband, ``env * exp(1j*phase)``.
+
+    Exact inverse of ``polar_split`` when no hole punching or slew
+    limiting is applied (round-trip below -140 dB, test-pinned)."""
     return np.asarray(env, dtype=float) * np.exp(1j * np.asarray(phase, dtype=float))
 
 

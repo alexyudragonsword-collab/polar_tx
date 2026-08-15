@@ -488,6 +488,9 @@ def run_rtl_export(outdir: str, *, n_bits: int = 10, n_thermo: int = 7,
 def run_mc_report(n_chips: int = 30, *, bw: float = 160e6,
                   skew_sigma_ns: float = 0.5, calibrated: bool = False,
                   limit_db: float = -35.0) -> dict:
+    """Monte Carlo yield run rendered for the GUI: metrics, summary table
+    and histogram figure.  Runs headless (Agg), so both frontends and the
+    tests call the same function."""
     import matplotlib
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt

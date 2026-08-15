@@ -30,6 +30,39 @@ TWOPI = 2.0 * np.pi
 
 @dataclass
 class DTCPMConfig:
+    """Open-loop DTC phase modulator parameters.
+
+    Sizing guide, from the design sweeps in ``examples/ex03``:
+
+    n_bits
+        Sets the phase-quantization EVM floor, ``(2*pi/2**B)/sqrt(12)``
+        spread over the oversampling ratio.  1024-QAM wants ~9 bit and
+        4096-QAM ~10 bit over a 1 UI range; ``dither=True`` buys about
+        one bit in band by first-order shaping the quantization error
+        out of the channel.
+    range_ui
+        DTC span in carrier UI.  1 UI is the minimum that can cover an
+        arbitrary phase (the command is wrapped modulo the range), and
+        widening it costs resolution at fixed n_bits.
+    inl_poly / inl_sin
+        Static nonlinearity in UI (pllsim conventions).  The sine term is
+        the one that matters for spectrum: amplitude ``A`` UI at
+        ``cycles`` per full range puts spurs at multiples of the
+        modulation offset at roughly ``20*log10(pi*A)`` dBc.
+    jitter_rms_s
+        Random edge jitter, converted to rad through ``fout``: a white
+        phase floor that no calibration removes.
+    f_update
+        Phase update clock when slower than the baseband grid.  ZOH puts
+        modulation images at multiples of f_update with sinc rolloff —
+        an aliasing budget, not an impairment to calibrate away.
+    lo_pn / lo_loop_bw
+        The fixed LO is PLL-locked, so its Leeson PSD is flattened below
+        the loop bandwidth.  This is why CPE is negligible in these
+        presets: the residual phase noise is high-pass shaped above the
+        symbol rate.
+    """
+
     n_bits: int = 10                # phase resolution over the full range
     range_ui: float = 1.0           # DTC span in carrier UI (2*pi*range_ui rad)
     inl_poly: tuple = ()            # polynomial in code/fullscale -> UI
@@ -45,10 +78,12 @@ class DTCPMConfig:
 
     @property
     def range_rad(self) -> float:
+        """Full DTC span in radians."""
         return TWOPI * self.range_ui
 
     @property
     def lsb_rad(self) -> float:
+        """Phase step of one code, ``range_rad / 2**n_bits``."""
         return self.range_rad / (1 << self.n_bits)
 
 
@@ -60,6 +95,20 @@ def _efm1_quantize(x: np.ndarray) -> np.ndarray:
 
 
 class DTCPhaseModulator(PhaseModulator):
+    """The wideband transmitter's phase path (see the module docstring).
+
+    No loop, so no loop bandwidth to trade against modulation bandwidth:
+    the whole trajectory is a vectorized table map on the baseband grid,
+    which is what lets this cover 320 MHz where a two-point ADPLL cannot.
+    The price is that every DTC imperfection lands directly on the
+    carrier, unattenuated by any loop — hence the calibration hooks.
+
+    ``cal.dtc_cal.apply_dtc_correction`` fills ``gain_hat`` and the
+    ``inl_lut_*`` pair from CW training; both are pre-subtracted from the
+    command here, so a calibrated modulator is the same object with state
+    set, not a different class.
+    """
+
     def __init__(self, cfg: DTCPMConfig):
         self.cfg = cfg
         # calibration state (set by cal.dtc_cal.apply_dtc_correction):
@@ -81,6 +130,13 @@ class DTCPhaseModulator(PhaseModulator):
         return TWOPI * t                          # UI -> rad
 
     def modulate(self, phase_cmd, fs_bb, *, noise=True, seed=0):
+        """Transmit ``phase_cmd`` [rad] @ ``fs_bb`` through the DTC.
+
+        Order of operations mirrors the hardware: calibration
+        pre-correction, wrap modulo the range, quantize (optionally
+        dithered), apply gain error and INL, ZOH to ``f_update``, then add
+        jitter and LO phase noise.  ``noise=False`` gates only the last
+        two."""
         c = self.cfg
         phase_cmd = np.asarray(phase_cmd, dtype=float)
         rng = np.random.default_rng(seed)

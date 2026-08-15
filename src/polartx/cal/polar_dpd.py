@@ -12,6 +12,17 @@ import numpy as np
 
 
 class PolarDPD:
+    """Static polar predistortion: an AM-AM inverse plus an AM-PM
+    correction, both indexed by the envelope command.
+
+    This is the correction a real polar TX can actually implement in two
+    small LUTs, and it is exact for a memoryless DPA.  Its limits are the
+    interesting part and are pinned by tests: it cannot fix supply-pushing
+    AM->PM (envelope-correlated PM with memory) and it cannot fix AM/PM
+    path skew.  Those need the Cartesian ILA/GMP path
+    (``cal.memory_dpd``) or a skew calibrator (``cal.skew``).
+    """
+
     def __init__(self, amp_in: np.ndarray, amp_out: np.ndarray,
                  phase_corr_rad: np.ndarray):
         """amp_in -> amp_out: inverse AM-AM (both normalized [0,1]);

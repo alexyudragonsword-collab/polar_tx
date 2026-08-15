@@ -19,6 +19,21 @@ from .waveforms.ble import gfsk_ble
 
 @dataclass
 class TxPreset:
+    """A ready-to-run chain plus the waveform generator that matches it.
+
+    The pairing is the point: ``tx`` and ``make_waveform`` share a
+    coherent frequency plan (sample rate, numerology, carrier), so a
+    preset cannot be run against a waveform it was not designed for by
+    accident.  The idiom everywhere in this package is::
+
+        p = wifi_dtc(bw=160e6, qam=1024)
+        res = p.tx.run(p.make_waveform(n_symbols=8), seed=1)
+
+    ``make_waveform``'s keyword arguments vary by standard (OFDM presets
+    take ``n_symbols``, EDGE/EDR take ``n_syms``, BLE takes ``n_bits``),
+    which is why the report layer dispatches by signature inspection.
+    """
+
     tx: PolarTX
     fs_bb: float
     make_waveform: Callable[..., Waveform]
@@ -59,6 +74,7 @@ def ble_adpll(rate: float = 1e6, *, mode: str = "response",
 
     def make_waveform(n_bits: int = 800, pattern: str = "prbs",
                       seed: int = 1) -> Waveform:
+        """GFSK burst of ``n_bits`` bits on the fref grid."""
         return gfsk_ble(n_bits, fref, rate, pattern=pattern, seed=seed)
 
     return TxPreset(tx=tx, fs_bb=fref, make_waveform=make_waveform)
@@ -81,6 +97,7 @@ def bt_edr_adpll(dpsk: str = "8dpsk", *, mode: str = "response",
                   settle_cycles=settle_cycles, **kw)
 
     def make_waveform(n_syms: int = 800, seed: int = 1) -> Waveform:
+        """EDR DPSK burst of ``n_syms`` symbols (SRRC pulse shaped)."""
         from .waveforms.edr import edr_dpsk
         return edr_dpsk(n_syms, p.fs_bb, mode=dpsk, seed=seed)
 
@@ -88,10 +105,12 @@ def bt_edr_adpll(dpsk: str = "8dpsk", *, mode: str = "response",
 
 
 def ble_1m_adpll(**kw) -> TxPreset:
+    """BLE LE-1M (1 Mb/s GFSK); ``ble_adpll`` with ``rate=1e6``."""
     return ble_adpll(rate=1e6, **kw)
 
 
 def ble_2m_adpll(**kw) -> TxPreset:
+    """BLE LE-2M (2 Mb/s GFSK); ``ble_adpll`` with ``rate=2e6``."""
     return ble_adpll(rate=2e6, **kw)
 
 
@@ -147,6 +166,9 @@ def lte20_adpll(qam: int = 64, *, mode: str = "response",
 
     def make_waveform(n_symbols: int = 28, seed: int = 0,
                       sc_fdma: bool = True) -> Waveform:
+        """LTE-20 burst.  ``sc_fdma=True`` (the default) is real uplink:
+        DFT-precoded, ~1.7 dB lower PAPR, and the QAM lattice only exists
+        after the inverse DFT."""
         # uplink SC-FDMA by default: what a handset polar TX transmits
         from .waveforms.ofdm import lte_waveform
         return lte_waveform(20e6, qam, n_symbols=n_symbols,
@@ -195,6 +217,7 @@ def wifi_dtc(bw: float = 160e6, qam: int = 1024, *, n_bits: int = 11,
     fs_bb = bw * oversampling
 
     def make_waveform(n_symbols: int = 8, seed: int = 0) -> Waveform:
+        """802.11 OFDM burst at this preset's bandwidth and constellation."""
         from .waveforms.ofdm import wifi_waveform
         return wifi_waveform(bw, qam, n_symbols=n_symbols,
                              oversampling=oversampling, seed=seed)
@@ -225,6 +248,8 @@ def bench_edge_polar_staszewski05() -> TxPreset:
     tx = PolarTX(ChainConfig(), pm, DPA(DPAConfig(n_bits=8)))
 
     def make_waveform(n_syms: int = 400, seed: int = 1) -> Waveform:
+        """EDGE 8PSK burst using the numerically extracted linearized
+        GMSK C0 pulse."""
         from .waveforms.edr import edge_waveform
         return edge_waveform(n_syms, fref, seed=seed)
 
@@ -303,6 +328,8 @@ class FIRTxPreset:
 
     @property
     def tx(self):
+        """The dual-tap chain, aliased so this preset is drop-in compatible
+        with ``TxPreset`` throughout the report and GUI layers."""
         return self.fir_tx
 
 
@@ -348,6 +375,8 @@ def bench_wifi7_mlo_fir_borokhovich26(bw: float = 40e6, *,
     # 16 settles to ~4 dB spread around the published class (and still
     # runs in ~1 s despite osr=50).
     def make_waveform(n_symbols: int = 16, seed: int = 0) -> Waveform:
+        """802.11be 4096-QAM burst; 16 symbols by default because this
+        preset's EVM is CFR-clipping-limited and clipping is bursty."""
         from .waveforms.ofdm import wifi_waveform
         return wifi_waveform(bw, 4096, n_symbols=n_symbols,
                              oversampling=osr, seed=seed)
@@ -405,6 +434,7 @@ def nr_dtc(bw: float = 100e6, *, scs: float | None = None,
                  env_skew_s=env_skew_s, dpa=dpa, dpd=dpd, **kw)
 
     def make_waveform(n_symbols: int = 8, seed: int = 0) -> Waveform:
+        """5G NR burst at this preset's SCS, bandwidth and constellation."""
         from .waveforms.ofdm import nr_waveform
         return nr_waveform(bw, scs, qam, n_symbols=n_symbols, seed=seed)
 

@@ -59,6 +59,13 @@ def nr_sem(bw: float = 100e6):
 
 
 def default_mask(wf: Waveform):
+    """The spectral template matching this waveform's standard, dispatched
+    on ``kind`` and numerology (SCS 15 kHz -> LTE, 30/60/120 kHz -> NR,
+    otherwise WiFi; GFSK/DPSK -> the BLE 1 MHz raster).
+
+    Breakpoints only.  Use ``default_mask_spec`` when the measurement
+    convention matters — it carries the resolution bandwidth and the
+    provenance alongside these points."""
     if wf.kind == "gfsk":
         return ble_mask(wf.meta.get("rate", 1e6))
     if wf.kind == "dpsk":

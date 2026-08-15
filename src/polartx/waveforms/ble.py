@@ -24,6 +24,9 @@ PATTERNS = {
 
 
 def ble_bits(n_bits: int, pattern: str = "prbs", seed: int = 1) -> np.ndarray:
+    """Payload bits: ``"prbs"`` for general use, or one of the fixed
+    certification patterns in ``PATTERNS`` (``"11110000"`` for delta-f1,
+    ``"10101010"`` for delta-f2), tiled to length."""
     if pattern == "prbs":
         return prbs(n_bits, seed=seed)
     base = PATTERNS[pattern]

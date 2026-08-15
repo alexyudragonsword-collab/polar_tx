@@ -19,7 +19,15 @@ from ..waveforms.base import Waveform
 
 
 def _chain_as_pa(tx, wf: Waveform, *, noise: bool, seed: int):
-    """Wrap PolarTX.run as an x -> y callable on wf's grid."""
+    """Wrap PolarTX.run as an x -> y callable on wf's grid.
+
+    The whole polar chain — compressing DPA, AM-PM, memory and all — is
+    handed to the vendored ILA as if it were one black-box PA.  This only
+    works if the chain is a STATIC system across runs, which is why
+    ``ChainConfig.fs_scale_fixed`` must be set: per-run normalization
+    makes the "PA" change between iterations and caps the fit's benefit at
+    a few dB (test-pinned).
+    """
 
     def pa(x: np.ndarray) -> np.ndarray:
         wf2 = replace(wf, x=x)

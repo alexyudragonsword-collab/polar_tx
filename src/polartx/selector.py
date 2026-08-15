@@ -106,6 +106,7 @@ class Requirement:
 
     @property
     def fs_bb(self) -> float:
+        """Baseband sample rate implied by the requirement, ``bw * osr``."""
         return self.bw_hz * self.osr
 
     @property
@@ -120,6 +121,16 @@ class Requirement:
 
 @dataclass
 class Candidate:
+    """One architecture scored against a requirement.
+
+    ``terms`` is the per-contributor EVM breakdown in dB (the shared
+    synthesizer term plus that architecture's own floors), which is what
+    makes a verdict arguable rather than oracular: read it to see WHICH
+    floor is binding before believing the ranking.  ``feasible=False``
+    means the architecture was excluded outright, with the reason in
+    ``notes`` — a two-point ADPLL past its coverage ceiling, for example.
+    """
+
     arch: str
     evm_db: float = float("nan")
     feasible: bool = True
@@ -128,6 +139,7 @@ class Candidate:
 
     @property
     def key(self):
+        """Sort key: feasible candidates first, then best EVM."""
         return (not self.feasible, self.evm_db)
 
 
@@ -207,16 +219,30 @@ def _score_adpll(req: Requirement, synth_evm: float) -> Candidate:
 
 @dataclass
 class SelectorReport:
+    """The scored comparison, plus renderings of it.
+
+    ``best`` / ``recommendation`` give the verdict, ``table()`` gives the
+    breakdown, ``suggest_preset()`` names the closest ready-to-run preset
+    so a recommendation can be run rather than just read.
+
+    This is an ANALYTIC screen on a shared-synthesizer basis, not a
+    simulation: it says which architecture to reach for first.  Confirm
+    with an actual chain run before committing to it.
+    """
+
     req: Requirement
     candidates: list[Candidate]
 
     @property
     def best(self) -> Candidate | None:
+        """Lowest-EVM feasible candidate, or None if none is feasible."""
         ok = [c for c in self.candidates if c.feasible]
         return min(ok, key=lambda c: c.evm_db) if ok else None
 
     @property
     def recommendation(self) -> str:
+        """One-line verdict: architecture, EVM, margin vs target, and why
+        anything was excluded."""
         b = self.best
         if b is None:
             return "no feasible architecture for this requirement"
@@ -251,6 +277,8 @@ class SelectorReport:
         return f"wifi_dtc(bw={self.req.bw_hz:.0g}, n_bits={self.req.dtc_bits})"
 
     def table(self) -> str:
+        """Fixed-width comparison table: EVM, PASS/fail vs target, and the
+        per-contributor breakdown for each candidate."""
         w = 18
         lines = [f"{'arch':{w}s}{'EVM':>9s}{'target':>9s}  breakdown / notes"]
         for c in sorted(self.candidates, key=lambda c: c.key):

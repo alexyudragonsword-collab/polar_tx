@@ -32,6 +32,32 @@ TWOPI = 2.0 * np.pi
 
 
 class ADPLLTwoPoint(PhaseModulator):
+    """The narrowband transmitter's phase path (see the module docstring).
+
+    The spec that decides everything here is the direct-path gain match.
+    A fractional error ``eps`` leaves ``eps * (highpassed phase)`` on the
+    output, so EVM is linear in ``eps`` and — when the gains DO match —
+    independent of the loop bandwidth.  Both statements are pinned by
+    tests, and both are the reason two-point modulation is worth its
+    calibration.
+
+    Pick the engine deliberately:
+
+    ``mode="response"``
+        Linearized z-domain composite, whole frame in seconds.  Use it
+        for EVM/ACLR sweeps.  It cannot show TDC wrapping or
+        dither-times-modulation coupling, so never source a spur claim
+        from it.
+    ``mode="event"``
+        Cycle-accurate, and the noise truth.  **Valid only while the
+        phase advance per reference cycle is far below one UI** — 0.8%
+        for BLE and 4.2% for EDR are fine, LTE-20's 29% is not.  Past
+        ~10% it warns and reports ``ui_per_ref_cycle_p99`` in the
+        diagnostics rather than returning a quietly wrong answer.
+        It is also where ``dp_range_hz`` clipping and the online
+        ``dp_cal`` calibrator live, both being per-cycle effects.
+    """
+
     def __init__(self, pll: ADPLL, *, dp_gain: float = 1.0,
                  mode: str = "response", settle_cycles: int = 40_000,
                  dp_range_hz: float | None = None):
@@ -62,6 +88,8 @@ class ADPLLTwoPoint(PhaseModulator):
         return self.dp_gain / (1.0 + self.pll.cfg.kdco_est_error)
 
     def analyze(self):
+        """Cached vendored ADPLL small-signal analysis (loop response and
+        phase-noise budget).  Both engines source their noise from it."""
         if self._ana is None:
             self._ana = self.pll.analyze()
         return self._ana
@@ -88,6 +116,10 @@ class ADPLLTwoPoint(PhaseModulator):
 
     # ------------------------------------------------------------- modes
     def modulate(self, phase_cmd, fs_bb, *, noise=True, seed=0):
+        """Transmit ``phase_cmd`` [rad] @ ``fs_bb`` through the configured
+        engine.  ``fs_bb <= fref`` is required: above it the z-domain loop
+        model has no meaning and the event grid cannot represent the
+        command either."""
         phase_cmd = np.asarray(phase_cmd, dtype=float)
         if fs_bb > self.pll.cfg.fref:
             raise ValueError("fs_bb must be <= fref (z-domain validity)")

@@ -16,6 +16,19 @@ from ..waveforms.edr import _srrc
 
 
 def devm(y: np.ndarray, wf: Waveform) -> dict:
+    """Differential EVM of a DPSK (BT EDR) burst.
+
+    Matched-filters ``y``, aligns it to the reference, decimates to symbol
+    rate and scores the SYMBOL-TO-SYMBOL phase difference — the quantity
+    an EDR receiver actually demodulates, and the reason a slowly varying
+    carrier phase does not show up here.
+
+    ``span`` symbols are dropped at each end (pulse-shaping edge
+    transient); a burst too short to survive both trims raises rather than
+    returning NaN.
+
+    Returns the RMS/peak differential EVM along with the alignment info.
+    """
     m = wf.meta
     sps, span = m["sps"], m["span"]
     h = m.get("pulse_taps")

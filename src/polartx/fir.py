@@ -57,6 +57,19 @@ def delay_for_notch(notch_offset_hz: float) -> float:
 
 @dataclass
 class FIRResult:
+    """One dual-tap run: the combined output plus BOTH taps' full results.
+
+    ``taps`` keeps each tap's ``PolarResult`` intact, so the per-tap
+    chain can be inspected exactly as a single-core run — and comparing a
+    tap against the combination is how the notch is measured
+    (``ooc_noise_suppression_db``).
+
+    Scored per-tone by default: the 2-tap combine imposes a known group
+    delay (tau/2) and in-band tilt that a real receiver equalizes, so a
+    scalar-equalized number would charge this chain for a linear response
+    the standard removes.
+    """
+
     y: np.ndarray
     fs: float
     wf: Waveform
@@ -79,14 +92,18 @@ class FIRResult:
         return replace(self.taps[0], y=self.y)
 
     def evm(self, equalize: str = "per_tone", **kw):
+        """Constellation EVM of the combined output, per-tone equalized by
+        default (see the class docstring)."""
         # the 2-tap combine adds a known group delay + in-band tilt that
         # a real receiver equalizes, so score EVM per-tone by default
         return self._as_polar().evm(equalize=equalize, **kw)
 
     def aclr(self, *a, **kw):
+        """ACLR of the COMBINED output (see ``_as_polar``)."""
         return self._as_polar().aclr(*a, **kw)
 
     def check_mask(self, *a, **kw):
+        """Spectral-mask check on the COMBINED output."""
         return self._as_polar().check_mask(*a, **kw)
 
     def avg_efficiency(self, dpa):
@@ -97,6 +114,9 @@ class FIRResult:
         return self._as_polar().avg_efficiency(dpa)
 
     def psd(self, nfft: int = 8192):
+        """Welch PSD of the combined output.  Default nfft is larger than
+        the single-chain default because the whole point here is resolving
+        a notch several hundred MHz off carrier."""
         from .vendor.padpd.metrics import psd
         return psd(self.y, self.fs, nfft=nfft)
 
@@ -115,6 +135,15 @@ class FIRDualTapTX:
 
     def run(self, wf: Waveform, *, noise: bool = True, seed: int = 0
             ) -> FIRResult:
+        """Run both taps and combine them.
+
+        The two taps use ``seed`` and ``seed + 1``: their DETERMINISTIC
+        content is identical (same codes, quantization, INL, DPD residual)
+        and so combines FIR-shaped and notched, while their random noise
+        is independent and merely power-sums.  That asymmetry is the
+        mechanism the notch relies on — give both taps the same seed and
+        the OOC suppression disappears.
+        """
         tau = delay_for_notch(self.notch_offset_hz)
         r1 = self.tx.run(wf, noise=noise, seed=seed)
         r2 = self.tx.run(wf, noise=noise, seed=seed + 1)

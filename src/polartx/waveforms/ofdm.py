@@ -43,6 +43,7 @@ class GenOFDMConfig(OFDMConfig):
 
     @property
     def fft_size(self) -> int:  # type: ignore[override]
+        """FFT length, ``bandwidth_hz / scs_hz`` unless overridden."""
         if self.fft_size_override is not None:
             return self.fft_size_override
         n = self.bandwidth_hz / self.scs_hz
@@ -53,12 +54,16 @@ class GenOFDMConfig(OFDMConfig):
 
     @property
     def sample_rate_hz(self) -> float:  # type: ignore[override]
+        """Physical baseband rate: it follows the FFT grid, not the channel
+        bandwidth."""
         # the physical rate follows the FFT grid, not the channel BW
         # (identical to the vendored bw*oversampling when fft = bw/scs)
         return self.fft_size * self.scs_hz * self.oversampling
 
     @property
     def n_active(self) -> int:  # type: ignore[override]
+        """Occupied subcarriers: the standard's table for WiFi numerology,
+        otherwise a ~94%-occupancy approximation."""
         if self.n_active_tones is not None:
             return self.n_active_tones
         if self.scs_hz == WIFI_SCS_HZ and self.bandwidth_hz in WIFI_ACTIVE_TONES:
