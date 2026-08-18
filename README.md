@@ -14,7 +14,7 @@
 | [`CONTRIBUTING.md`](CONTRIBUTING.md) | 要**提交**改动 | 测试/vendor/GUI/口径的约定——每条都有测试或 CI job 背书 |
 | [`CHANGELOG.md`](CHANGELOG.md) | 想知道**怎么走到这一步** | 按开发轮次的变更记录，含被推翻的结论 |
 | [`ROADMAP.md`](ROADMAP.md) | 想知道**还差什么** | 只写未完成项：被外部阻塞的、已知模型缺口、明确不做的 |
-| [`CLAUDE.md`](CLAUDE.md) | 用 Claude Code 开发 | 仓库级 agent 指引：命令、分支规矩、最容易破坏的七条 |
+| [`AGENTS.md`](AGENTS.md) | 用 AI agent 开发 | 仓库级规则与导航（Project Cairn 入口）。`CLAUDE.md` 只有一行 `@AGENTS.md`，Codex 直接读 `AGENTS.md` |
 | `examples/ex01`–`ex18` | 想看**可执行的例子** | 18 个成套脚本，CI 每次 push 全部跑一遍 |
 
 ```

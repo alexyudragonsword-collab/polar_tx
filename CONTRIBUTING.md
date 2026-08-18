@@ -14,12 +14,16 @@ reviewer goodwill.
 
 ```bash
 pip install -e ".[test,gui,guiqt]"
-pytest tests/ -q                    # 全绿是提交的前置条件
-python examples/ex01_ble_gfsk_adpll.py     # 图写到 examples/out/
+pytest tests/ -q                    # ~240 项，~2 min；全绿是提交的前置条件
+python examples/exNN_*.py           # 图写到 examples/out/
+streamlit run gui/Home.py           # 网页 GUI
+polartx-gui                         # 桌面 GUI（或 python -m polartx.guiqt）
+python tools/vendor_check.py        # vendor 漂移检查（CI 也跑这个）
 ```
 
-可选：`iverilog`（RTL 金向量验证，缺失时相关测试自动 skip）、
-`streamlit` / `PySide6`（两个 GUI 的测试，缺失时 skip）。
+可选依赖：`iverilog`（RTL 金向量验证）、`streamlit` / `PySide6`（两个 GUI）。
+缺失时相关测试**干净地 skip**——所以**本地带 skip 的全绿是正常的，CI 上带
+skip 就不正常**：那说明某个 job 的依赖没装上，等于那部分没被验证。
 
 ---
 
@@ -134,11 +138,13 @@ push 都跑：
 
 ## 7. 提交 / Commits
 
-- 开发分支：`claude/digital-polar-tx-dev-r0c338`。
+- 开发分支：`claude/digital-polar-tx-dev-r0c338`。**不要在没被要求的情况下
+  推 `main`**——每次都要单独问；**不要主动开 PR**，除非明确要求。
 - 提交前：`pytest tests/ -q` 全绿；碰过 examples 就把碰过的跑一遍
   （CI 的 `examples` job 会跑全部 18 个）。
 - 提交信息写**为什么**，不写**改了哪些文件**（diff 已经说了后者）。
 - 新物理效应/新指标 = 新测试。CI 的 `test` 矩阵覆盖多平台多 Python 版本。
+- GitHub 操作走 `mcp__github__*` MCP 工具；这个环境里**没有 `gh` CLI**。
 
 ## 8. 代码风格 / Style
 
@@ -146,3 +152,11 @@ push 都跑：
 公开 dataclass 的字段用行尾注释注明**单位**（`# [Hz]`、`# [rad]`、
 `# fraction of rms`）；向量化优先，逐样本 Python 循环只用在 event 引擎
 那种确实需要逐周期状态的地方，并在 docstring 里写明代价。
+
+两条和这个仓库性质直接相关的写作习惯：
+
+- **docstring 或 README 里的物理断言，必须是你这次真的量过的**。这里的数字是
+  承重的，不是修辞——写一个没量过的数字，下一个人会拿它去做设计决策。
+- **负面结论要写进代码**。已经有好几处 docstring 记着**没成的**东西
+  （固定斜率上限下 smoothstep 输给线性插值；不固定 `fs_scale_fixed` 时 ILA
+  收益封顶）。保持这个习惯——省掉的是下一个人重做一遍同样的弯路。
