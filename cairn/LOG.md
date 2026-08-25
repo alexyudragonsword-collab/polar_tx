@@ -16,7 +16,11 @@
 - 工作区中途被容器回收静默退回 `22b7519`，从 origin `reset --hard` 恢复；
   Python 环境同时被清空，重装后 Qt 的 GL 库缺失使 `test_gui_qt` 从 skip 变
   ERROR，补装 `libegl1` 等后**真的跑起来**：全量 **264 passed / 10 skipped**。
-- 仍未做：**真机侧载**。CI 绿不等于真机能 import。
+- **真机侧载做了，暴露出一个真 bug**：构建全绿、APK 能装，但**运行按钮全无反应**
+  ——`applyLang()` 的 `textContent` 把 21 个 `<label data-zh=…>` 包着的控件全删了。
+  纯文本 parity 测试结构上看不见这类"运行时被销毁"。补了静态不变量 + jsdom
+  真 DOM harness（CI 独立一步直接跑 node，不走会 skip 的包装）。详见
+  `cairn/android-app.md`。
 - **首次真构建：解释版成功（83.9 MB artifact），编译版挂在 `cpow` 未声明**。
   修在工具链（`-include complex.h` / `-lm` / 仅交叉路径的 `-Wl,--no-undefined`），
   不是移除模块——扫过生成 C 才发现 13/42 个模块都会调 `cpow`。详见

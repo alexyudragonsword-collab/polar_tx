@@ -135,3 +135,55 @@ def test_each_method_has_a_visible_output_target(method):
     call_site = js[js.index(f'"{method}"'):][:900]
     assert re.search(r'\$\("[a-z0-9-]+"\)|run\(\s*"[a-z0-9-]+"', call_site), \
         f"{method} is called but nothing renders its result"
+
+
+def test_no_translatable_element_wraps_a_control():
+    """``applyLang()`` assigns ``textContent``, which REPLACES ALL CHILDREN.
+
+    So an element carrying ``data-zh`` must never contain another element:
+    the label text goes in an inner ``<span>`` and that span carries the
+    attribute.
+
+    This is not hypothetical.  The first build that reached a phone had 21
+    ``<label data-zh=…>`` elements wrapping their own ``<input>``, so the
+    language pass deleted every control from the DOM the moment boot
+    finished, and every Run button then threw on a null and did nothing at
+    all — no overlay, no error card, nothing to see.  Every check in this
+    module still passed, because the ids WERE in index.html; they simply
+    stopped existing a moment later.
+    """
+    from html.parser import HTMLParser
+
+    void = {"area", "base", "br", "col", "embed", "hr", "img", "input",
+            "link", "meta", "source", "track", "wbr"}
+
+    class Scan(HTMLParser):
+        def __init__(self):
+            super().__init__()
+            self.stack: list[tuple[str, str | None]] = []
+            self.bad: list[str] = []
+
+        def _check(self, child):
+            for tag, zh in self.stack:
+                if zh:
+                    self.bad.append(f"<{tag} data-zh={zh[:24]!r}> contains <{child}>")
+
+        def handle_starttag(self, tag, attrs):
+            self._check(tag)
+            if tag not in void:
+                self.stack.append((tag, dict(attrs).get("data-zh")))
+
+        def handle_startendtag(self, tag, attrs):
+            self._check(tag)
+
+        def handle_endtag(self, tag):
+            for i in range(len(self.stack) - 1, -1, -1):
+                if self.stack[i][0] == tag:
+                    del self.stack[i:]
+                    break
+
+    scan = Scan()
+    scan.feed(read(INDEX))
+    assert not scan.bad, (
+        "a data-zh element wraps another element; applyLang() will delete it:\n  "
+        + "\n  ".join(scan.bad))

@@ -40,6 +40,18 @@ window.onHostReply = (id, replyStr) => {
 
 /* ---------------------------------------------------------- language */
 let lang = "zh";
+
+/* Swap every translatable string.  This assigns textContent, which REPLACES
+ * ALL CHILDREN — so an element carrying data-zh must never wrap another
+ * element.  Put the label text in an inner <span> and tag that instead:
+ *
+ *     <label><span data-zh="种子" data-en="Seed">种子</span><input …></label>
+ *
+ * The first device build got this wrong: 21 <label data-zh=…> elements
+ * wrapped their own <input>, so this line deleted every control from the DOM
+ * the moment boot() finished, and every Run button then threw on a null and
+ * did nothing visible at all.  tests/test_android_parity.py enforces the
+ * invariant statically; tests/android_page_harness.js catches it at runtime. */
 function applyLang() {
   document.querySelectorAll("[data-zh]").forEach(el => {
     el.textContent = el.dataset[lang];

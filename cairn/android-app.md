@@ -130,6 +130,34 @@ glibc 上的声明。**对照做在了错误的平台上，所以那次验证是
 
 改成模块级 `read()` helper 统一走 UTF-8，以后再加读取点也不会漏。
 
+### 静态检查看不见"运行时被销毁"——第一次上真机就栽在这
+
+构建全绿、两个 APK 都装上了，**点运行按钮毫无反应**。没有遮罩、没有错误卡、
+什么都没有。
+
+原因：`applyLang()` 用 `el.textContent = …`，而 **textContent 会替换全部子节点**。
+页面里有 21 个 `<label data-zh=…>` 直接包着自己的 `<input>`/`<select>`，
+于是 boot 结尾那次语言刷新把**所有控件从 DOM 里删掉了**；点击处理器随即在
+`$("ch-preset").value` 上对 null 取属性、同步抛异常——按钮因此完全静默。
+
+**我的整套 parity 测试全都通过了**，因为它们查的是"id 在 index.html 里存在"。
+id 确实在，只是运行零点几秒后就不存在了。这类 bug 纯文本检查**结构上看不到**。
+
+补的是两层，而且都按规矩先弄坏一次确认会红（回退单个 label，两层同时变红）：
+
+1. **静态不变量**：带 `data-zh` 的元素不得包含任何元素（用 HTML 解析器判，
+   不是正则——我第一版正则报了 37 个误报）。标签文字放进内层 `<span>`。
+2. **真 DOM harness**（`tests/android_page_harness.js`，jsdom）：执行 `app.js`、
+   跑 boot、逐个点击运行按钮，断言调用真的到达 bridge 且参数可用；它当场
+   复现了真机现象，包括那条 `TypeError: … reading 'value'`。
+
+CI 里 harness 是**独立一步直接调 node**，不走会 skip 的 pytest 包装——
+skip 掉的绿和真跑过的绿长得一模一样。
+
+教训：`docs/android.md` 里"CI 证明不了 app 能不能跑起来"那句话是对的，
+但我当时把它当成了免责声明而不是**待办**。姊妹库 `pll_simulator` 早就有
+`android_page_harness.py`，我没照着建一个。
+
 ## 口径差异（决定，不是缺口）
 
 | 手机上没有 | 为什么 |

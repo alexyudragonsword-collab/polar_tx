@@ -49,6 +49,16 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y libegl1 libopengl0 libxkbcommon0
       - name: Install
         run: pip install -e .[test,guiqt,gui]
+      # jsdom, so the Android page harness RUNS here rather than skipping.
+      # The pytest wrapper skips when jsdom is absent, which is right for a
+      # laptop and wrong for CI: a green run that tested nothing looks exactly
+      # like a green run that tested something.  Invoking node directly means
+      # a missing dependency fails the job.
+      - name: Install jsdom for the Android page harness
+        run: npm install --no-save jsdom
+      - name: Android page harness (real DOM, stub bridge)
+        run: node tests/android_page_harness.js
+
       - name: GUI tests (Qt + web + headless compute layer)
         run: pytest tests/test_gui_qt.py tests/test_gui_web.py tests/test_guiutil.py -q
 

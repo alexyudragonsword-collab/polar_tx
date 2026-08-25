@@ -35,14 +35,14 @@
 <div id="tab-chain" class="tab">
   <section class="card">
     <h2 data-zh="端到端链路" data-en="End-to-end chain">端到端链路</h2>
-    <label data-zh="预设" data-en="Preset">预设
+    <label><span data-zh="预设" data-en="Preset">预设</span>
       <select id="ch-preset"></select>
     </label>
     <div class="grid2">
-      <label data-zh="随机种子" data-en="Seed">随机种子
+      <label><span data-zh="随机种子" data-en="Seed">随机种子</span>
         <input id="ch-seed" type="number" value="1" step="1">
       </label>
-      <label data-zh="AM/PM skew [ns]" data-en="AM/PM skew [ns]">AM/PM skew [ns]
+      <label><span data-zh="AM/PM skew [ns]" data-en="AM/PM skew [ns]">AM/PM skew [ns]</span>
         <input id="ch-skew" type="number" value="0" step="0.1">
       </label>
     </div>
@@ -66,16 +66,16 @@
     <h2 data-zh="双抽头 FIR 陷波（RFIC'26 MLO）"
         data-en="Dual-tap FIR notch (RFIC'26 MLO)">双抽头 FIR 陷波（RFIC'26 MLO）</h2>
     <div class="grid2">
-      <label data-zh="信道带宽 [MHz]" data-en="Channel BW [MHz]">信道带宽 [MHz]
+      <label><span data-zh="信道带宽 [MHz]" data-en="Channel BW [MHz]">信道带宽 [MHz]</span>
         <input id="fir-bw" type="number" value="40" step="10">
       </label>
-      <label data-zh="陷波偏移 [MHz]" data-en="Notch offset [MHz]">陷波偏移 [MHz]
+      <label><span data-zh="陷波偏移 [MHz]" data-en="Notch offset [MHz]">陷波偏移 [MHz]</span>
         <input id="fir-notch" type="number" value="500" step="50">
       </label>
-      <label data-zh="OFDM 符号数" data-en="OFDM symbols">OFDM 符号数
+      <label><span data-zh="OFDM 符号数" data-en="OFDM symbols">OFDM 符号数</span>
         <input id="fir-syms" type="number" value="8" step="1">
       </label>
-      <label data-zh="过采样率" data-en="Oversampling">过采样率
+      <label><span data-zh="过采样率" data-en="Oversampling">过采样率</span>
         <input id="fir-osr" type="number" value="50" step="10">
       </label>
     </div>
@@ -93,28 +93,28 @@
   <section class="card">
     <h2 data-zh="多核 / Doherty 合路" data-en="Multi-core / Doherty combining">多核 / Doherty 合路</h2>
     <div class="grid2">
-      <label data-zh="路数" data-en="Ways">路数
+      <label><span data-zh="路数" data-en="Ways">路数</span>
         <select id="cb-nway">
           <option value="2" selected>2</option>
           <option value="3">3</option>
         </select>
       </label>
-      <label data-zh="峰值单元类别" data-en="Peaking class">峰值单元类别
+      <label><span data-zh="峰值单元类别" data-en="Peaking class">峰值单元类别</span>
         <select id="cb-peaking">
           <option value="C" selected>class-C</option>
           <option value="B">class-B</option>
         </select>
       </label>
-      <label data-zh="回退 [dB]" data-en="Backoff [dB]">回退 [dB]
+      <label><span data-zh="回退 [dB]" data-en="Backoff [dB]">回退 [dB]</span>
         <input id="cb-backoff" type="number" value="6" step="1">
       </label>
-      <label data-zh="合路器插损 [dB]" data-en="Combiner loss [dB]">合路器插损 [dB]
+      <label><span data-zh="合路器插损 [dB]" data-en="Combiner loss [dB]">合路器插损 [dB]</span>
         <input id="cb-loss" type="number" value="0.4" step="0.1">
       </label>
-      <label data-zh="增益失配 [%]" data-en="Gain imbalance [%]">增益失配 [%]
+      <label><span data-zh="增益失配 [%]" data-en="Gain imbalance [%]">增益失配 [%]</span>
         <input id="cb-gain" type="number" value="0" step="1">
       </label>
-      <label data-zh="相位失配 [deg]" data-en="Phase imbalance [deg]">相位失配 [deg]
+      <label><span data-zh="相位失配 [deg]" data-en="Phase imbalance [deg]">相位失配 [deg]</span>
         <input id="cb-phase" type="number" value="0" step="1">
       </label>
     </div>
@@ -132,16 +132,16 @@
   <section class="card">
     <h2 data-zh="架构选择器" data-en="Architecture selector">架构选择器</h2>
     <div class="grid2">
-      <label data-zh="带宽 [MHz]" data-en="Bandwidth [MHz]">带宽 [MHz]
+      <label><span data-zh="带宽 [MHz]" data-en="Bandwidth [MHz]">带宽 [MHz]</span>
         <input id="sel-bw" type="number" value="80" step="10">
       </label>
-      <label data-zh="EVM 目标 [dB]" data-en="EVM target [dB]">EVM 目标 [dB]
+      <label><span data-zh="EVM 目标 [dB]" data-en="EVM target [dB]">EVM 目标 [dB]</span>
         <input id="sel-evm" type="number" value="-35" step="1">
       </label>
-      <label data-zh="载频 [GHz]" data-en="Carrier [GHz]">载频 [GHz]
+      <label><span data-zh="载频 [GHz]" data-en="Carrier [GHz]">载频 [GHz]</span>
         <input id="sel-fout" type="number" value="5.8" step="0.1">
       </label>
-      <label data-zh="DTC 位数" data-en="DTC bits">DTC 位数
+      <label><span data-zh="DTC 位数" data-en="DTC bits">DTC 位数</span>
         <input id="sel-bits" type="number" value="11" step="1">
       </label>
     </div>
@@ -163,16 +163,16 @@
   <section class="card">
     <h2 data-zh="蒙特卡洛良率" data-en="Monte Carlo yield">蒙特卡洛良率</h2>
     <div class="grid2">
-      <label data-zh="芯片数" data-en="Chips">芯片数
+      <label><span data-zh="芯片数" data-en="Chips">芯片数</span>
         <input id="mc-n" type="number" value="20" step="5">
       </label>
-      <label data-zh="skew 标准差 [ns]" data-en="skew sigma [ns]">skew 标准差 [ns]
+      <label><span data-zh="skew 标准差 [ns]" data-en="skew sigma [ns]">skew 标准差 [ns]</span>
         <input id="mc-sigma" type="number" value="0.5" step="0.1">
       </label>
-      <label data-zh="EVM 限值 [dB]" data-en="EVM limit [dB]">EVM 限值 [dB]
+      <label><span data-zh="EVM 限值 [dB]" data-en="EVM limit [dB]">EVM 限值 [dB]</span>
         <input id="mc-limit" type="number" value="-35" step="1">
       </label>
-      <label data-zh="带宽 [MHz]" data-en="Bandwidth [MHz]">带宽 [MHz]
+      <label><span data-zh="带宽 [MHz]" data-en="Bandwidth [MHz]">带宽 [MHz]</span>
         <input id="mc-bw" type="number" value="160" step="20">
       </label>
     </div>
