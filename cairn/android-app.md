@@ -96,6 +96,22 @@ include `<complex.h>`，NDK 的 clang 把隐式声明当**错误**。`--host` �
 `-Wl,--no-undefined` 只加在交叉路径上，也是撞出来的：主机构建**故意不链接
 libpython**，在那里要求全部符号解析会直接炸在 Python C-API 上。
 
+### 双语页面 + `read_text()` = 只在 Windows 上红
+
+推 Android 那一版把 CI 弄红了，而我当时只报了本地 264 passed **没去看 CI**——
+这是流程上的漏，不是技术问题。
+
+技术上：`test_android_parity.py` 用裸 `Path.read_text()` 读页面文件，它走的是
+**locale 编码**，Windows runner 上是 cp1252，而这些文件装着 app 的中英双语串。
+10 个 job 里 9 个绿，只有 `test (windows-latest, 3.11)` 红，14 项全挂在
+`UnicodeDecodeError`——报的错和被测的东西毫无关系。
+
+本地用 `encoding="cp1252"` 复现到了 CI 报的同两个字节（`0x8f`/`0x90`）。
+顺带发现更阴的一点：`style.css` 在 cp1252 下**不报错，直接乱码**——
+错误至少还会响。
+
+改成模块级 `read()` helper 统一走 UTF-8，以后再加读取点也不会漏。
+
 ## 口径差异（决定，不是缺口）
 
 | 手机上没有 | 为什么 |
