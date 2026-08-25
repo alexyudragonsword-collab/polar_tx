@@ -121,6 +121,40 @@ gradle -p android :app:assembleDebug
 
 ---
 
+## 交叉编译才会踩到的坑：`cpow` 未声明
+
+第一次真构建就挂在这里，值得记清楚，因为 `--host` 试跑**抓不到它**：
+
+```
+export/rtl.c: error: call to undeclared library function 'cpow'
+  #define __Pyx_c_pow_double(a, b)  (cpow(a, b))
+  note: include the header <complex.h> …
+```
+
+Cython 把它无法证明非负的 `x ** y` 降级成 `cpow()`，却不 include
+`<complex.h>`。glibc 的头链会把这些声明间接带进来，所以**主机构建永远看不到**；
+NDK 的 clang 不会，而且 C99 之后隐式函数声明是**错误**不是警告。
+
+关键是**这不是"排除掉某个坏模块"能解决的**：扫过全部 42 个模块的生成 C，
+**13 个**会真的调用 `cpow`（`fir`、`dpa/dpa`、`polar/split`、`waveforms/ble`、
+`metrics/*`、`cal/polar_dpd` …），clang 只是死在第一个上。要说话的是工具链。
+
+`packaging/android_wheel.py` 的 `compile_c` 因此带三个承重开关：
+
+| 开关 | 作用 |
+|---|---|
+| `-include complex.h` | 让声明无条件存在。对照验证过：不加时报的是和 CI 一字不差的那条错误，加上就干净 |
+| `-lm` | Android 的 math 库与 libc 分开 |
+| `-Wl,--no-undefined`（**仅交叉路径**） | 把"真机 dlopen 才炸"变成 CI 里的链接失败 |
+
+第三个只在传了 `-lpython` 的交叉路径上加。主机构建**故意不链接 libpython**
+（CPython 扩展模块的 C-API 由加载它的解释器解析），在那里要求全部符号解析
+会直接炸在 Python API 上——这条也是实测撞出来的，不是推演的。
+
+它的价值正好补上文档里"CI 证明不了什么"的一角：`cpow` 这类平台函数如果在目标
+API 级别不存在，`-shared` 链接会**默默放过**，然后在手机上 `dlopen` 失败。
+现在它会在 CI 里响。
+
 ## 手机上刻意**没有**的功能
 
 口径差异是要**记录的决定**，不是留给下一个人去发现的缺口：
@@ -161,5 +195,7 @@ gradle -p android :app:assembleDebug
 "解释版冒充编译版"、"编译版冒充解释版"、"源码盖住 .so"三个都红。
 
 **CI 证明不了的，也不该拿"已验证"去暗示的**：这个 app 能不能**跑起来**。
+（`-Wl,--no-undefined` 把其中"平台符号缺失"这一类挪进了 CI 能证明的范围，
+但仅此一类。）
 交叉编译干净、wheel 看着对，都不等于在真机上 `import` 成功。手势手感、
 刘海和安全区同样只有真机看得到。**侧载装一台，做一次真实计算，再说完成。**

@@ -17,6 +17,10 @@
   Python 环境同时被清空，重装后 Qt 的 GL 库缺失使 `test_gui_qt` 从 skip 变
   ERROR，补装 `libegl1` 等后**真的跑起来**：全量 **264 passed / 10 skipped**。
 - 仍未做：**真机侧载**。CI 绿不等于真机能 import。
+- **首次真构建：解释版成功（83.9 MB artifact），编译版挂在 `cpow` 未声明**。
+  修在工具链（`-include complex.h` / `-lm` / 仅交叉路径的 `-Wl,--no-undefined`），
+  不是移除模块——扫过生成 C 才发现 13/42 个模块都会调 `cpow`。详见
+  `cairn/android-app.md`。
 
 ## 2026-08-18 · Project Cairn 初始化
 

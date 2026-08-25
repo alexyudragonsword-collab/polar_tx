@@ -209,13 +209,48 @@ def cythonize(package_name: str, tree: Path, sources: list[Path]) -> list[Path]:
 
 def compile_c(csrc: Path, include_dirs: list[Path], cc: str,
               extra: list[str], libdir: Path | None, pylib: str) -> Path:
+    """Compile one cythonised module to a shared object.
+
+    Three flags below are load-bearing and were each added after a real
+    failure or to convert one into a visible failure:
+
+    ``-include complex.h``
+        Cython lowers ``x ** y`` on values it cannot prove non-negative to
+        ``cpow()`` (see ``__Pyx_c_pow_double``) without including
+        ``<complex.h>``.  glibc declares those functions through headers
+        Python.h already drags in, so a host build never notices; the NDK's
+        clang does not, and treats an implicit declaration as an ERROR
+        rather than a warning under C99+.  In this project 13 of the 42
+        compiled modules generate that call, so it is not one bad module to
+        exclude — it is the toolchain that has to be told.
+
+    ``-lm``
+        Android keeps the math library separate from libc, and the flag
+        below means undefined math symbols can no longer be deferred.
+
+    ``-Wl,--no-undefined``, only when linking libpython
+        A ``-shared`` link happily leaves symbols undefined, so a missing
+        platform function becomes a dlopen failure on a phone — the one
+        class of breakage a clean cross-compile is famous for hiding.  With
+        this, that becomes a link error in CI instead.
+
+        It applies ONLY on the cross path, where ``-lpython`` is passed:
+        a host build deliberately does not link libpython (a CPython
+        extension module resolves the C-API from the interpreter that loads
+        it), so requiring every symbol there would fail on the Python API
+        itself.  Chaquopy ships libpython as a real shared library and the
+        wheel links against it, which is what makes the check meaningful
+        there and wrong here.
+    """
     so = csrc.with_suffix(".so")
-    cmd = [cc, "-shared", "-fPIC", "-O2", "-fvisibility=hidden"]
+    cmd = [cc, "-shared", "-fPIC", "-O2", "-fvisibility=hidden",
+           "-include", "complex.h"]
     for inc in include_dirs:
         cmd += ["-I", str(inc)]
     cmd += extra + ["-o", str(so), str(csrc)]
     if libdir is not None:
-        cmd += ["-L", str(libdir), f"-l{pylib}"]
+        cmd += ["-L", str(libdir), f"-l{pylib}", "-Wl,--no-undefined"]
+    cmd += ["-lm"]
     run(cmd)
     return so
 
