@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  No <uses-permission> anywhere, and that is worth defending.
+
+  This app computes locally: the WebView loads file:///android_asset, Python
+  runs in-process, nothing is fetched and nothing is sent.  A change that
+  wants INTERNET should stop a review and be justified out loud, because it
+  converts a self-contained instrument into one that can send whatever the
+  user typed into it somewhere else.  tests/test_android_parity.py asserts
+  the absence.
+-->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <application
+        android:label="polartx"
+        android:icon="@mipmap/ic_launcher"
+        android:roundIcon="@mipmap/ic_launcher"
+        android:allowBackup="false"
+        android:supportsRtl="true"
+        android:theme="@android:style/Theme.Material.Light.NoActionBar">
+
+        <activity
+            android:name=".MainActivity"
+            android:exported="true"
+            android:label="polartx"
+            android:configChanges="orientation|screenSize|keyboardHidden|uiMode">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+    </application>
+</manifest>

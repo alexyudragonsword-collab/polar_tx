@@ -2,6 +2,22 @@
 
 本文件按倒序记录实质性进展——最新的一条在这行下面。每条保持简短，只写摘要和指针；结论沉淀进 `cairn/<topic>.md`。
 
+## 2026-08-25 · Android 面：Chaquopy + WebView，解释版与编译版
+
+- 按 `python-android-apk` 技能全流程做完：可行性闸门 → appbridge → android/ 骨架
+  → Cython 编译变体 → CI。详见 `cairn/android-app.md` 与 `docs/android.md`。
+- 闸门结论 Python 3.10（scipy 的 Android wheel 到此为止），依据是姊妹库
+  `pll_simulator` 同样三个二进制依赖的 14 次实测构建，不是推断——本仓代理封了
+  `chaquo.com`，所以本地跑不了 Gradle，那是 CI 的事。
+- 编译集 **42/101 模块**，用"删掉 .py 后套件仍过"证明：干净 venv 装 wheel、
+  确认无 `.py` 可回退、**242 passed / 12 skipped**。
+- 编译到底买到什么：**带对照组**测的，且第一次对照就失败（搜索串写错），
+  改对后才成立——散文全无，**字面常量全在**。
+- 工作区中途被容器回收静默退回 `22b7519`，从 origin `reset --hard` 恢复；
+  Python 环境同时被清空，重装后 Qt 的 GL 库缺失使 `test_gui_qt` 从 skip 变
+  ERROR，补装 `libegl1` 等后**真的跑起来**：全量 **264 passed / 10 skipped**。
+- 仍未做：**真机侧载**。CI 绿不等于真机能 import。
+
 ## 2026-08-18 · Project Cairn 初始化
 
 - 在已成熟的项目上做 retrofit：`polartx` 此时已有 238 项测试全绿、18 个 examples、两个 GUI、40 次提交。

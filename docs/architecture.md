@@ -58,7 +58,8 @@ src/polartx/
 ├── export/rtl.py     定点化 + Verilog/Verilog-AMS 导出 + 金向量
 ├── selector.py       架构选择器：给定需求，DTC vs ADPLL 哪个更合适
 ├── presets.py        ★ 端到端预设（标准链路 + 文献对标）
-├── guiutil.py        ★ 两个 GUI 共用的全部计算（可脱离 GUI 测试）
+├── guiutil.py        ★ 三个前端共用的全部计算（可脱离前端测试）
+├── appbridge.py      Android 的单函数 JSON 桥（薄封装；见 docs/android.md）
 ├── guiqt/            PySide6 桌面 GUI
 └── vendor/           改编移植区（见 §5）
 ```
@@ -129,7 +130,8 @@ commit 与路径，`tools/vendor_check.py` + CI 的 `vendor-drift` job 每次 pu
 | 新损伤 | `impairments.py` 或 `ChainConfig` 加字段 | 单调性/标度律测试，字段注释写单位 |
 | 新指标 | `metrics/` | 声明测量口径；输入不足要抛异常，不返回 NaN |
 | 新对标预设 | `presets.py` 的 `bench_*` + `polartx.__all__` | 必须进 `guiutil.PRESETS`（有测试挡） |
-| 新 GUI 页面 | `guiutil.py` 放计算 | **两个前端都要接**，两边都要有测试 |
+| 新 GUI 页面 | `guiutil.py` 放计算 | **两个桌面/网页前端都要接**，两边都要有测试 |
+| Android 能力 | `appbridge.py` 加方法 + `app.js` 加 render | 必须**同一次改动**里配对，`test_android_parity.py` 双向卡死 |
 
 ## 7. 已知边界
 

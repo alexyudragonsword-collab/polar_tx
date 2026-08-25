@@ -1,0 +1,98 @@
+---
+type: project_topic
+status: active
+summary: "polartx 的 Android 面（Chaquopy + WebView）：可行性闸门为什么落在 Python 3.10、编译版实测买到与没买到什么、以及手机与桌面之间刻意的口径差异"
+tags: [polartx, android, chaquopy, cython, 前端]
+contains: [decision, experience, lesson, open_question]
+created: "2026-08-25"
+updated: "2026-08-25"
+related: []
+authoring_mode: ai_generated
+---
+# Android 面
+
+面向使用者与构建者的完整说明在 `docs/android.md`。这里只放**过程知识**：
+当时为什么这么选，以及哪些是决定、哪些还是缺口。
+
+## 决策记录
+
+### 可行性闸门靠的是姊妹库的实测，不是自己推断
+
+Chaquopy 的 Python 版本由最重的二进制依赖决定。本仓的出口代理封了
+`chaquo.com`（403 policy denial），拿不到它的包索引，**也不去猜**。
+
+改用一条更硬的证据：姊妹库 `pll_simulator` 用**完全相同的三个二进制依赖**
+（numpy/scipy/matplotlib，传递性带上 contourpy/fonttools/kiwisolver/pillow）
+在 Chaquopy Python 3.10 上构建，*Android APK* workflow 跑过 14 次，最近一次
+两个 ABI 交叉编译、ELF 校验、两个 Gradle 构建全部通过。
+
+这也意味着**本地跑不了 Gradle 构建**，那是 CI 的事。
+
+### 编译集是测出来的，不是选出来的
+
+`--compile` 故意没有"全部"默认值：选定的集合等于一个断言——删掉这些 `.py`
+之后套件仍然通过。所以按这个顺序做：建 wheel → 干净 venv 安装 → 确认磁盘上
+**没有任何 `.py` 可回退** → 跑全量。
+
+结果：**42 / 101 个模块**，**242 passed / 12 skipped**。
+
+过程中测掉一个真风险：`presets` 的 `make_waveform` 靠 `inspect.signature`
+分派 burst 长度关键字，Cython 化后签名内省**仍然可用**。这条是测出来的；
+如果不测就把 `presets` 排除掉，会平白少保护一块，理由还是假的。
+
+### 三个模块刻意不编译，各有理由
+
+- `vendor/` —— 它的价值就是**可审计的改编副本**（出处头 + 漂移检查）；
+  而且那不是 polartx 自己的 IP。
+- `guiqt/` —— 桌面专用，手机上不导入。
+- `appbridge.py` —— 它的**整个方法表在 `app.js` 里是明文**，编译它保护不了
+  任何尚未公开的东西。这里用的是技能文档那条判据：不要为**保护的表象**付出
+  构建面积。
+
+## 经验
+
+### 没有对照组的阴性结果什么都不说明
+
+验证"编译到底藏住了什么"时，第一次跑对照组就**失败**了——我拿去搜未编译
+模块的短语大小写写错，于是"编译模块里搜不到散文"这个阴性结果当时毫无意义。
+改对之后才成立：
+
+| 检查 | 结果 |
+|---|---|
+| 对照：未编译 `presets.py` 的散文 | **仍在** |
+| 已编译 `chain.so` 的 docstring/注释 | **全无**（5 个短语全落空） |
+| 已编译 `chain.so` 的字面常量 | **全在**（`2e6`/`50e-9`/`0.15` 各精确命中 1 次） |
+
+所以对外只能说：**把读算法的成本从"解压即读"抬到"反汇编"**。不是许可证
+校验，不是数据保护，也不掩盖 UI 显示的任何东西。
+
+### 写完门禁要把它检查的东西弄坏一次
+
+`inspect_apk.py` 是唯一挡住"两个 APK 其实是同一个"的东西（两次构建共用工作区，
+真实失败模式是第二次复用第一次的 pip 输出，构建日志对此只字不提）。
+用合成 APK 验了五个方向：该绿的两个绿；"解释版冒充编译版"、"编译版冒充
+解释版"、"源码盖住 `.so`"三个都红。
+
+### 测试自己也会撞上自己的散文
+
+`test_the_app_declares_no_permissions` 第一版直接搜字符串 `uses-permission`，
+结果被 manifest 里**解释这条政策的注释**触发。改成先剥注释再找真标签。
+这类"检查撞上自己的文档"很容易反过来被当成被检查对象的问题。
+
+## 口径差异（决定，不是缺口）
+
+| 手机上没有 | 为什么 |
+|---|---|
+| RTL / AMS 导出 | 输出是 Verilog 目录，验证要 shell 调 `iverilog`；两样在手机上都没有意义 |
+| `run_mc_parallel` | 报告层走串行 `run_mc`；`ProcessPoolExecutor` 不该在 Android 下 fork |
+
+页面五个标签覆盖 bridge 全部 7 个方法，双向由 `tests/test_android_parity.py`
+卡死。
+
+## 开放问题
+
+- **没有在真机上跑过。** 交叉编译干净、wheel 看着对、CI 全绿，都不等于真机
+  `import` 成功；手势手感、刘海安全区同样只有真机看得到。侧载一台做一次真实
+  计算之前，"能用"这句话不成立。
+- 双抽头 FIR（osr=50）在 x86 runner 上 2.1 s，手机上按几倍估——是否需要给它
+  一个更小的手机默认值，等真机数据再定。

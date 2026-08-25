@@ -4,3 +4,6 @@ examples/out/
 .pytest_cache/
 build/
 dist/
+
+# scratch tree from packaging/android_wheel.py
+build-android-wheel/

@@ -83,7 +83,17 @@ response 模式不能背书杂散结论）。
 `dpa/combiner.py` 的效率是从负载调制物理**导出**的（不是拟合的），这一点比
 拟合模型强；但整个模型没有和任何实测 Doherty DPA 比对过。
 
-### B5. 剩 24 处 docstring
+### B5. Android 版没有在真机上跑过
+
+交叉编译干净、wheel 的 ELF 与 tag 相符、CI 全绿——**都不等于真机 `import`
+成功**，尤其是编译版。手势手感、刘海与安全区同样只有真机看得到。
+`docs/android.md` 已经把这条写成"CI 证明不了什么"，这里记着它仍然开着：
+**侧载一台、做一次真实计算之前，"能用"这句话不成立。**
+
+顺带一个等真机数据才能定的小问题：双抽头 FIR（osr=50）在 x86 runner 上 2.1 s，
+手机上是否需要更小的默认值。
+
+### B6. 剩 24 处 docstring
 
 都是 GUI 内部件和父函数已解释的嵌套闭包。低价值，列出来只是为了闭环。
 
@@ -97,11 +107,11 @@ response 模式不能背书杂散结论）。
 CI 的 `build` job 已经在产 sdist + wheel，只差发布这一步。如果这个库要给别人
 用，得先决定版本策略。
 
-### C2. Windows exe 未接入发布流程
+### C2. Windows exe 与 Android APK 未接入发布流程
 
 两条 workflow 都在真 CI 上成功跑过（`windows-exe` ×2、`windows-exe-nuitka` ×3，
 均为手动 `workflow_dispatch`），产物正常。但它们和 release 没有联动——
-打 tag 不会自动出 exe。
+打 tag 不会自动出 exe，也不会出 APK（`android.yml` 同样是手动触发）。
 
 ### C3. `mode="event"` 的性能
 

@@ -92,22 +92,29 @@ push 都跑：
 
 上游 commit 无法访问时（浅克隆、离线），检查器会 **skip**，不会误报 DRIFT。
 
-## 4. GUI 不能落后于库 / Both GUIs, or neither
+## 4. 前端不能落后于库 / All surfaces, or none
 
-这个工程有两个前端：Streamlit 网页版（`gui/`）和 PySide6 桌面版
-（`src/polartx/guiqt/`）。计算全部住在 `src/polartx/guiutil.py`，可以脱离
-两个 GUI 单独测试——**新功能先落在 `guiutil`，再由两个前端各自接线**。
+这个工程有**三个**前端：Streamlit 网页版（`gui/`）、PySide6 桌面版
+（`src/polartx/guiqt/`）和 Android WebView 版（`android/`，经
+`src/polartx/appbridge.py`）。计算全部住在 `src/polartx/guiutil.py`，可以脱离
+三个前端单独测试——**新功能先落在 `guiutil`，再由各前端接线**。
 
 规矩：
 
 1. 新增 `bench_*` 预设必须进 `guiutil.PRESETS`，
    `test_benchmarks.py::test_every_benchmark_is_reachable_from_the_gui`
    会挡住漏接的情况。
-2. 新增 GUI 页面要**两个前端都加**，并且两边都有测试
+2. 新增 GUI 页面要**两个桌面/网页前端都加**，并且两边都有测试
    （`tests/test_gui_web.py` 用 streamlit `AppTest`，
    `tests/test_gui_qt.py` 用 offscreen Qt）。页数不要 hardcode，从
    `PAGES` 推。
-3. 报告层画的星座图必须和它打印的 EVM 用**同一个均衡口径**——
+3. **Android 的 bridge 方法与页面必须双向对齐**：`appbridge._METHODS` 里多一个
+   没人调的方法，或 `app.js` 调一个不存在的方法，`tests/test_android_parity.py`
+   都会红（纯文本比对，不需要浏览器或模拟器）。**一个没有调用者的 bridge 方法
+   只是半个功能**——它有 bridge 测试，看起来被覆盖了，对用户什么也不做。
+4. Android 上刻意缺的功能（RTL 导出、并行蒙卡）记在 `docs/android.md` 与
+   `cairn/android-app.md`，**口径差异是要记录的决定，不是留给下一个人发现的缺口**。
+5. 报告层画的星座图必须和它打印的 EVM 用**同一个均衡口径**——
    `PolarResult.evm_equalize_default` 就是为此存在的。用不同口径画的图
    会无声地和数字矛盾。
 

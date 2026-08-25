@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<!-- viewport-fit=cover pairs with the env(safe-area-inset-*) padding in
+     style.css; without it the header sits under the notch on a real phone -->
+<meta name="viewport"
+      content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>polartx</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header>
+  <h1>polartx <span id="version"></span></h1>
+  <button id="lang" class="ghost">EN</button>
+</header>
+
+<div id="boot" class="card">
+  <p data-zh="正在启动 Python 运行时（首次导入 numpy/scipy/matplotlib，约数秒）…"
+     data-en="Starting the Python runtime (first import of numpy/scipy/matplotlib, a few seconds)…">
+     正在启动 Python 运行时（首次导入 numpy/scipy/matplotlib，约数秒）…</p>
+  <p class="error" id="boot-error" hidden></p>
+</div>
+
+<main id="app" hidden>
+<nav id="tabs">
+  <button data-tab="chain" class="active" data-zh="链路" data-en="Chain">链路</button>
+  <button data-tab="fir" data-zh="FIR 陷波" data-en="FIR">FIR 陷波</button>
+  <button data-tab="combiner" data-zh="合路" data-en="Doherty">合路</button>
+  <button data-tab="selector" data-zh="选型" data-en="Select">选型</button>
+  <button data-tab="mc" data-zh="良率" data-en="Yield">良率</button>
+</nav>
+
+<!-- ------------------------------------------------------------ chain -->
+<div id="tab-chain" class="tab">
+  <section class="card">
+    <h2 data-zh="端到端链路" data-en="End-to-end chain">端到端链路</h2>
+    <label data-zh="预设" data-en="Preset">预设
+      <select id="ch-preset"></select>
+    </label>
+    <div class="grid2">
+      <label data-zh="随机种子" data-en="Seed">随机种子
+        <input id="ch-seed" type="number" value="1" step="1">
+      </label>
+      <label data-zh="AM/PM skew [ns]" data-en="AM/PM skew [ns]">AM/PM skew [ns]
+        <input id="ch-skew" type="number" value="0" step="0.1">
+      </label>
+    </div>
+    <label>
+      <input id="ch-noise" type="checkbox" checked>
+      <span data-zh="含随机噪声（关掉只看数据通路）"
+            data-en="random noise on (off isolates the datapath)">含随机噪声（关掉只看数据通路）</span>
+    </label>
+    <p class="muted"
+       data-zh="skew 是极坐标架构最尖锐的损伤：WiFi 160 MHz 在 0.2 ns 就掉 mask，LTE-20 在 1 ns，恒包络 BLE 免疫。"
+       data-en="Skew is this architecture's sharpest impairment: WiFi 160 MHz fails its mask at 0.2 ns, LTE-20 at 1 ns, constant-envelope BLE is immune.">
+       skew 是极坐标架构最尖锐的损伤：WiFi 160 MHz 在 0.2 ns 就掉 mask，LTE-20 在 1 ns，恒包络 BLE 免疫。</p>
+    <button id="run-chain" class="primary" data-zh="运行" data-en="Run">运行</button>
+  </section>
+  <section class="card" id="ch-out"></section>
+</div>
+
+<!-- -------------------------------------------------------------- fir -->
+<div id="tab-fir" class="tab" hidden>
+  <section class="card">
+    <h2 data-zh="双抽头 FIR 陷波（RFIC'26 MLO）"
+        data-en="Dual-tap FIR notch (RFIC'26 MLO)">双抽头 FIR 陷波（RFIC'26 MLO）</h2>
+    <div class="grid2">
+      <label data-zh="信道带宽 [MHz]" data-en="Channel BW [MHz]">信道带宽 [MHz]
+        <input id="fir-bw" type="number" value="40" step="10">
+      </label>
+      <label data-zh="陷波偏移 [MHz]" data-en="Notch offset [MHz]">陷波偏移 [MHz]
+        <input id="fir-notch" type="number" value="500" step="50">
+      </label>
+      <label data-zh="OFDM 符号数" data-en="OFDM symbols">OFDM 符号数
+        <input id="fir-syms" type="number" value="8" step="1">
+      </label>
+      <label data-zh="过采样率" data-en="Oversampling">过采样率
+        <input id="fir-osr" type="number" value="50" step="10">
+      </label>
+    </div>
+    <p class="muted"
+       data-zh="本页最慢：过采样 50 是把几百 MHz 外的陷波放进网格所必需的。FIR 只陷相关内容，随机噪底不被陷波——这正是抑制机理。"
+       data-en="The slowest page here: osr=50 is what puts a several-hundred-MHz notch inside the grid at all. The FIR only notches correlated content; independent noise power-sums — which is the suppression mechanism.">
+       本页最慢：过采样 50 是把几百 MHz 外的陷波放进网格所必需的。FIR 只陷相关内容，随机噪底不被陷波——这正是抑制机理。</p>
+    <button id="run-fir" class="primary" data-zh="运行" data-en="Run">运行</button>
+  </section>
+  <section class="card" id="fir-out"></section>
+</div>
+
+<!-- --------------------------------------------------------- combiner -->
+<div id="tab-combiner" class="tab" hidden>
+  <section class="card">
+    <h2 data-zh="多核 / Doherty 合路" data-en="Multi-core / Doherty combining">多核 / Doherty 合路</h2>
+    <div class="grid2">
+      <label data-zh="路数" data-en="Ways">路数
+        <select id="cb-nway">
+          <option value="2" selected>2</option>
+          <option value="3">3</option>
+        </select>
+      </label>
+      <label data-zh="峰值单元类别" data-en="Peaking class">峰值单元类别
+        <select id="cb-peaking">
+          <option value="C" selected>class-C</option>
+          <option value="B">class-B</option>
+        </select>
+      </label>
+      <label data-zh="回退 [dB]" data-en="Backoff [dB]">回退 [dB]
+        <input id="cb-backoff" type="number" value="6" step="1">
+      </label>
+      <label data-zh="合路器插损 [dB]" data-en="Combiner loss [dB]">合路器插损 [dB]
+        <input id="cb-loss" type="number" value="0.4" step="0.1">
+      </label>
+      <label data-zh="增益失配 [%]" data-en="Gain imbalance [%]">增益失配 [%]
+        <input id="cb-gain" type="number" value="0" step="1">
+      </label>
+      <label data-zh="相位失配 [deg]" data-en="Phase imbalance [deg]">相位失配 [deg]
+        <input id="cb-phase" type="number" value="0" step="1">
+      </label>
+    </div>
+    <p class="muted"
+       data-zh="效率由负载调制物理导出，不是拟合：class-B 平顶与 class-C 双凸是算出来的，不是画上去的。"
+       data-en="Efficiency is derived from the load-modulation physics, not fitted: the class-B flat top and the class-C dip come out on their own.">
+       效率由负载调制物理导出，不是拟合：class-B 平顶与 class-C 双凸是算出来的，不是画上去的。</p>
+    <button id="run-combiner" class="primary" data-zh="运行" data-en="Run">运行</button>
+  </section>
+  <section class="card" id="cb-out"></section>
+</div>
+
+<!-- --------------------------------------------------------- selector -->
+<div id="tab-selector" class="tab" hidden>
+  <section class="card">
+    <h2 data-zh="架构选择器" data-en="Architecture selector">架构选择器</h2>
+    <div class="grid2">
+      <label data-zh="带宽 [MHz]" data-en="Bandwidth [MHz]">带宽 [MHz]
+        <input id="sel-bw" type="number" value="80" step="10">
+      </label>
+      <label data-zh="EVM 目标 [dB]" data-en="EVM target [dB]">EVM 目标 [dB]
+        <input id="sel-evm" type="number" value="-35" step="1">
+      </label>
+      <label data-zh="载频 [GHz]" data-en="Carrier [GHz]">载频 [GHz]
+        <input id="sel-fout" type="number" value="5.8" step="0.1">
+      </label>
+      <label data-zh="DTC 位数" data-en="DTC bits">DTC 位数
+        <input id="sel-bits" type="number" value="11" step="1">
+      </label>
+    </div>
+    <label>
+      <input id="sel-ce" type="checkbox">
+      <span data-zh="恒包络（GFSK/GMSK）" data-en="constant envelope (GFSK/GMSK)">恒包络（GFSK/GMSK）</span>
+    </label>
+    <p class="muted"
+       data-zh="这是解析筛选，不是仿真：它说先该抓哪个架构，再用「链路」页确认。"
+       data-en="An analytic screen, not a simulation: it says which architecture to reach for first — confirm it on the Chain tab.">
+       这是解析筛选，不是仿真：它说先该抓哪个架构，再用「链路」页确认。</p>
+    <button id="run-selector" class="primary" data-zh="运行" data-en="Run">运行</button>
+  </section>
+  <section class="card" id="sel-out"></section>
+</div>
+
+<!-- --------------------------------------------------------------- mc -->
+<div id="tab-mc" class="tab" hidden>
+  <section class="card">
+    <h2 data-zh="蒙特卡洛良率" data-en="Monte Carlo yield">蒙特卡洛良率</h2>
+    <div class="grid2">
+      <label data-zh="芯片数" data-en="Chips">芯片数
+        <input id="mc-n" type="number" value="20" step="5">
+      </label>
+      <label data-zh="skew 标准差 [ns]" data-en="skew sigma [ns]">skew 标准差 [ns]
+        <input id="mc-sigma" type="number" value="0.5" step="0.1">
+      </label>
+      <label data-zh="EVM 限值 [dB]" data-en="EVM limit [dB]">EVM 限值 [dB]
+        <input id="mc-limit" type="number" value="-35" step="1">
+      </label>
+      <label data-zh="带宽 [MHz]" data-en="Bandwidth [MHz]">带宽 [MHz]
+        <input id="mc-bw" type="number" value="160" step="20">
+      </label>
+    </div>
+    <label>
+      <input id="mc-cal" type="checkbox">
+      <span data-zh="每片做 skew 校准" data-en="per-chip skew calibration">每片做 skew 校准</span>
+    </label>
+    <p class="muted"
+       data-zh="耗时与芯片数成正比，手机上从小数目起步。良率之外也看分布：95% 通过率下 p95 只余 0.2 dB 和余 6 dB 是两个设计。"
+       data-en="Cost is linear in chip count — start small on a phone. Read the distribution, not just the yield: 95% passing with 0.2 dB of p95 margin is a different design from 95% with 6 dB.">
+       耗时与芯片数成正比，手机上从小数目起步。良率之外也看分布：95% 通过率下 p95 只余 0.2 dB 和余 6 dB 是两个设计。</p>
+    <button id="run-mc" class="primary" data-zh="运行" data-en="Run">运行</button>
+  </section>
+  <section class="card" id="mc-out"></section>
+</div>
+</main>
+
+<div id="busy" hidden>
+  <div class="spinner"></div>
+  <p id="busy-text"></p>
+</div>
+
+<script src="app.js"></script>
+</body>
+</html>

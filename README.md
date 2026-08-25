@@ -14,6 +14,7 @@
 | [`CONTRIBUTING.md`](CONTRIBUTING.md) | 要**提交**改动 | 测试/vendor/GUI/口径的约定——每条都有测试或 CI job 背书 |
 | [`CHANGELOG.md`](CHANGELOG.md) | 想知道**怎么走到这一步** | 按开发轮次的变更记录，含被推翻的结论 |
 | [`ROADMAP.md`](ROADMAP.md) | 想知道**还差什么** | 只写未完成项：被外部阻塞的、已知模型缺口、明确不做的 |
+| [`docs/android.md`](docs/android.md) | 要**改 Android 版** | 可行性闸门、版本集、编译版实测买到了什么、刻意不做的功能 |
 | [`AGENTS.md`](AGENTS.md) | 用 AI agent 开发 | 仓库级规则与导航（Project Cairn 入口）。`CLAUDE.md` 只有一行 `@AGENTS.md`，Codex 直接读 `AGENTS.md` |
 | `examples/ex01`–`ex18` | 想看**可执行的例子** | 18 个成套脚本，CI 每次 push 全部跑一遍 |
 
@@ -42,6 +43,8 @@ streamlit run gui/Home.py
 pip install -e .[guiqt]   # PySide6 原生桌面版
 polartx-gui               # 或 python -m polartx.guiqt
 ```
+
+**Android APK**：`android/` 用 Chaquopy 把真的 CPython + numpy/scipy/matplotlib 装进 APK，UI 是 WebView，计算全在本地，**零权限**。手动触发的 *Android APK* workflow 一次产出**两个** APK——解释版，以及把 42/101 个模块 Cython 编译成 `.so` 的编译版（`strings` 拿不到 docstring 了，但字面常量仍在——实测边界见 [`docs/android.md`](docs/android.md)）。两者由 `inspect_apk.py` 门禁证明确实不同。
 
 **Windows 免安装 exe**：两条手动触发的 GitHub Actions 打包**两个 GUI × 两种打包器 = 4 个 onefile exe**，上传前都在 runner 上冒烟测试——`windows-exe`（PyInstaller：快、自解压）和 `windows-exe-nuitka`（Nuitka：MSVC 真编译、启动快、构建慢）。各自 qt/web 两个独立 job；从 Actions → Run workflow 触发，下载 `polartx-gui-qt[-nuitka]`（桌面，windowed）和 `polartx-gui-web[-nuitka]`（启动本地服务 + 开浏览器）。
 
@@ -99,8 +102,9 @@ src/polartx/
 ├── export/rtl.py      # 定点化 + Verilog / Verilog-AMS 导出 + 金向量
 ├── selector.py        # 架构选择器（解析打分，DTC vs ADPLL）
 ├── presets.py         # ★ 端到端预设（标准链路 + 文献对标）
-├── guiutil.py         # ★ 两个 GUI 共用的全部计算（可脱离 GUI 测试）
-└── guiqt/             # PySide6 桌面 GUI（网页版在仓库根的 gui/）
+├── guiutil.py         # ★ 三个前端共用的全部计算（可脱离 GUI 测试）
+├── appbridge.py       # Android 的单函数 JSON 桥（薄封装，逻辑都在 guiutil）
+└── guiqt/             # PySide6 桌面 GUI（网页版 gui/、Android 版 android/ 在仓库根）
 ```
 
 带 ★ 的是新人最先要读的五个文件；逐模块说明与"加东西改哪里"见

@@ -22,6 +22,7 @@
 |---|---|---|
 | `CONTRIBUTING.md` | **命令、环境、提交规矩、约定全文**（下面"硬规矩"的完整版） | 约定变了才改 |
 | `docs/architecture.md` | 模块地图、数据流三个对象、"加东西改哪里" | 结构变了才改；改代码前必读 |
+| `docs/android.md` | Android/Chaquopy：可行性闸门、版本集、编译版实测边界 | 碰 `android/` 或版本集时必读 |
 | `README.md` | 能力、结果表、建模口径与已知边界 | 能力或数字变了就改 |
 | `CHANGELOG.md` / `ROADMAP.md`（根） | 历史 / 未完成项 | 条目做完：ROADMAP 删掉、CHANGELOG 记一笔。本项目**不建** `cairn/ROADMAP.md` |
 | `AGENTS.md`（根） | 规则与导航 | 很少变；控制在 ~65 行内 |
@@ -52,7 +53,7 @@
 
 - **断言物理量，不断言快照**。不要把当前输出硬编码成期望值，也不要硬编码计数。
 - **`src/polartx/vendor/` 是可校验的改编副本，不是 fork**。改它之前先想能不能在 `polartx` 侧包一层；真要改就更新 `tools/vendor_manifest.json`。
-- **两个 GUI 同步，或者都别动**。计算住在 `guiutil.py`，Streamlit 与 PySide6 两个前端都要接、都要测。
+- **前端同步，或者都别动**。计算住在 `guiutil.py`；Streamlit、PySide6、Android（经 `appbridge.py`）三个前端都要接、都要测。Android 侧 bridge 方法与 `app.js` 双向对齐由 `tests/test_android_parity.py` 卡死。
 - **测量口径要显式声明**。EVM 均衡（`scalar` vs `per_tone`）由 `PolarResult.evm_equalize_default` 承载，保证画的星座图和打印的数字同口径；mask 的出处由 `MaskSpec.source` 承载。
 - **绝不臆造规范限值**。内置 mask 全是 `source="stylized"` 的工程模板；需要真表格就开口要，不要编看起来合理的数字。
 - **引擎有适用域**（`ADPLLTwoPoint` 的 `mode="event"` 只在每参考周期相位推进 ≪1 UI 时有效，越界告警并暴露 `ui_per_ref_cycle_p99`）；`response` 模式已线性化，**不能背书杂散结论**。指标输入不够时**抛异常**，不返回 NaN。

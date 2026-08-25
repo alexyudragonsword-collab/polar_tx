@@ -10,6 +10,30 @@ release 分组。
 
 ## 未发布 / Unreleased
 
+### Android APK：Chaquopy + WebView（2026-08-25）
+
+第四个前端。`android/` 用 Chaquopy 把真的 CPython + numpy/scipy/matplotlib
+装进 APK，UI 是 WebView，计算全在本地，**零权限**；所有逻辑经
+`src/polartx/appbridge.py` 的**单函数** JSON 桥落到既有的 `guiutil`，所以手机
+是同一批数字的第三个渲染器，不是第四份实现。
+
+- 可行性闸门定在 **Python 3.10**（Chaquopy 仓库里有 scipy wheel 的最新版本），
+  依据是姊妹库 `pll_simulator` 同样三个二进制依赖的 14 次实测构建。本仓代理封了
+  `chaquo.com`，Gradle 构建只能在 CI 上跑。
+- **编译版**：42/101 模块 Cython 编译成 `.so`。编译集不是选的是**证明**的——
+  干净 venv 装 wheel、确认磁盘上没有 `.py` 可回退、跑全量：242 passed。
+  顺带测掉一个真风险：`presets` 靠 `inspect.signature` 分派，Cython 化后仍可用。
+- **保护边界带对照组实测**，而且第一次对照就失败（搜索串写错，当时那批阴性
+  结果毫无意义）；改对后：编译模块的散文全无，**字面常量全在**（`2e6`/`50e-9`/
+  `0.15` 各精确命中一次）。所以只说"把读算法的成本从解压即读抬到反汇编"。
+- CI 一次出两个 APK，并用 `inspect_apk.py` 证明它们**确实不同**——两次构建共用
+  工作区，真实失败模式是第二次复用第一次的 pip 输出而日志只字不提。这个门禁
+  被弄坏过一次确认会红（五个方向）。
+- 过程中工作区被容器回收静默退回旧提交，从 origin 恢复；重装环境后 Qt 的 GL 库
+  缺失让 `test_gui_qt` 从 skip 变 ERROR，补库后**真的跑起来**：264 passed /
+  10 skipped（此前 238）。
+- **未做**：真机侧载。CI 绿不等于真机 import 成功。
+
 ### 文档补全（2026-08-15）
 
 - 新增 `CONTRIBUTING.md`：把测试套件**已经在强制执行**的约定写下来——

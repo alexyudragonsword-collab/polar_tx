@@ -1,0 +1,154 @@
+name: Android APK
+
+# Manual only.  The APK is a sideload artifact, not a release gate, and a
+# Chaquopy build downloads an SDK plus a full CPython and several native
+# wheels per ABI — real runner minutes.  The fast Python tests stay on push
+# where they belong (ci.yml runs tests/test_appbridge.py and
+# tests/test_android_parity.py on every commit, with no Android anywhere);
+# a human asks for the APK.
+#
+# Every run produces TWO APKs from the same source:
+#
+#   interpreted — polartx ships as .py, installed from an sdist.  The plain
+#                 build.
+#   compiled    — the modelling modules are Cython-compiled to .so and
+#                 installed from per-ABI wheels.  `strings` on the
+#                 interpreted build prints back function names, line numbers
+#                 and whole docstrings; this one gives machine code instead.
+#                 Measured, with a control, on this repository: prose from a
+#                 compiled module is gone, and every literal constant is
+#                 still findable exactly — see docs/android.md before
+#                 promising anyone more than that.
+#
+# Same applicationId, so installing one replaces the other on a phone.
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"          # what AGP 8.x requires
+      - uses: actions/setup-python@v5
+        with:
+          # Must match `version` in android/app/build.gradle.kts.  Nothing
+          # checks it; a mismatch surfaces much later as wheels Chaquopy's
+          # pip declines.  3.10 is the newest Python with an Android scipy
+          # wheel (chaquo/chaquopy#1237), and the compiled wheels are tagged
+          # cp310 for the same reason.
+          python-version: "3.10"
+      - name: Install build tools
+        run: pip install build cython
+      - uses: gradle/actions/setup-gradle@v3
+        with:
+          gradle-version: "8.2"
+
+      # ---------------------------------------------------------- interpreted
+      - name: Build the polartx sdist the app embeds
+        # an sdist, not install("../.."): a directory install makes the whole
+        # repository an input of the pip task, and the Gradle project lives
+        # inside that repository, so every AGP task's output would land
+        # inside the pip task's input and Gradle 8's validation rejects it
+        run: python -m build --sdist --outdir android/app/pysrc .
+      - name: Build interpreted APK
+        run: gradle -p android :app:assembleDebug
+      - name: Set the interpreted APK aside
+        run: |
+          mkdir -p out
+          mv android/app/build/outputs/apk/debug/app-debug.apk \
+             out/polartx-interpreted-debug.apk
+      - uses: actions/upload-artifact@v4
+        with:
+          name: polartx-debug-apk-interpreted
+          path: out/polartx-interpreted-debug.apk
+          if-no-files-found: error
+
+      # ------------------------------------------------------------ compiled
+      # Report, do not assume: with no NDK the rest of this job is
+      # meaningless, so it fails here rather than quietly producing a second
+      # interpreted APK under a name that claims otherwise.
+      - name: Locate the NDK
+        run: |
+          ndk="${ANDROID_NDK_HOME:-$ANDROID_NDK_LATEST_HOME}"
+          echo "ANDROID_NDK_HOME=$ANDROID_NDK_HOME"
+          echo "ANDROID_NDK_LATEST_HOME=$ANDROID_NDK_LATEST_HOME"
+          test -d "$ndk" || { echo "::error::no NDK on this runner"; exit 1; }
+          echo "NDK=$ndk" >> $GITHUB_ENV
+
+      - name: Cross-compile one wheel per ABI
+        # The compile set is a claim that the suite still passes with these
+        # .py files deleted.  Verified on this repository: 42 of 101 modules
+        # compiled, 242 passed / 12 skipped against the installed wheel with
+        # no .py to fall back to.  Changing this list means re-running that.
+        run: |
+          # the sdist must go: with both present Chaquopy still has a
+          # pure-Python polartx to resolve, and this second APK could
+          # quietly be the first one again
+          rm -f android/app/pysrc/polartx-*.tar.gz
+          for abi in arm64-v8a x86_64; do
+            python packaging/android_wheel.py --package polartx \
+              --compile chain,fir,selector,impairments,montecarlo,measured,presets,guiutil,phasemod,dpa,polar,metrics,cal,analysis,waveforms,export \
+              --abi "$abi" --ndk "$NDK"
+          done
+          ls -la android/app/pysrc/
+
+      - name: Check each wheel is the architecture its tag claims
+        # A wheel installed by path skips ABI matching entirely; this catches
+        # the mismatch here rather than as an ELF header error on a device.
+        run: |
+          python - <<'PY'
+          import glob, sys, zipfile
+          from pathlib import Path
+          names = {0xB7: "AArch64", 0x3E: "x86-64", 0x28: "ARM"}
+          ok = True
+          whls = sorted(glob.glob("android/app/pysrc/polartx-*.whl"))
+          if len(whls) != 2:
+              print(f"::error::expected 2 wheels, found {len(whls)}")
+              sys.exit(1)
+          for whl in whls:
+              with zipfile.ZipFile(whl) as z:
+                  so = next(n for n in z.namelist() if n.endswith(".so"))
+                  data = z.read(so)
+              machine = int.from_bytes(data[18:20], "little")   # ELF e_machine
+              print(f"{Path(whl).name}: {so} -> {names.get(machine, hex(machine))}")
+              if machine != (0xB7 if "arm64" in whl else 0x3E):
+                  print(f"::error::{whl} is not the architecture it claims")
+                  ok = False
+          sys.exit(0 if ok else 1)
+          PY
+
+      - name: Build compiled APK
+        run: gradle -p android :app:assembleDebug
+      - name: Set the compiled APK aside
+        # a block scalar, not a plain one: YAML folds a plain scalar onto one
+        # line and keeps the backslash, so bash sees "\ " — an escaped space
+        # — instead of a line continuation
+        run: |
+          mv android/app/build/outputs/apk/debug/app-debug.apk \
+             out/polartx-compiled-debug.apk
+      - uses: actions/upload-artifact@v4
+        with:
+          name: polartx-debug-apk-compiled
+          path: out/polartx-compiled-debug.apk
+          if-no-files-found: error
+
+      # ---------------------------------------------------------- verify both
+      # The two builds run back to back in one workspace, so the realistic
+      # failure is the second reusing the first's pip output and the
+      # "compiled" APK being the interpreted one renamed.  Nothing in the
+      # build log would say so — look inside instead.
+      - name: Prove the two APKs actually differ
+        run: |
+          set -o pipefail
+          python packaging/inspect_apk.py out/polartx-interpreted-debug.apk \
+            --package polartx --pure chain,phasemod,dpa,metrics
+          python packaging/inspect_apk.py out/polartx-compiled-debug.apk \
+            --package polartx --native chain,phasemod,dpa,metrics
