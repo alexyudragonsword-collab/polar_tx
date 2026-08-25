@@ -214,19 +214,31 @@ def compile_c(csrc: Path, include_dirs: list[Path], cc: str,
     Three flags below are load-bearing and were each added after a real
     failure or to convert one into a visible failure:
 
-    ``-include complex.h``
+    ``-DCYTHON_CCOMPLEX=0``
         Cython lowers ``x ** y`` on values it cannot prove non-negative to
-        ``cpow()`` (see ``__Pyx_c_pow_double``) without including
-        ``<complex.h>``.  glibc declares those functions through headers
-        Python.h already drags in, so a host build never notices; the NDK's
-        clang does not, and treats an implicit declaration as an ERROR
-        rather than a warning under C99+.  In this project 13 of the 42
-        compiled modules generate that call, so it is not one bad module to
-        exclude — it is the toolchain that has to be told.
+        the C99 ``cpow()`` (see ``__Pyx_c_pow_double``).  glibc declares
+        that through headers Python.h already drags in, so a host build
+        never notices; **Bionic does not declare it at this API level at
+        all**, and clang treats an implicit declaration as an ERROR rather
+        than a warning under C99+.  In this project 13 of the 42 compiled
+        modules generate that call, so it was never one bad module to
+        exclude — the toolchain has to be told.
+
+        ``-include complex.h`` was the obvious fix and was tried first.  It
+        does NOT work: the header is included and still declares nothing,
+        because the function is simply absent from Bionic here.  This macro
+        is the real lever — Cython guards it with ``#if
+        !defined(CYTHON_CCOMPLEX)``, so defining it 0 selects Cython's own
+        ``__Pyx_c_pow_double``, which uses only real-valued libm
+        (``pow``/``atan2``/``exp``/``log``) and therefore depends on no
+        platform complex support at any API level.  Verified by symbol
+        rather than by argument: the object references ``cpow`` without the
+        flag and references nothing complex with it.
 
     ``-lm``
-        Android keeps the math library separate from libc, and the flag
-        below means undefined math symbols can no longer be deferred.
+        Android keeps the math library separate from libc, and Cython's
+        own complex implementation calls into it.  The flag below also
+        means undefined math symbols can no longer be deferred.
 
     ``-Wl,--no-undefined``, only when linking libpython
         A ``-shared`` link happily leaves symbols undefined, so a missing
@@ -244,7 +256,7 @@ def compile_c(csrc: Path, include_dirs: list[Path], cc: str,
     """
     so = csrc.with_suffix(".so")
     cmd = [cc, "-shared", "-fPIC", "-O2", "-fvisibility=hidden",
-           "-include", "complex.h"]
+           "-DCYTHON_CCOMPLEX=0"]
     for inc in include_dirs:
         cmd += ["-I", str(inc)]
     cmd += extra + ["-o", str(so), str(csrc)]

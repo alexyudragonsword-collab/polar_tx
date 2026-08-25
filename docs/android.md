@@ -131,20 +131,44 @@ export/rtl.c: error: call to undeclared library function 'cpow'
   note: include the header <complex.h> …
 ```
 
-Cython 把它无法证明非负的 `x ** y` 降级成 `cpow()`，却不 include
-`<complex.h>`。glibc 的头链会把这些声明间接带进来，所以**主机构建永远看不到**；
+Cython 把它无法证明非负的 `x ** y` 降级成 C99 的 `cpow()`。glibc 通过
+Python.h 已经拖进来的头链声明了它，所以**主机构建永远看不到**；
 NDK 的 clang 不会，而且 C99 之后隐式函数声明是**错误**不是警告。
 
-关键是**这不是"排除掉某个坏模块"能解决的**：扫过全部 42 个模块的生成 C，
+**这不是"排除掉某个坏模块"能解决的**：扫过全部 42 个模块的生成 C，
 **13 个**会真的调用 `cpow`（`fir`、`dpa/dpa`、`polar/split`、`waveforms/ble`、
-`metrics/*`、`cal/polar_dpd` …），clang 只是死在第一个上。要说话的是工具链。
+`metrics/*`、`cal/polar_dpd` …），clang 只是死在第一个上。
 
-`packaging/android_wheel.py` 的 `compile_c` 因此带三个承重开关：
+### `-include complex.h` 是显而易见的修法，而它**不管用**——试过了
+
+第一轮修的就是它，第二次 CI 用**同一条错误**把它否掉了：命令行里带着
+`-include complex.h`，clang 仍然说"请 include \<complex.h\>"。
+
+结论是硬的：**Bionic 在这个 API 级别的 `complex.h` 里根本没有 `cpow`**。
+头包进来了，里面没这个函数——这也顺带答死了此前那个"API 21 有没有 cpow"的
+悬案，答案是没有。
+
+### 真正的开关：`-DCYTHON_CCOMPLEX=0`
+
+Cython 用 `#if !defined(CYTHON_CCOMPLEX)` 守卫这个宏，所以命令行 `-D` 能盖掉
+它的自动探测。置 0 之后它改用**自己实现的** `__Pyx_c_pow_double`——只调用实数
+libm（`pow`/`atan2`/`exp`/`log`），因此**在任何 API 级别都不依赖平台复数支持**。
+
+按符号验证，不按论证：
+
+| 检查 | 结果 |
+|---|---|
+| 不加该宏，目标文件的未定义符号 | 引用 `cpow` |
+| 加了该宏 | 复数 libm 符号 **0 个**（42 个 `.so` 全扫） |
+| 受影响函数（`_rapp_vams`，Rapp AM-AM）的输出 | 两种实现**逐位相同**（9 组参数同一 SHA） |
+| 装上后跑全量 | 242 passed / 12 skipped |
+
+`compile_c` 因此带三个承重开关：
 
 | 开关 | 作用 |
 |---|---|
-| `-include complex.h` | 让声明无条件存在。对照验证过：不加时报的是和 CI 一字不差的那条错误，加上就干净 |
-| `-lm` | Android 的 math 库与 libc 分开 |
+| `-DCYTHON_CCOMPLEX=0` | 改用 Cython 自带复数实现，绕开平台 `cpow` |
+| `-lm` | Android 的 math 库与 libc 分开，而那份实现要用实数 libm |
 | `-Wl,--no-undefined`（**仅交叉路径**） | 把"真机 dlopen 才炸"变成 CI 里的链接失败 |
 
 第三个只在传了 `-lpython` 的交叉路径上加。主机构建**故意不链接 libpython**

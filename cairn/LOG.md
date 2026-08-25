@@ -21,6 +21,10 @@
   修在工具链（`-include complex.h` / `-lm` / 仅交叉路径的 `-Wl,--no-undefined`），
   不是移除模块——扫过生成 C 才发现 13/42 个模块都会调 `cpow`。详见
   `cairn/android-app.md`。
+- **第二次构建否掉了那个修法**：带着 `-include complex.h` 仍报同一条错——
+  **Bionic 在该 API 级别没有 `cpow` 这个函数**。真开关是 `-DCYTHON_CCOMPLEX=0`
+  （Cython 自带复数实现，只用实数 libm）。上一次的"对照验证"做在了 glibc 上，
+  而缺的从来不是 glibc 的声明——交叉编译的验证必须在目标侧约束下做。
 - **同一版还把 CI 弄红了，我当时没看**：`test_android_parity.py` 裸 `read_text()`
   走 locale 编码，Windows runner 的 cp1252 撞上页面里的中英双语串，14 项挂
   `UnicodeDecodeError`（10 个 job 只红这 1 个）。已收口到统一的 UTF-8 helper。
