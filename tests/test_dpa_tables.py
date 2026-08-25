@@ -1,5 +1,6 @@
 """DPA code tables: mismatch statistics and AM-AM/AM-PM laws."""
 import numpy as np
+import pytest
 
 from polartx.dpa import DPA, DPAConfig, code_amplitude_table
 from polartx.dpa.characteristics import amam_curve
@@ -45,6 +46,10 @@ def test_rapp_compression():
     r = np.linspace(0.01, 1.0, 100)
     y = amam_curve(("rapp", 2.0, 1.5), r)
     gain = y / r
-    assert y[-1] == 1.0                       # normalized full scale
+    # approx, not ==: the claim is "full scale is normalized to 1", not that
+    # the arithmetic lands on that float bit-exactly.  It did on numpy 2.x and
+    # missed by one ULP on 1.26 (1.0000000000000002), which is a snapshot
+    # assertion failing for the reason CONTRIBUTING.md §1 warns about.
+    assert y[-1] == pytest.approx(1.0)        # normalized full scale
     assert gain[0] > 1.05 * gain[-1]          # small-signal gain > FS gain
     assert (np.diff(y) > 0).all()             # monotone

@@ -35,6 +35,28 @@ jobs:
   # Linux job with the Qt runtime + streamlit so BOTH GUI frontends are
   # actually exercised (Qt offscreen; the web pages via streamlit AppTest,
   # which executes each page script and clicks every button).
+  # pyproject declares numpy>=1.24 / scipy>=1.10 / matplotlib>=3.7, and until
+  # this job existed nothing ever ran at those versions -- the matrix above
+  # always resolves the newest.  The declaration was false for months: numpy
+  # renamed trapz -> trapezoid in 2.0, a vendored integrator used the new name
+  # only, and EVERY narrowband ADPLL preset raised AttributeError on numpy 1.x.
+  # It surfaced on Android, where Chaquopy's wheel for Python 3.10 is numpy 1.x
+  # -- the first place a floor-version numpy ever actually ran this code.
+  # 37 tests failed there while CI was green.
+  test-floor:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install the DECLARED minimums, not the newest
+        run: |
+          pip install "numpy==1.24.4" "scipy==1.10.1" "matplotlib==3.7.5" pytest
+          pip install --no-deps -e .
+      - name: Test at the floor
+        run: pytest tests/ -q
+
   test-gui:
     runs-on: ubuntu-latest
     env:

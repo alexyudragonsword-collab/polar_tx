@@ -143,6 +143,19 @@ push 都跑：
 同理，指标函数在输入不够时要**抛异常**，不要返回 NaN——
 `metrics/dpsk.py` 就是因为这个改过。
 
+## 6.5 声明了的依赖下限，就要真的测 / Test the floor you declare
+
+`pyproject.toml` 写 `numpy>=1.24`，那这句话就是个**契约**。CI 的 `test` 矩阵
+永远解析到最新版，所以在 `test-floor` job 出现之前，那个下限**从来没被跑过**。
+
+代价是真的：numpy 2.0 把 `np.trapz` 改名 `np.trapezoid`，一个 vendored 积分器
+只用了新名字，于是**每一个窄带 ADPLL 预设**在 numpy 1.x 上都抛
+`AttributeError`——37 项测试会红，而 CI 一直是绿的。它最后是在 **Android** 上
+暴露的（Chaquopy 给 Python 3.10 的 wheel 是 numpy 1.x，那是第一个真的用下限版本
+跑这份代码的地方）。
+
+所以：**改依赖下限就要同时改 `test-floor`**，别让声明和被测的东西分家。
+
 ## 7. 提交 / Commits
 
 - 开发分支：`claude/digital-polar-tx-dev-r0c338`。**不要在没被要求的情况下

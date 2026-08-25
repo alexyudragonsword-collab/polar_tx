@@ -158,6 +158,33 @@ skip 掉的绿和真跑过的绿长得一模一样。
 但我当时把它当成了免责声明而不是**待办**。姊妹库 `pll_simulator` 早就有
 `android_page_harness.py`，我没照着建一个。
 
+### Android 当了一次"下限依赖的探测器"
+
+真机报 `AttributeError: module 'numpy' has no attribute 'trapezoid'`，只在窄带
+预设上。表面看是 Android 问题，**其实不是**：在桌面上装 numpy 1.26 一模一样地
+复现，**37 项测试红**。这个库对 numpy < 2.0 一直是坏的，而 `pyproject.toml`
+声明的是 `numpy>=1.24`。
+
+Android 只是**第一个真的跑了下限版 numpy 的地方**——Chaquopy 给 Python 3.10 的
+wheel 是 numpy 1.x。CI 的矩阵永远解析最新版，所以那条声明从来没被验证过。
+
+根因一行：`vendor/pllsim/core/jitter.py` 用 `np.trapezoid`（numpy 2.0 的新名字），
+而它在 `ADPLL.analyze()` 的积分相噪路径上——宽带 DTC 不走这条，所以只有窄带炸。
+先量范围再动手：42 处报错**全是同一个名字**，就一行。
+
+两点值得记：
+
+1. **vendor 政策当场生效**：改完 `tools/vendor_check.py` 立刻报
+   "undeclared extended file"，逼着我用 `--update` + `reason` 登记。这个改动
+   本质上属于上游（`pll_simulator` 同样有这个问题），记在 ROADMAP 里。
+2. **顺带抓出一条违反自家规矩的老断言**：`test_rapp_compression` 里
+   `assert y[-1] == 1.0` 对浮点做精确相等——numpy 2.x 上碰巧成立，1.26 上差
+   1 ULP。这正是 `CONTRIBUTING.md` §1 禁止的"断言快照"，改成 `approx`。
+
+真正的守卫是 CI 新增的 `test-floor` job：装 `pyproject` 声明的**下限**
+（numpy 1.24.4 / scipy 1.10.1 / matplotlib 3.7.5）跑全量。**声明了却不测的
+契约，等于没声明。**
+
 ## 口径差异（决定，不是缺口）
 
 | 手机上没有 | 为什么 |

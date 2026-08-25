@@ -19,6 +19,14 @@ from __future__ import annotations
 
 import numpy as np
 
+#: ``np.trapz`` was renamed ``np.trapezoid`` in numpy 2.0, and upstream uses
+#: the new name only.  polartx declares ``numpy>=1.24``, so the old name has
+#: to keep working -- and it is not a hypothetical floor: Chaquopy's Android
+#: wheel for Python 3.10 is numpy 1.x, where the whole narrowband path (every
+#: ADPLL preset reaches this through analyze()) died with
+#: "module 'numpy' has no attribute 'trapezoid'".
+_trapz = getattr(np, "trapezoid", None) or np.trapz
+
 TWOPI = 2.0 * np.pi
 
 
@@ -51,7 +59,7 @@ def integrate_pn(f: np.ndarray, s_phi: np.ndarray, f1: float = 1e3, f2: float = 
         fi, si = np.append(fi, f2), np.append(si, s2)
     if fi.size < 2:
         return 0.0
-    return float(np.trapezoid(si, fi))
+    return float(_trapz(si, fi))
 
 
 def ipn_dbc(f: np.ndarray, s_phi: np.ndarray, f1: float = 1e3, f2: float = 100e6) -> float:

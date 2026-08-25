@@ -112,7 +112,13 @@ CI 的 `build` job 已经在产 sdist + wheel，只差发布这一步。如果�
 均为手动 `workflow_dispatch`），产物正常。但它们和 release 没有联动——
 打 tag 不会自动出 exe，也不会出 APK（`android.yml` 同样是手动触发）。
 
-### C3. `mode="event"` 的性能
+### C3. `np.trapezoid` 的修法属于上游
+
+`vendor/pllsim/core/jitter.py` 的 numpy 1.x 兼容别名是在本仓打的补丁（已按
+manifest 登记，`reason` 写清了）。**同一个问题上游 `pll_simulator` 也有**：它
+只用了 numpy 2.0 的新名字。正确的长期做法是推回上游，然后这里恢复 verbatim。
+
+### C4. `mode="event"` 的性能
 
 Python 逐周期循环 ~1–2 Mcycles/s。这是**故意的**（`CLAUDE.md`：真正需要逐周期
 状态的地方才用 Python 循环），但如果 event 模式的使用频率上来了，
