@@ -34,6 +34,7 @@ skew、DPA、指标）都是共用的同一份代码，窄带和宽带的结果�
 ```
 src/polartx/
 ├── waveforms/        激励：base.Waveform 是所有下游代码看到的唯一形状
+│   ├── base.py       Waveform 容器 + require_ofdm_ref()（缺参考直接抛错）
 │   ├── ofdm.py       通用 OFDM 引擎（SCS 可配；WiFi 预设与 padpd 逐位一致）
 │   ├── ble.py        GFSK（BT=0.5, h=0.5），恒包络
 │   └── edr.py        π/4-DQPSK / 8DPSK（EDR），含线性化 GMSK C0 脉冲
@@ -50,9 +51,21 @@ src/polartx/
 ├── chain.py          ★ ChainConfig + PolarTX + PolarResult（见 §3）
 ├── fir.py            双抽头 FIR TX（RFIC'26 类 MLO 陷波），与主链同口径
 ├── impairments.py    分数延迟 skew 注入、ZOH、包络量化
-├── cal/              校准：skew、两点增益（含在线 LMS）、DTC LUT、polar DPD、GMP 记忆 DPD
-├── metrics/          指标：EVM/ACLR/PSD/mask/SEM/BLE Δf/DPSK dEVM/接收机式 EVM/RX 频段噪声
-├── analysis/         解析对照：环路响应、量化噪底、ZOH sinc 与镜像、噪声预算
+├── cal/              校准
+│   ├── skew.py       AM/PM 路径延迟失配：估计 + 修正
+│   ├── twopoint.py   两点调制直接路径增益标定（离线估计器；在线 LMS 在调制器里）
+│   ├── dtc_cal.py    开环 DTC 增益/INL 标定，从解调相位误差反推
+│   ├── polar_dpd.py  极坐标 DPD：幅度/相位双 LUT，每个数字极坐标 TX 都有的那一对
+│   └── memory_dpd.py 笛卡尔记忆 DPD（GMP），包住整条极坐标链
+├── metrics/          指标（`__init__.py` 汇出 EVM/ACLR/PSD/CCDF 等 padpd 指标）
+│   ├── masks.py      各制式谱模板（`source="stylized"`，不是认证限值）
+│   ├── sem.py        SEM 检查，按仪表的测量口径
+│   ├── aclr_ext.py   多偏置 ACLR，蜂窝测量口径
+│   ├── ble_metrics.py  BLE 调制质量：Δf、瞬态 ACP（stylized RF-PHY 口径）
+│   ├── dpsk.py       EDR DPSK 载荷的差分 EVM（DEVM）
+│   ├── ofdm_rx.py    接收机式 OFDM EVM：preamble 信道估计 + pilot CPE 跟踪
+│   └── rxband.py     双工偏置处的 RX 频段噪声——FDD polar TX 的经典预算
+├── analysis/responses.py  解析对照：环路响应、量化噪底、ZOH sinc 与镜像、噪声预算
 ├── measured.py       实测数据通路（OpenDPD 格式）→ 测量定标的 DPA 模型
 ├── montecarlo.py     良率分析（spec 化、进程池并行）
 ├── export/rtl.py     定点化 + Verilog/Verilog-AMS 导出 + 金向量
@@ -61,10 +74,18 @@ src/polartx/
 ├── guiutil.py        ★ 三个前端共用的全部计算（可脱离前端测试）
 ├── appbridge.py      Android 的单函数 JSON 桥（薄封装；见 docs/android.md）
 ├── guiqt/            PySide6 桌面 GUI
+│   ├── app.py        主窗口与入口（`polartx-gui`）
+│   ├── pages.py      各功能页；计算一律经 guiutil，页面里不放物理
+│   └── widgets.py    共用控件：worker 线程、图框、指标表
 └── vendor/           改编移植区（见 §5）
 ```
 
 带 ★ 的是新人最先要读的五个文件。
+
+这张表是**文件级**的，并且由 `tests/test_docs_consistency.py` 卡死：新增一个
+模块而不在这里给它一行，测试直接红；反过来，这里写了一个不存在的文件名也红。
+之前 `cal/`、`metrics/`、`guiqt/` 只有目录级的一行概括，14 个模块的文件名一个
+都查不到——那正是"改代码前必读"读不出东西来的状态。
 
 ## 3. 数据流三个对象
 
