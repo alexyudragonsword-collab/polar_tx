@@ -102,9 +102,16 @@ response 模式不能背书杂散结论）。
 
 ### C1. 版本与发布流程
 
-`pyproject.toml` 一直停在 `0.1.0`，没有 git tag、没有 release、没上 PyPI。
-CI 的 `build` job 已经在产 sdist + wheel，只差发布这一步。如果这个库要给别人
-用，得先决定版本策略。
+**打包元数据已经补齐**（2026-09-12）：classifiers、`[project.urls]`、keywords，
+以及 PEP 561 的 `py.typed`（实测在 wheel 里）；版本号在 `pyproject.toml` 与
+`polartx.__version__` 两处的一致性由 `tests/test_packaging.py` 卡死。
+
+**剩下的才是这一条的本体**：`pyproject.toml` 仍停在 `0.1.0`，没有 git tag、
+没有 release、没上 PyPI。CI 的 `build` job 已经在产 sdist + wheel，缺的是
+发布这一步和版本策略——姊妹库 `pll_simulator` 用的是"release notes 触发
+auto-release"，可以照搬，但要先决定这个库要不要给外部用。
+
+另：`LICENSE` 的版权人还是 "polar_tx contributors"（见 A2），对外发布前要定。
 
 ### C2. Windows exe 与 Android APK 未接入发布流程
 

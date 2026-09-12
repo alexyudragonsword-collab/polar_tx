@@ -42,6 +42,25 @@ preamble 的波形死在算术里；蒙卡穿过抽象 `PhaseModulator` 取 `.cf
 数据哈希，拆前拆后逐值比对**完全一致**。协议记在
 `cairn/static-gates-and-refactor.md`。
 
+### 打包元数据：classifiers / urls / py.typed（2026-09-12）
+
+分发层此前只有名字、版本和依赖：**0 个 classifier、没有 urls、没有 `py.typed`**。
+补上 11 个 classifier（逐个对着官方 trove 列表核过）、仓库/CHANGELOG/架构文档三个
+`[project.urls]`、keywords，以及 PEP 561 的 `py.typed`——实测 wheel 里确实带上了
+`polartx/py.typed`。
+
+**没加 `License :: OSI Approved :: MIT License` 分类器**是有意的：PEP 639 已经
+弃用 license 分类器，改用 SPDX 字符串，而字符串写法要 setuptools ≥ 77，本仓
+build-system 的下限是 68（Android wheel 构建那边就是这个量级）。license 表里
+已经写着 MIT，wheel 的 `License: MIT` 也正常出来了。
+
+两处会互相说谎的地方由 `tests/test_packaging.py` 卡住：`pyproject.toml` 的版本
+与 `polartx.__version__` 必须一致；`py.typed` 的标记文件和 `package-data` 条目
+必须同时在——**少任何一半都是静默空操作**，装到别人机器上注解就消失了。
+三个检查都做了变异验证。
+
+版本号仍是 `0.1.0`，发布流程（tag / release / PyPI）仍未接，见 ROADMAP C1。
+
 ### Android APK：Chaquopy + WebView（2026-08-25）
 
 第四个前端。`android/` 用 Chaquopy 把真的 CPython + numpy/scipy/matplotlib

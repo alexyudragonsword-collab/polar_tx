@@ -9,6 +9,26 @@ description = "Behavioral simulation of digital polar transmitters: ADPLL two-po
 readme = "README.md"
 requires-python = ">=3.10"
 license = { text = "MIT" }
+# No "License :: OSI Approved :: MIT License" classifier on purpose: PEP 639
+# deprecates license classifiers in favour of an SPDX `license` string, and
+# the string form needs setuptools>=77 while the build-system floor here is
+# 68 (what the Android wheel build has).  The license table above carries it.
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Science/Research",
+    "Intended Audience :: Telecommunications Industry",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Scientific/Engineering",
+    "Topic :: Scientific/Engineering :: Physics",
+    "Typing :: Typed",
+]
+keywords = ["polar transmitter", "ADPLL", "DTC", "digital PA", "EVM",
+            "ACLR", "behavioral simulation", "RF"]
+
 dependencies = [
     "numpy>=1.24",
     "scipy>=1.10",
@@ -28,8 +48,19 @@ dev = ["ruff==0.15.8", "mypy==1.19.1"]
 [project.scripts]
 polartx-gui = "polartx.guiqt.app:main"
 
+[project.urls]
+Repository = "https://github.com/alexyudragonsword-collab/polar_tx"
+Changelog = "https://github.com/alexyudragonsword-collab/polar_tx/blob/main/CHANGELOG.md"
+Architecture = "https://github.com/alexyudragonsword-collab/polar_tx/blob/main/docs/architecture.md"
+
 [tool.setuptools.packages.find]
 where = ["src"]
+
+# PEP 561: ship the inline annotations to installers.  They are only worth
+# exporting because CI type-checks them (CONTRIBUTING.md 8.1) -- a py.typed
+# marker on unchecked annotations exports someone else's problem.
+[tool.setuptools.package-data]
+polartx = ["py.typed"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
