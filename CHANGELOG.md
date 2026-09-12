@@ -10,6 +10,38 @@ release 分组。
 
 ## 未发布 / Unreleased
 
+### 静态检查闸门 + 文档锚定 + 拆报告层（2026-09-12）
+
+一次工程体检之后的三批整改。体检本身的结论是**主干是健康的**——277 项测试
+0 失败、自身代码语句覆盖率 92.8%（vendor 57.3%）、vendor 0 漂移、bandit 无
+中高危——短板全在工程外围，所以这一轮动的也全是外围。
+
+**加了两个闸门，它们立刻抓到东西。** 仓库此前没有任何静态检查配置。ruff
+（CI `lint` job，版本钉死）抓出 3 处真的引用丢失：一处 `paths = emit_dpd_rtl(...)`
+的返回值从来没被读过、一处重写后遗留的 `prev = -np.inf`、两个导入了却没用的
+preset。mypy 抓出的 9 个非 vendor 错里 6 个是同一个根因——`Waveform.ofdm_ref`
+和 `FIRTxPreset.fir_tx` 用 `object` 当"其实是某个具体类"的占位，于是**穿过这两个
+字段的一切**也不可检查。改成 `if TYPE_CHECKING:` 导入真实类型后，顺出两个潜在
+真问题：vendored config 允许 `seed=None`，而 `cfg.seed + 777` 会让带 pilot 或
+preamble 的波形死在算术里；蒙卡穿过抽象 `PhaseModulator` 取 `.cfg`，而
+`ADPLLTwoPoint` 根本没有这个属性（在 `.pll.cfg`）。两处都改成明确窄化 + 抛带话
+的异常。范围取舍（vendor 在两个工具里待遇相反、哪些风格码不管）见
+`CONTRIBUTING.md` §8.1。
+
+**`docs/architecture.md` 补到文件级并被测试卡死。** `cal/`、`metrics/`、`guiqt/`
+之前只有目录级的一行概括，14 个模块的文件名在这份"模块地图"里一个都查不到。
+新增 `tests/test_docs_consistency.py` 卡两个方向（模块没进地图 / 地图写了不存在
+的文件），顺带把 README 的 "230+ 项测试" 换成可核对的测试函数数——它按 AST 数
+函数而不数 pytest 实收，因为实收数取决于装了哪些可选依赖，那是机器的属性。
+四个检查都做了变异验证。
+
+**拆了 `run_chain_report`**：168 行、圈复杂度 D(29) → A(3)，计算与绘图分离，
+星座图的点由指标阶段算出，图阶段只负责画——图上画的和旁边印的 EVM 不可能来自
+不同的均衡口径。验证不靠"套件还绿"（套件里没有任何测试会因为图变了而失败）：
+16 个 preset ＋ 3 个带损伤配置的指标全量键值、每个 axes 的范围、每个 artist 的
+数据哈希，拆前拆后逐值比对**完全一致**。协议记在
+`cairn/static-gates-and-refactor.md`。
+
 ### Android APK：Chaquopy + WebView（2026-08-25）
 
 第四个前端。`android/` 用 Chaquopy 把真的 CPython + numpy/scipy/matplotlib

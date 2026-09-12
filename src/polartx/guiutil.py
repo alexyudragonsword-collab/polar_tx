@@ -5,7 +5,10 @@ only lay them out.  Mirrors the sibling repos' gui_core/services split.
 """
 from __future__ import annotations
 
+from dataclasses import dataclass
+
 import numpy as np
+
 
 def _registry():
     """Display name -> factory(**overrides) -> TxPreset.
@@ -66,147 +69,181 @@ def _size_kwargs(make_waveform, n_units: int | None) -> dict:
     return {}
 
 
-def run_chain_report(name: str, *, seed: int = 1, noise: bool = True,
-                     n_units: int | None = None, **overrides) -> dict:
-    """Build, run, and package metrics + figures for one chain."""
-    import matplotlib
-    matplotlib.use("Agg")
-    import matplotlib.pyplot as plt
+@dataclass
+class _Constellation:
+    """The constellation panel's data, equalized with the SAME convention as
+    the printed EVM — the invariant `evm_equalize_default` exists to keep
+    (CONTRIBUTING.md 5).  Computed with the metrics, drawn by the figure, so
+    the picture cannot drift from the number."""
 
-    from .metrics import check_mask
-    from .metrics.masks import default_mask
+    pts: np.ndarray             # equalized symbols to scatter
+    label: str                  # convention suffixes, as they appear in the title
+    zoom_span: float | None     # dense-QAM centre zoom, None = full square
 
-    p = build_preset(name, **overrides)
-    wf = p.make_waveform(**_size_kwargs(p.make_waveform, n_units))
-    res = p.tx.run(wf, noise=noise, seed=seed)
 
-    # one equalization convention for BOTH the number and the picture
-    eq = getattr(res, "evm_equalize_default", "scalar")
-
-    metrics = {}
-    e = res.evm()
+def _evm_metrics(e) -> dict:
+    """The EVM entry for whichever metric family this waveform kind uses."""
     if hasattr(e, "db"):
-        metrics["EVM [dB]"] = round(e.db, 1)
-        metrics["EVM [%]"] = round(e.percent, 2)
-    elif "devm_pct" in e:
-        metrics["DEVM [%]"] = round(e["devm_pct"], 2)
-    else:
-        metrics["phase EVM [%]"] = round(e["evm_pct"], 2)
-    try:
-        a = res.aclr()
-        metrics["ACLR upper [dBc]"] = round(float(a["upper_dbc"]), 1)
-    except ValueError:
-        pass
+        return {"EVM [dB]": round(e.db, 1), "EVM [%]": round(e.percent, 2)}
+    if "devm_pct" in e:
+        return {"DEVM [%]": round(e["devm_pct"], 2)}
+    return {"phase EVM [%]": round(e["evm_pct"], 2)}
+
+
+def _spectrum_metrics(res, wf) -> tuple[np.ndarray, np.ndarray, np.ndarray, dict]:
+    """PSD, the mask trace to draw, and the two mask verdicts.
+
+    Returns the spectrum arrays as well so the figure draws exactly the PSD
+    the verdict was computed from, rather than a second, independent one.
+    """
+    from .metrics import check_mask
+    from .metrics.masks import default_mask, default_mask_spec
+    from .metrics.sem import check_sem
+
     f, pdb = res.psd(nfft=8192)
-    ok, margin, mask_db = check_mask(f, pdb, default_mask(wf))
-    metrics["mask"] = "PASS" if ok else "FAIL"
+    ok, _margin, mask_db = check_mask(f, pdb, default_mask(wf))
+    metrics = {"mask": "PASS" if ok else "FAIL"}
     # The plain margin is pinned at 0.00 dB whenever the signal passes (the
     # mask is 0 dBr in-channel and the PSD is peak-normalized, so the worst
     # point is the carrier tangency). Report the OUT-OF-BAND margin, which
     # is the number that actually moves with the design, measured the way a
     # spectrum analyser does — integrated in the mask's resolution
     # bandwidth rather than per FFT bin.
-    from .metrics.masks import default_mask_spec
-    from .metrics.sem import check_sem
     _sem = check_sem(f, pdb, default_mask_spec(wf), channel_bw_hz=wf.bw)
     if "oob_margin_db" in _sem:
         metrics["mask OOB margin [dB]"] = round(_sem["oob_margin_db"], 1)
+    return f, pdb, mask_db, metrics
+
+
+def _convention_metrics(rx: np.ndarray, tx_s: np.ndarray, eq_grid: np.ndarray,
+                        eq: str, evm_db: float) -> dict:
+    """What this report's equalization convention costs, stated rather than
+    left implicit — the two residuals a reader would otherwise have to know
+    to ask about (CONTRIBUTING.md 5)."""
+    metrics: dict = {}
+    # Neither scalar nor per_tone equalization removes COMMON PHASE
+    # ERROR: per_tone averages along the symbol axis, so a per-symbol
+    # phase rotation survives it.  A real receiver tracks CPE off the
+    # pilots, so the convention matters when comparing to measured
+    # numbers — report the residual instead of leaving it implicit.
+    # (These presets run a PLL-locked LO whose noise is high-pass
+    # shaped above the symbol rate, so CPE is normally ~0.1 deg and
+    # what phase noise remains is fast, i.e. ICI that CPE tracking
+    # cannot fix either.)
+    if eq_grid.ndim == 2 and eq_grid.shape[0] > 1:
+        _cpe = np.angle((eq_grid * np.conj(tx_s)).sum(axis=1, keepdims=True))
+        _res = eq_grid * np.exp(-1j * _cpe)
+        _e0 = np.sqrt((np.abs(eq_grid - tx_s) ** 2).mean())
+        _e1 = np.sqrt((np.abs(_res - tx_s) ** 2).mean())
+        metrics["CPE rms [deg]"] = round(float(np.rad2deg(_cpe.std())), 2)
+        _gain = 20 * np.log10(max(_e0, 1e-30) / max(_e1, 1e-30))
+        if _gain > 0.5:
+            metrics["EVM if CPE tracked [dB]"] = round(evm_db - _gain, 1)
+
+    # The bigger convention effect is the LINEAR one.  Impairments like
+    # AM/PM path skew produce a frequency-dependent response as well as
+    # data-dependent distortion; scalar EVM (the default here, so that
+    # memory distortion stays visible) counts the frequency response as
+    # error, while a real receiver's per-tone equalizer removes it.  At
+    # 0.5 ns of skew that split is ~5 dB — far larger than CPE — so
+    # report it whenever it matters.
+    if eq == "scalar" and rx.ndim == 2 and rx.shape[0] > 1:
+        _gt = ((np.conj(tx_s) * rx).sum(axis=0)
+               / (np.abs(tx_s) ** 2).sum(axis=0))
+        _et = np.sqrt((np.abs(rx / _gt - tx_s) ** 2).mean()
+                      / (np.abs(tx_s) ** 2).mean())
+        _etdb = float(20 * np.log10(max(_et, 1e-30)))
+        if evm_db - _etdb > 1.0:
+            metrics["EVM per-tone eq [dB]"] = round(_etdb, 1)
+    return metrics
+
+
+def _ofdm_constellation(res, wf, e, eq: str,
+                        evm_db: float) -> tuple[_Constellation, dict]:
+    """Demodulate and equalize once, then hand back the panel and the numbers.
+
+    Everything OFDM-specific about the report lives here: the equalizer, the
+    convention residuals it implies, SC-FDMA de-precoding, and whether the
+    lattice is resolvable at this EVM.  Nothing is demodulated twice, so the
+    picture and the printed EVM cannot come from different equalizations.
+    """
+    from .waveforms.ofdm import demodulate_ofdm
+
+    ref = wf.require_ofdm_ref()
+    rx = demodulate_ofdm(res.y, ref)
+    tx_s = ref.tx_symbols
+    if eq == "per_tone" and rx.ndim == 2:
+        # per-subcarrier channel estimate, exactly like the EVM metric:
+        # removes the linear phase ramp (group delay) a receiver equalizes
+        g = ((np.conj(tx_s) * rx).sum(axis=0)
+             / (np.abs(tx_s) ** 2).sum(axis=0))
+    else:
+        g = np.vdot(tx_s, rx) / np.vdot(tx_s, tx_s)
+    eq_grid = rx / g
+    label = f"{eq} eq."
+    metrics = _convention_metrics(rx, tx_s, eq_grid, eq, evm_db)
+
+    qam_ref = wf.meta.get("qam_symbols")
+    if wf.meta.get("dft_precode") and qam_ref is not None \
+            and eq_grid.ndim == 2:
+        # SC-FDMA: the frequency-domain symbols are DFT-precoded and
+        # look like a Gaussian cloud — the QAM constellation only
+        # exists after the receiver's inverse DFT across the
+        # allocation.  Plotting the precoded grid shows a blob that
+        # says nothing about link quality.
+        n_act = eq_grid.shape[1]
+        eq_grid = np.fft.ifft(eq_grid, axis=1) * np.sqrt(n_act)
+        eq_grid = eq_grid[-qam_ref.shape[0]:]      # drop preamble rows
+        label += ", DFT de-precoded"
+
+    ref_pts = np.asarray(qam_ref if qam_ref is not None else tx_s)
+    n_lvl = len(np.unique(np.round(ref_pts.real, 3)))
+    # Why a constellation looks fuzzy has two distinct causes, and the
+    # user cannot tell them apart by eye: either the error clouds are
+    # genuinely wider than the lattice spacing (a link at its EVM
+    # limit), or too few symbols were run to populate M sites. Say
+    # which, so a legitimately marginal picture is not read as a bug.
+    m_order = n_lvl ** 2
+    if m_order > 1 and hasattr(e, "percent"):
+        sep = (np.sqrt(6.0 / (m_order - 1)) / 2) / max(e.percent / 100, 1e-12)
+        hits = ref_pts.size / m_order
+        metrics["constellation"] = (
+            "resolved" if sep > 3 else
+            "marginal" if sep > 2 else "clouds overlap at this EVM")
+        if hits < 4:
+            metrics["constellation"] += f" (only {hits:.1f} pts/symbol site)"
+
+    zoom_span = None
+    if n_lvl >= 32:
+        # 1024-QAM and denser: the full square is a solid wall of points
+        # at any usable marker size.  Zoom to the centre sub-lattice so
+        # the individual clouds — and whether they still separate at this
+        # EVM — are actually visible.
+        zoom_span = 4.5 * np.ptp(np.unique(np.round(ref_pts.real, 3))) / (n_lvl - 1)
+        label += f", centre zoom ({n_lvl}^2-QAM)"
+    return _Constellation(pts=eq_grid.ravel(), label=label,
+                          zoom_span=zoom_span), metrics
+
+
+def _chain_figure(name: str, wf, res, e, f: np.ndarray, pdb: np.ndarray,
+                  mask_db: np.ndarray, cons: _Constellation | None):
+    """Spectrum + per-kind right-hand panel.  Rendering only: every number
+    drawn here was computed by the helpers above."""
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
 
     fig, ax = plt.subplots(1, 2, figsize=(11, 4.2))
     ax[0].plot(f / 1e6, pdb, lw=0.7)
     ax[0].plot(f / 1e6, mask_db, "r--", lw=1.0)
     ax[0].set(xlabel="offset [MHz]", ylabel="dBr", ylim=(-90, 5),
               title=f"{name} spectrum")
-    if wf.kind == "ofdm":
-        from .waveforms.ofdm import demodulate_ofdm
-        ref = wf.require_ofdm_ref()
-        rx = demodulate_ofdm(res.y, ref)
-        tx_s = ref.tx_symbols
-        if eq == "per_tone" and rx.ndim == 2:
-            # per-subcarrier channel estimate, exactly like the EVM metric:
-            # removes the linear phase ramp (group delay) a receiver equalizes
-            g = ((np.conj(tx_s) * rx).sum(axis=0)
-                 / (np.abs(tx_s) ** 2).sum(axis=0))
-        else:
-            g = np.vdot(tx_s, rx) / np.vdot(tx_s, tx_s)
-        eq_grid = rx / g
-        label = f"{eq} eq."
-        # Neither scalar nor per_tone equalization removes COMMON PHASE
-        # ERROR: per_tone averages along the symbol axis, so a per-symbol
-        # phase rotation survives it.  A real receiver tracks CPE off the
-        # pilots, so the convention matters when comparing to measured
-        # numbers — report the residual instead of leaving it implicit.
-        # (These presets run a PLL-locked LO whose noise is high-pass
-        # shaped above the symbol rate, so CPE is normally ~0.1 deg and
-        # what phase noise remains is fast, i.e. ICI that CPE tracking
-        # cannot fix either.)
-        if eq_grid.ndim == 2 and eq_grid.shape[0] > 1:
-            _cpe = np.angle((eq_grid * np.conj(tx_s)).sum(axis=1,
-                                                          keepdims=True))
-            _res = eq_grid * np.exp(-1j * _cpe)
-            _e0 = np.sqrt((np.abs(eq_grid - tx_s) ** 2).mean())
-            _e1 = np.sqrt((np.abs(_res - tx_s) ** 2).mean())
-            metrics["CPE rms [deg]"] = round(float(np.rad2deg(_cpe.std())), 2)
-            _gain = 20 * np.log10(max(_e0, 1e-30) / max(_e1, 1e-30))
-            if _gain > 0.5:
-                metrics["EVM if CPE tracked [dB]"] = round(
-                    metrics.get("EVM [dB]", 0.0) - _gain, 1)
-
-        # The bigger convention effect is the LINEAR one.  Impairments like
-        # AM/PM path skew produce a frequency-dependent response as well as
-        # data-dependent distortion; scalar EVM (the default here, so that
-        # memory distortion stays visible) counts the frequency response as
-        # error, while a real receiver's per-tone equalizer removes it.  At
-        # 0.5 ns of skew that split is ~5 dB — far larger than CPE — so
-        # report it whenever it matters.
-        if eq == "scalar" and rx.ndim == 2 and rx.shape[0] > 1:
-            _gt = ((np.conj(tx_s) * rx).sum(axis=0)
-                   / (np.abs(tx_s) ** 2).sum(axis=0))
-            _et = np.sqrt((np.abs(rx / _gt - tx_s) ** 2).mean()
-                          / (np.abs(tx_s) ** 2).mean())
-            _etdb = float(20 * np.log10(max(_et, 1e-30)))
-            if metrics.get("EVM [dB]", 0.0) - _etdb > 1.0:
-                metrics["EVM per-tone eq [dB]"] = round(_etdb, 1)
-        qam_ref = wf.meta.get("qam_symbols")
-        if wf.meta.get("dft_precode") and qam_ref is not None \
-                and eq_grid.ndim == 2:
-            # SC-FDMA: the frequency-domain symbols are DFT-precoded and
-            # look like a Gaussian cloud — the QAM constellation only
-            # exists after the receiver's inverse DFT across the
-            # allocation.  Plotting the precoded grid shows a blob that
-            # says nothing about link quality.
-            n_act = eq_grid.shape[1]
-            eq_grid = np.fft.ifft(eq_grid, axis=1) * np.sqrt(n_act)
-            eq_grid = eq_grid[-qam_ref.shape[0]:]      # drop preamble rows
-            label += ", DFT de-precoded"
-        pts = eq_grid.ravel()
-        ref_pts = np.asarray(qam_ref if qam_ref is not None else tx_s)
-        n_lvl = len(np.unique(np.round(ref_pts.real, 3)))
-        # Why a constellation looks fuzzy has two distinct causes, and the
-        # user cannot tell them apart by eye: either the error clouds are
-        # genuinely wider than the lattice spacing (a link at its EVM
-        # limit), or too few symbols were run to populate M sites. Say
-        # which, so a legitimately marginal picture is not read as a bug.
-        m_order = n_lvl ** 2
-        if m_order > 1 and hasattr(e, "percent"):
-            sep = (np.sqrt(6.0 / (m_order - 1)) / 2) / max(e.percent / 100, 1e-12)
-            hits = ref_pts.size / m_order
-            metrics["constellation"] = (
-                "resolved" if sep > 3 else
-                "marginal" if sep > 2 else "clouds overlap at this EVM")
-            if hits < 4:
-                metrics["constellation"] += f" (only {hits:.1f} pts/symbol site)"
-        ax[1].plot(pts.real, pts.imag, ".", ms=1, alpha=0.4)
-        if n_lvl >= 32:
-            # 1024-QAM and denser: the full square is a solid wall of points
-            # at any usable marker size.  Zoom to the centre sub-lattice so
-            # the individual clouds — and whether they still separate at this
-            # EVM — are actually visible.
-            span = 4.5 * np.ptp(np.unique(np.round(ref_pts.real, 3)))/ (n_lvl - 1)
-            ax[1].set_xlim(-span, span)
-            ax[1].set_ylim(-span, span)
-            label += f", centre zoom ({n_lvl}^2-QAM)"
-        ax[1].set_title(f"constellation ({label})")
+    if cons is not None:
+        ax[1].plot(cons.pts.real, cons.pts.imag, ".", ms=1, alpha=0.4)
+        if cons.zoom_span is not None:
+            ax[1].set_xlim(-cons.zoom_span, cons.zoom_span)
+            ax[1].set_ylim(-cons.zoom_span, cons.zoom_span)
+        ax[1].set_title(f"constellation ({cons.label})")
     elif wf.kind == "dpsk":
         # trim the pulse-shaping edge transient, but scale the trim to the
         # burst: a fixed [20:-20] silently produced an EMPTY plot for any
@@ -232,6 +269,43 @@ def run_chain_report(name: str, *, seed: int = 1, noise: bool = True,
         ax[1].set_title("IQ trajectory")
     ax[1].set_aspect("equal")
     fig.tight_layout()
+    return fig
+
+
+def run_chain_report(name: str, *, seed: int = 1, noise: bool = True,
+                     n_units: int | None = None, **overrides) -> dict:
+    """Build, run, and package metrics + figures for one chain.
+
+    The three phases are separate on purpose: build/run, then every number,
+    then the picture.  The numbers do not depend on the figure existing (the
+    Android bridge and the tests want them without matplotlib), and the
+    figure computes nothing of its own, so a panel cannot disagree with the
+    metric printed beside it.
+    """
+    p = build_preset(name, **overrides)
+    wf = p.make_waveform(**_size_kwargs(p.make_waveform, n_units))
+    res = p.tx.run(wf, noise=noise, seed=seed)
+
+    # one equalization convention for BOTH the number and the picture
+    eq = getattr(res, "evm_equalize_default", "scalar")
+    e = res.evm()
+
+    metrics = _evm_metrics(e)
+    try:
+        a = res.aclr()
+        metrics["ACLR upper [dBc]"] = round(float(a["upper_dbc"]), 1)
+    except ValueError:
+        pass
+    f, pdb, mask_db, mask_metrics = _spectrum_metrics(res, wf)
+    metrics.update(mask_metrics)
+
+    cons = None
+    if wf.kind == "ofdm":
+        cons, ofdm_metrics = _ofdm_constellation(
+            res, wf, e, eq, metrics.get("EVM [dB]", 0.0))
+        metrics.update(ofdm_metrics)
+
+    fig = _chain_figure(name, wf, res, e, f, pdb, mask_db, cons)
     return {"metrics": metrics, "fig": fig, "result": res, "waveform": wf}
 
 

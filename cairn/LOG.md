@@ -2,6 +2,23 @@
 
 本文件按倒序记录实质性进展——最新的一条在这行下面。每条保持简短，只写摘要和指针；结论沉淀进 `cairn/<topic>.md`。
 
+## 2026-09-12 · 工程体检后的三批整改：静态闸门、类型、文档锚定、拆报告层
+
+- 体检结论（只读评估，未改代码）：主干健康——277 项测试 0 失败、自身代码覆盖率
+  92.8%、vendor 0 漂移、bandit 无中高危；短板全在工程外围。
+- **批次 1a**：加 ruff 闸门（CI `lint` job，版本钉死），并修掉它抓出的 3 处真
+  引用丢失 + 18 处死导入。详见 `cairn/static-gates-and-refactor.md` 的决策与教训。
+- **批次 1b**：加 mypy。9 个非 vendor 错里 6 个同一根因——`ofdm_ref` / `fir_tx`
+  用 `object` 当占位，让穿过它的一切都不可检查。顺出两个潜在真问题：
+  `seed=None` 下带 pilot 的波形会死在算术里；蒙卡穿过抽象接口取 `.cfg`。
+- **批次 2**：`docs/architecture.md` 补到文件级（cal/metrics/guiqt 共 14 个模块之前
+  只有目录级概括），新增 `tests/test_docs_consistency.py` 两方向卡死，
+  README 计数改为可核对的测试函数数。四个检查都做了变异验证。
+- **批次 3**：拆 `run_chain_report`（168 行 D(29) → A(3)），计算与绘图分离。
+  验证不靠"套件还绿"：19 个配置的指标与图上每个 artist 逐值比对完全一致，
+  协议记在 `cairn/static-gates-and-refactor.md` → 行为不变重构的验证协议。
+- 未做（需授权）：合回 `main`、版本/classifiers/py.typed 等发布层（ROADMAP C1/C2）。
+
 ## 2026-08-25 · Android 面：Chaquopy + WebView，解释版与编译版
 
 - 按 `python-android-apk` 技能全流程做完：可行性闸门 → appbridge → android/ 骨架
