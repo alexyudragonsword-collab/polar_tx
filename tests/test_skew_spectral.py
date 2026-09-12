@@ -1,5 +1,4 @@
 """Power-detector skew search and the phase-interp shape trade."""
-import numpy as np
 
 from polartx.cal.skew import estimate_skew_by_acp
 from polartx.chain import ChainConfig

@@ -1,5 +1,4 @@
 """AM/PM path skew: EVM impact, estimation accuracy, correction."""
-import numpy as np
 import pytest
 
 from polartx.cal import corrected_chain_config, estimate_env_skew

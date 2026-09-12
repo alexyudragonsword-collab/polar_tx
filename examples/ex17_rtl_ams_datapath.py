@@ -15,7 +15,6 @@ The chain the files realize:
   phase-command -> DTC phase acc -> EFM1 dither -> DTC code
 """
 import os
-import tempfile
 
 from polartx.cal.polar_dpd import PolarDPD
 from polartx.dpa import DPA, DPAConfig
@@ -48,7 +47,7 @@ def main():
             print(f"  {name:22s}: {res}")
 
     sc = rtl.dpa_rnm_selfcheck(dpa, OUT)
-    print(f"\nDPA RNM self-check (baked AMS LUT vs behavioral DPA):")
+    print("\nDPA RNM self-check (baked AMS LUT vs behavioral DPA):")
     print(f"  amp max err {sc['amp_max_err']:.2e}, "
           f"AM-PM max err {sc['ph_max_err']:.2e} rad -> "
           f"{'OK' if sc['ok'] else 'FAIL'}")

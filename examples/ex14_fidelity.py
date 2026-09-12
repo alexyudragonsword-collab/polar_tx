@@ -26,7 +26,7 @@ from polartx.presets import ble_1m_adpll, lte20_adpll, wifi_dtc
 from polartx.vendor.padpd.metrics import evm_of_signal, psd
 from polartx.vendor.pllsim.blocks.oscillator import OscConfig
 from polartx.waveforms.edr import edge_waveform
-from polartx.waveforms.ofdm import lte_waveform, wifi_waveform
+from polartx.waveforms.ofdm import wifi_waveform
 
 OUT = os.path.join(os.path.dirname(__file__), "out")
 os.makedirs(OUT, exist_ok=True)

@@ -5,6 +5,14 @@ examples/out/
 build/
 dist/
 
+# tool caches and the coverage database (pytest --cov writes .coverage into
+# the repo root, which otherwise shows up as an untracked file)
+.ruff_cache/
+.mypy_cache/
+.coverage
+coverage.json
+htmlcov/
+
 # scratch tree from packaging/android_wheel.py
 build-android-wheel/
 node_modules/

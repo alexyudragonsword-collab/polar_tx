@@ -182,7 +182,6 @@ def test_skew_damage_is_not_common_phase():
     real, data-dependent, broadband gain — spread distortion (ICI), not a
     per-symbol common rotation.  So CPE tracking buys nothing no matter
     how bad the skew gets, while the EVM collapses."""
-    import numpy as np
     import matplotlib.pyplot as plt
     prev = 0.0
     for sk_ns in (0.0, 0.5, 2.0):
@@ -270,8 +269,7 @@ def test_skew_sensitivity_follows_the_envelope_not_the_architecture():
     bandwidth), while constant-envelope BLE is immune outright."""
     import numpy as np
     import matplotlib.pyplot as plt
-    from polartx.chain import ChainConfig
-    from polartx.presets import ble_1m_adpll, lte20_adpll
+    from polartx.presets import ble_1m_adpll
 
     # BLE GFSK: env == 1, so skew is mathematically a no-op.  Compare the
     # chain output itself, not a rounded metric.

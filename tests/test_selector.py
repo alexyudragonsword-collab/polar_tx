@@ -1,6 +1,4 @@
 """Architecture selector: the narrowband/wideband split and its physics."""
-import numpy as np
-import pytest
 
 from polartx.selector import Requirement, select
 
@@ -47,7 +45,6 @@ def test_dtc_evm_improves_with_more_bits():
 def test_integrated_pn_grows_with_bandwidth():
     """Wider signals integrate more open-loop LO phase noise: the DTC synth-PN
     term degrades monotonically with bandwidth."""
-    prev = -np.inf
     last = None
     for bw in (10e6, 40e6, 160e6, 320e6):
         rep = select(Requirement("w", bw, "ofdm", fout=6e9))

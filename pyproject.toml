@@ -29,3 +29,28 @@ where = ["src"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-q"
+
+[tool.ruff]
+# src/polartx/vendor/ is a verifiable adapted copy of pll_simulator and
+# PA_DPD, not a fork (CONTRIBUTING.md 2).  Linting it would push toward
+# edits whose only purpose is silencing a warning, and every such edit has
+# to be declared in tools/vendor_manifest.json or the drift checker fails.
+# Upstream's style is upstream's business.
+extend-exclude = ["src/polartx/vendor"]
+
+[tool.ruff.lint]
+# The default rule set (E4/E7/E9/F) minus three codes that carry no defect
+# signal in this codebase.  Pyflakes (F) is the part that pays: an unused
+# import or an assigned-and-never-read local is usually a reference that got
+# dropped in a rewrite, which is exactly the failure mode CONTRIBUTING.md 1
+# is about.  E7 is kept for E711/E712/E713/E714/E722, which are real.
+ignore = [
+    "E702",   # semicolon-compacted plotting lines; deliberate, and dense on purpose
+    "E731",   # one lambda in a table-driven test reads better than a def
+    "E741",   # `l` as a loop variable in two examples
+]
+
+[tool.ruff.lint.per-file-ignores]
+# The examples import next to the plot panel they serve, so the narrative
+# reads top to bottom.  That is the point of an example script.
+"examples/*" = ["E402"]

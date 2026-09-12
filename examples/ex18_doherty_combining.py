@@ -19,7 +19,7 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
 
-from polartx.dpa import (DPA, DPAConfig, DohertyCombiner, imbalance_montecarlo)
+from polartx.dpa import (DPAConfig, DohertyCombiner, imbalance_montecarlo)
 
 OUT = os.path.join(os.path.dirname(__file__), "out")
 os.makedirs(OUT, exist_ok=True)

@@ -5,6 +5,23 @@ on:
   pull_request:
 
 jobs:
+  # Static checks, pinned.  An unpinned linter means a new release can turn
+  # CI red on code that did not change, which is the same class of surprise
+  # test-floor below exists to prevent.  Config (rule set, what is ignored
+  # and why, the vendor exclusion) lives in pyproject.toml.
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - name: Install
+        run: pip install -e . "ruff==0.15.8"
+      - name: ruff
+        run: ruff check .
+
   test:
     strategy:
       fail-fast: false

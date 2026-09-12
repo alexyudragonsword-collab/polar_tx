@@ -35,7 +35,7 @@ def test_emit_files(tmp_path):
 
 
 def test_iverilog_golden(tmp_path):
-    paths = emit_dpd_rtl(_luts(), str(tmp_path))
+    emit_dpd_rtl(_luts(), str(tmp_path))     # called for the files it writes
     out = verify_with_iverilog(str(tmp_path))
     if out is None:
         pytest.skip("iverilog not installed")

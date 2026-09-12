@@ -8,7 +8,6 @@ These tests pin both.
 """
 import inspect
 
-import numpy as np
 import pytest
 
 import polartx.presets as P

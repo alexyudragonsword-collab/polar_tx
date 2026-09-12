@@ -1,5 +1,4 @@
 """DPA supply pushing: envelope-correlated PM that polar LUTs can't fix."""
-import numpy as np
 
 from polartx.chain import ChainConfig, PolarTX, SupplyConfig
 from polartx.dpa import DPA, DPAConfig

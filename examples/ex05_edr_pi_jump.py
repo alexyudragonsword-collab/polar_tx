@@ -19,7 +19,6 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 from polartx.chain import ChainConfig
-from polartx.metrics import check_mask
 from polartx.metrics.ble_metrics import bt_acp
 from polartx.metrics.masks import ble_mask
 from polartx.presets import bt_edr_adpll
