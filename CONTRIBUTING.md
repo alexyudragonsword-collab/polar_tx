@@ -199,3 +199,22 @@ push 都跑：
   为它们改 example 的叙述节奏不值得。
 - **example 里放行 E402**。example 脚本按叙述顺序在用到的那一段就近 import，
   这是 example 的写法，不是错误。
+
+`mypy`（同一个 job，同样钉死版本）跑的是 `src/polartx`，配置同在
+`pyproject.toml`。这里的取舍和 ruff 反过来：vendor 树**查类型但不报错**
+（`follow_imports = "silent"`）——正是它里面的注解让 `ofdm_ref`、`fir_tx`
+在这一侧可检查，而副本内部的告警是上游的事。
+
+第一步只上默认严格度，**没有** `disallow_untyped_defs`：这个库有大量无注解的
+函数，一次性要求注解会淹掉真正的信号。想加严的话，加的是
+`--check-untyped-defs`（现在 `guiqt/widgets.py:40` 会提醒你它被跳过了）。
+
+写类型的两条本仓库经验：
+
+- **不要用 `object` 当"这里其实是某个具体类"的占位**。`Waveform.ofdm_ref` 和
+  `FIRTxPreset.fir_tx` 都曾是 `object` 加一句行尾注释说明真实类型，结果类型
+  检查器把它俩之上的**一切**都放过了（`wf.ofdm_ref.tx_symbols` 也一样）。
+  写 `if TYPE_CHECKING:` 导入真实类型：运行时零代价，注释变成机器能读的。
+- **`Optional` 字段要么窄化要么抛错，不要靠调用方自觉**。缺指标输入时抛异常
+  是 §6 的规矩，所以窄化的地方顺手就是那个异常该待的地方
+  （`Waveform.require_ofdm_ref()`）。

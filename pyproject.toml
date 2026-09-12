@@ -50,6 +50,22 @@ ignore = [
     "E741",   # `l` as a loop variable in two examples
 ]
 
+[tool.mypy]
+python_version = "3.10"          # the floor requires-python declares
+files = ["src/polartx"]
+ignore_missing_imports = true    # streamlit / PySide6 ship no stubs here
+warn_unused_configs = true
+# The vendor tree is checked for TYPES but not for ERRORS: annotations there
+# are what makes ofdm_ref and fir_tx checkable on this side, while a warning
+# inside a verbatim copy is upstream's to fix (17 of the 26 errors this
+# config started from live there).  follow_imports = "silent" is what buys
+# the first without the second.
+exclude = "^src/polartx/vendor/"
+
+[[tool.mypy.overrides]]
+module = "polartx.vendor.*"
+follow_imports = "silent"
+
 [tool.ruff.lint.per-file-ignores]
 # The examples import next to the plot panel they serve, so the narrative
 # reads top to bottom.  That is the point of an example script.

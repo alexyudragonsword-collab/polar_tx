@@ -119,8 +119,9 @@ def run_chain_report(name: str, *, seed: int = 1, noise: bool = True,
               title=f"{name} spectrum")
     if wf.kind == "ofdm":
         from .waveforms.ofdm import demodulate_ofdm
-        rx = demodulate_ofdm(res.y, wf.ofdm_ref)
-        tx_s = wf.ofdm_ref.tx_symbols
+        ref = wf.require_ofdm_ref()
+        rx = demodulate_ofdm(res.y, ref)
+        tx_s = ref.tx_symbols
         if eq == "per_tone" and rx.ndim == 2:
             # per-subcarrier channel estimate, exactly like the EVM metric:
             # removes the linear phase ramp (group delay) a receiver equalizes

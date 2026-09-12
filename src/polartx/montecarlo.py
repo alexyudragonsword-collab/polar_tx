@@ -13,6 +13,8 @@ from typing import Callable
 
 import numpy as np
 
+from .phasemod.dtc_openloop import DTCPhaseModulator, DTCPMConfig
+
 
 @dataclass
 class MCResult:
@@ -60,6 +62,25 @@ def run_mc(build: Callable[[int], tuple], n_chips: int, *,
     return MCResult(values=vals, limit=limit, seeds=seeds)
 
 
+def _dtc_cfg(tx) -> DTCPMConfig:
+    """The DTC modulator config of a wideband chain, with the narrowing said
+    out loud.
+
+    Both builders below draw a DTC gain error, which exists only on the
+    open-loop DTC modulator: ``PolarTX.phasemod`` is the abstract interface,
+    and ``ADPLLTwoPoint`` has no ``.cfg`` at all (its configuration lives one
+    level down, on ``.pll.cfg``).  Handing these builders a narrowband preset
+    is a programming error; this is where it says so instead of failing as an
+    AttributeError inside a draw.
+    """
+    pm = tx.phasemod
+    if not isinstance(pm, DTCPhaseModulator):
+        raise TypeError("Monte Carlo draws a DTC gain error, so the preset "
+                        "must be a wideband open-loop DTC chain; got "
+                        f"{type(pm).__name__}")
+    return pm.cfg
+
+
 # ------------------------------------------------- parallel spec-based MC
 def _wifi_chip_job(args: tuple) -> float:
     """Module-level worker (picklable): build a chip from a spec dict
@@ -84,7 +105,7 @@ def _wifi_chip_job(args: tuple) -> float:
         lo_pn=OscConfig(f0=5.9e9, gain=1.0, pn_dbchz=lo_db,
                         pn_foffset=1e6, pn_f1f3=200e3,
                         pn_floor_dbchz=-155.0))
-    p.tx.phasemod.cfg.gain_error = float(
+    _dtc_cfg(p.tx).gain_error = float(
         rng.normal(0.0, spec.get("dtc_gain_sigma", 0.01)))
     wf = p.make_waveform(n_symbols=spec.get("n_symbols", 3), seed=0)
     if spec.get("calibrated_skew"):
@@ -135,7 +156,7 @@ def wifi_chip_builder(bw: float = 160e6, qam: int = 1024, *,
             dpa=DPAConfig(n_bits=10, n_thermo=6,
                           sigma_cell=sigma_cell, seed=chip_seed),
             env_skew_s=float(rng.normal(0.0, skew_sigma_s)))
-        p.tx.phasemod.cfg.gain_error = float(rng.normal(0.0, dtc_gain_sigma))
+        _dtc_cfg(p.tx).gain_error = float(rng.normal(0.0, dtc_gain_sigma))
         if "wf" not in wf_cache:
             wf_cache["wf"] = p.make_waveform(n_symbols=n_symbols, seed=0)
         wf = wf_cache["wf"]

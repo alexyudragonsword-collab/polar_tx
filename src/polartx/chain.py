@@ -130,7 +130,8 @@ class PolarResult:
         """OFDM: constellation EVM vs the reference grid.  GFSK:
         phase-trajectory EVM dict.  DPSK (EDR): differential EVM dict."""
         if self.wf.kind == "ofdm":
-            return evm_of_signal(self.y, self.wf.ofdm_ref, equalize=equalize)
+            return evm_of_signal(self.y, self.wf.require_ofdm_ref(),
+                                 equalize=equalize)
         if self.wf.kind == "dpsk":
             from .metrics.dpsk import devm
             return devm(self.y, self.wf)

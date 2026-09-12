@@ -71,6 +71,20 @@ class GenOFDMConfig(OFDMConfig):
         return 2 * int(0.47 * self.fft_size)
 
 
+def _sub_seed(seed: int | None, offset: int) -> int | None:
+    """Offset a seed into an independent stream, honouring seed=None.
+
+    The vendored OFDMConfig declares ``seed: int | None`` and treats None as
+    "draw fresh entropy" (default_rng(None)).  The pilot and preamble streams
+    here derive from it by offset, and `None + 777` is a TypeError -- so
+    building a waveform WITH pilots or a preamble under seed=None used to die
+    in the arithmetic while a plain one worked.  None propagates instead; for
+    an int seed the arithmetic is unchanged, so every generated waveform in
+    the library is bit-identical.
+    """
+    return None if seed is None else seed + offset
+
+
 def _synth_grid(cfg, sym: np.ndarray):
     """Frequency-domain symbol grid -> time-domain burst.
 
@@ -145,7 +159,7 @@ def ofdm_waveform(cfg: GenOFDMConfig) -> Waveform:
     if cfg.n_pilots:
         pilot_idx = np.linspace(0, n_act - 1, cfg.n_pilots + 2,
                                 dtype=int)[1:-1]
-        prng = np.random.default_rng(cfg.seed + 777)
+        prng = np.random.default_rng(_sub_seed(cfg.seed, 777))
         pilots = 1.0 - 2.0 * prng.integers(0, 2, (cfg.n_symbols,
                                                   cfg.n_pilots))
         data[:, pilot_idx] = pilots
@@ -153,7 +167,7 @@ def ofdm_waveform(cfg: GenOFDMConfig) -> Waveform:
         data = np.fft.fft(data, axis=1) / np.sqrt(n_act)
 
     if cfg.preamble_symbols:
-        prng = np.random.default_rng(cfg.seed + 999)
+        prng = np.random.default_rng(_sub_seed(cfg.seed, 999))
         pre = 1.0 - 2.0 * prng.integers(0, 2, (cfg.preamble_symbols,
                                                n_act)).astype(float)
         grid = np.concatenate([pre.astype(complex), data], axis=0)

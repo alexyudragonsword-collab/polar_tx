@@ -27,8 +27,9 @@ def evm_rx(y: np.ndarray, wf: Waveform, *, track_cpe: bool = True
       from the pilot tones before the error is scored.
     EVM is scored over DATA tones of DATA symbols only.
     """
-    rx = demodulate_ofdm(y, wf.ofdm_ref)
-    tx = wf.ofdm_ref.tx_symbols
+    ref = wf.require_ofdm_ref()
+    rx = demodulate_ofdm(y, ref)
+    tx = ref.tx_symbols
     n_pre = wf.meta.get("preamble_symbols", 0)
     pilot_idx = np.asarray(wf.meta.get("pilot_idx", []), dtype=int)
 

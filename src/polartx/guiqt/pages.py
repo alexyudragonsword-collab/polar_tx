@@ -1,6 +1,8 @@
 """Feature pages, all computation via the headless polartx.guiutil layer."""
 from __future__ import annotations
 
+from typing import Any
+
 import numpy as np
 from PySide6.QtWidgets import (QCheckBox, QComboBox, QDoubleSpinBox,
                                QFormLayout, QGroupBox, QHBoxLayout, QLabel,
@@ -67,8 +69,8 @@ class ChainPage(Page):
         lay.addWidget(self.figbox, 1)
         self._table = None
 
-    def _overrides(self, name: str) -> dict:
-        ov = {}
+    def _overrides(self, name: str) -> dict[str, Any]:
+        ov: dict[str, Any] = {}
         if name.startswith("Bench:"):
             return ov            # benchmarks fix their published-class params
         if "WiFi" in name or "NR" in name:

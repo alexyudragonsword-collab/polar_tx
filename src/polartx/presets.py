@@ -3,7 +3,7 @@ into ready-to-run PolarTX chains (pllsim.presets convention)."""
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Callable
+from typing import TYPE_CHECKING, Callable
 
 from .chain import ChainConfig, PolarTX
 from .dpa.dpa import DPA, DPAConfig
@@ -15,6 +15,11 @@ from .vendor.pllsim.blocks.tdc import TDCConfig
 from .vendor.pllsim.synth import design_adpll_dlf
 from .waveforms.base import Waveform
 from .waveforms.ble import gfsk_ble
+
+if TYPE_CHECKING:
+    # Typing only, so .fir import stays lazy (it is taken inside the factory
+    # below).  The annotation says what the trailing comment used to.
+    from .fir import FIRDualTapTX
 
 
 @dataclass
@@ -321,13 +326,13 @@ class FIRTxPreset:
     with TxPreset anywhere the ordinary chain/report layer is used (the
     GUI preset registry included); ``.single_tx`` stays available for the
     baseline the OOC-suppression measurement needs."""
-    fir_tx: object              # FIRDualTapTX
+    fir_tx: FIRDualTapTX        # the dual-tap chain
     single_tx: PolarTX          # one tap alone (baseline)
     fs_bb: float
     make_waveform: Callable[..., Waveform]
 
     @property
-    def tx(self):
+    def tx(self) -> FIRDualTapTX:
         """The dual-tap chain, aliased so this preset is drop-in compatible
         with ``TxPreset`` throughout the report and GUI layers."""
         return self.fir_tx

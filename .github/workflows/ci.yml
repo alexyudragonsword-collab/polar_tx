@@ -17,10 +17,16 @@ jobs:
         with:
           python-version: "3.11"
           cache: pip
+      # The GUI extras are installed so mypy sees the real PySide6 and
+      # streamlit types.  Without them those imports degrade to Any and the
+      # job would check strictly less than a developer's laptop does, which
+      # is the wrong direction for a gate.
       - name: Install
-        run: pip install -e . "ruff==0.15.8"
+        run: pip install -e ".[gui,guiqt]" "ruff==0.15.8" "mypy==1.19.1"
       - name: ruff
         run: ruff check .
+      - name: mypy
+        run: mypy
 
   test:
     strategy:
