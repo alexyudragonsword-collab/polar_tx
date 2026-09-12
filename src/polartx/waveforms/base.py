@@ -51,3 +51,12 @@ class Waveform:
             raise ValueError(f'waveform kind="{self.kind}" carries no '
                              "ofdm_ref: nothing to demodulate against")
         return self.ofdm_ref
+
+    def require_phase_ideal(self) -> np.ndarray:
+        """The ideal phase trajectory, or a clear error — the same contract as
+        require_ofdm_ref, for the constant-envelope (GFSK) metric set."""
+        if self.phase_ideal is None:
+            raise ValueError(f'waveform kind="{self.kind}" carries no '
+                             "phase_ideal: no reference trajectory to score "
+                             "the transmitted phase against")
+        return self.phase_ideal

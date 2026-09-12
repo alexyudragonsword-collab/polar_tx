@@ -205,6 +205,17 @@ push 都跑：
 （`follow_imports = "silent"`）——正是它里面的注解让 `ofdm_ref`、`fir_tx`
 在这一侧可检查，而副本内部的告警是上游的事。
 
+> **工具必须装进项目环境，并且用 `python -m mypy` 跑。**
+> ```bash
+> pip install -e ".[gui,guiqt,dev]"   # dev extra 里是钉死的 ruff + mypy
+> python -m mypy && ruff check .
+> ```
+> mypy 是**从它自己所在的环境**解析 numpy / PySide6 / scipy 的类型的。用
+> `uv tool install` 或 pipx 装的独立 mypy 看不见这些包，配合
+> `ignore_missing_imports = true` 就把所有涉及它们的东西退化成 `Any`——然后
+> 报告 "Success"。接入这条闸门时就踩了：本地 0 错，CI 9 错，**CI 是对的那一边**，
+> 因为它把工具和依赖装在同一个环境里。一个检查通过不等于它检查了东西。
+
 第一步只上默认严格度，**没有** `disallow_untyped_defs`：这个库有大量无注解的
 函数，一次性要求注解会淹掉真正的信号。想加严的话，加的是
 `--check-untyped-defs`（现在 `guiqt/widgets.py:40` 会提醒你它被跳过了）。

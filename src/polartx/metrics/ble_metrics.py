@@ -17,7 +17,8 @@ TWOPI = 2.0 * np.pi
 
 def phase_evm(y: np.ndarray, wf: Waveform, skip: int = 0) -> dict:
     """EVM of the transmitted phase trajectory vs the ideal GFSK phase."""
-    return _phase_evm(np.unwrap(np.angle(y)), wf.phase_ideal, skip=skip)
+    return _phase_evm(np.unwrap(np.angle(y)), wf.require_phase_ideal(),
+                      skip=skip)
 
 
 def acp_transient_db(y: np.ndarray, fs: float, *, offset_hz: float = 2e6,

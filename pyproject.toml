@@ -19,6 +19,11 @@ dependencies = [
 test = ["pytest"]
 gui = ["streamlit>=1.30"]
 guiqt = ["PySide6>=6.5"]
+# The static-check tools, pinned here so the CI job and a laptop agree on the
+# version.  Install them INTO the project environment (see CONTRIBUTING.md
+# 8.1): mypy resolves numpy's and PySide6's types from the environment it
+# runs in, so an isolated tool install checks almost nothing.
+dev = ["ruff==0.15.8", "mypy==1.19.1"]
 
 [project.scripts]
 polartx-gui = "polartx.guiqt.app:main"

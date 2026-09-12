@@ -30,6 +30,10 @@ def ble_bits(n_bits: int, pattern: str = "prbs", seed: int = 1) -> np.ndarray:
     if pattern == "prbs":
         return prbs(n_bits, seed=seed)
     base = PATTERNS[pattern]
+    if base is None:
+        # "prbs" is the None entry and returned above; anything else mapped to
+        # None is a new pattern registered without its bit table
+        raise ValueError(f"pattern {pattern!r} has no fixed bit table")
     reps = int(np.ceil(n_bits / base.size))
     return np.tile(base, reps)[:n_bits]
 

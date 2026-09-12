@@ -44,7 +44,10 @@ import numpy as np
 from .analysis.responses import dtc_quant_phase_rms, evm_db_from_phase_rms
 
 TWOPI = 2.0 * np.pi
-_trapz = getattr(np, "trapezoid", None) or np.trapz  # numpy 2.x renamed it
+# numpy 2.0 renamed trapz -> trapezoid and dropped the old name.  Both sides
+# go through getattr: a static `np.trapz` is an attribute error under numpy 2
+# even though `or` never evaluates it there.
+_trapz = getattr(np, "trapezoid", None) or getattr(np, "trapz")
 
 # LC-oscillator technology class, matched to pllsim.selector: -122 dBc/Hz at
 # 1 MHz offset on a 4.8 GHz carrier, scaled 20 log10(fout / 4.8 GHz).  The DCO

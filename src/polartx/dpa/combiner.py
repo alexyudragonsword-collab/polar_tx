@@ -200,13 +200,15 @@ def imbalance_montecarlo(base: DohertyCombiner, *, sigma_gain: float = 0.02,
         ripple.append(cur["amam_ripple_db"])
         ampm_pp.append(cur["ampm_pp_deg"])
         loss.append(c.combining_loss_db())
-    ripple, ampm_pp, loss = map(np.asarray, (ripple, ampm_pp, loss))
+    # new names rather than rebinding the lists to arrays: same values, and
+    # each name keeps one type
+    rip_a, ampm_a, loss_a = (np.asarray(v) for v in (ripple, ampm_pp, loss))
     return {
-        "amam_ripple_db": {"p50": float(np.percentile(ripple, 50)),
-                           "p95": float(np.percentile(ripple, 95))},
-        "ampm_pp_deg": {"p50": float(np.percentile(ampm_pp, 50)),
-                        "p95": float(np.percentile(ampm_pp, 95))},
-        "combining_loss_db": {"p50": float(np.percentile(loss, 50)),
-                              "p05": float(np.percentile(loss, 5))},
+        "amam_ripple_db": {"p50": float(np.percentile(rip_a, 50)),
+                           "p95": float(np.percentile(rip_a, 95))},
+        "ampm_pp_deg": {"p50": float(np.percentile(ampm_a, 50)),
+                        "p95": float(np.percentile(ampm_a, 95))},
+        "combining_loss_db": {"p50": float(np.percentile(loss_a, 50)),
+                              "p05": float(np.percentile(loss_a, 5))},
         "n_trials": n_trials,
     }

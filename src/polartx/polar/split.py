@@ -66,7 +66,9 @@ def polar_split(x: np.ndarray, env_floor: float = 0.0,
             starts = np.flatnonzero(d == 1)
             ends = np.flatnonzero(d == -1)       # exclusive, on diff grid
             for s, e in zip(starts, ends):
-                i0, i1 = max(s, 0), min(e, phase.size - 1)
+                # int() on the numpy scalars first: s/e come off an index
+                # array and are used as slice bounds below
+                i0, i1 = max(int(s), 0), min(int(e), phase.size - 1)
                 if i1 - i0 < 2:
                     continue
                 u = np.linspace(0.0, 1.0, i1 - i0 + 1)

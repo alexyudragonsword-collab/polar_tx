@@ -132,9 +132,12 @@ def ofdm_waveform(cfg: GenOFDMConfig) -> Waveform:
     channel estimation).  Channel coding is deliberately out of scope:
     no TX-impairment metric is measured downstream of the bit mapping.
     """
-    meta = {"qam": cfg.qam_order, "scs_hz": cfg.scs_hz,
-            "dft_precode": cfg.dft_precode, "n_pilots": cfg.n_pilots,
-            "preamble_symbols": cfg.preamble_symbols}
+    # numerology and references, so deliberately heterogeneous: scalars here,
+    # the pilot index array and the pre-precoding QAM grid added later
+    meta: dict[str, object] = {
+        "qam": cfg.qam_order, "scs_hz": cfg.scs_hz,
+        "dft_precode": cfg.dft_precode, "n_pilots": cfg.n_pilots,
+        "preamble_symbols": cfg.preamble_symbols}
     plain = (not cfg.dft_precode and cfg.n_pilots == 0
              and cfg.preamble_symbols == 0)
     if plain:

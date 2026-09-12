@@ -7,9 +7,9 @@ matplotlib.use("Agg")            # figures are re-parented onto Qt canvases
 import matplotlib.pyplot as plt  # noqa: E402,F401
 from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg
 from PySide6.QtCore import QThread, Signal
-from PySide6.QtWidgets import (QMessageBox, QPushButton, QSizePolicy,
-                               QTableWidget, QTableWidgetItem, QVBoxLayout,
-                               QWidget)
+from PySide6.QtWidgets import (QAbstractItemView, QMessageBox, QPushButton,
+                               QSizePolicy, QTableWidget, QTableWidgetItem,
+                               QVBoxLayout, QWidget)
 
 
 class Worker(QThread):
@@ -89,5 +89,7 @@ def metrics_table(metrics: dict) -> QTableWidget:
         t.setItem(i, 1, QTableWidgetItem(str(v)))
     t.resizeColumnsToContents()
     t.setMaximumHeight(30 * (len(metrics) + 1) + 10)
-    t.setEditTriggers(QTableWidget.NoEditTriggers)
+    # The enum's canonical home; QTableWidget re-exports it at runtime but
+    # PySide6's stubs do not declare the forwarded name.
+    t.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
     return t

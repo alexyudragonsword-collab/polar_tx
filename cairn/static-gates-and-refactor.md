@@ -5,7 +5,7 @@ summary: "polartx 的静态检查闸门（ruff + mypy）为什么这样划范围
 tags: [polartx, 工程纪律, ruff, mypy, 重构]
 contains: [decision, lesson, experience, open_question]
 created: "2026-09-12"
-updated: "2026-09-12"
+updated: "2026-09-12（当日修订：见「本地 mypy 跑在空气上」）"
 related: []
 authoring_mode: ai_generated
 ---
@@ -40,6 +40,20 @@ authoring_mode: ai_generated
 
 ## 经验与教训
 
+- **本地 mypy 跑在空气上，是 CI 抓出来的。**（2026-09-12 当日修订：本文最初写着
+  "mypy clean over 49 files"，那个结论是假的。）本地的 mypy 是 `uv tool install`
+  装的，有自己独立的 Python 环境，**看不见项目的 numpy / PySide6 / scipy**；配合
+  `ignore_missing_imports = true`，所有涉及这些库的东西退化成 `Any`，于是报
+  "Success: no issues found"。CI 把 mypy 和依赖装在同一个环境里，报 **9 个错**——
+  两边的 numpy 都是 2.4.6、mypy 都是 1.19.1，差别只在"工具能不能看见依赖"。
+  这正是本仓库历史上反复出现的那类失效：**一个检查通过，不等于它检查了东西**。
+  堵法是结构性的：工具版本收进 `pyproject.toml` 的 `dev` extra，
+  `pip install -e ".[gui,guiqt,dev]"` 之后用 `python -m mypy` 跑，和 CI 同环境。
+  那 9 个错里 8 个是真该修的（numpy 2 的 `np.trapz` 静态属性、`list` 被重新绑定成
+  ndarray、异构 meta dict 被推断成 `dict[str, float]`、`PATTERNS` 的 None 哨兵、
+  `phase_ideal` 的 Optional），1 个是 PySide6 stub 没声明转发枚举
+  （`QTableWidget.NoEditTriggers` 运行时在、stub 里没有，改用
+  `QAbstractItemView.EditTrigger.NoEditTriggers`，并实测建表仍正常）。
 - **不要用 `object` 当"这里其实是某个具体类"的占位。** `Waveform.ofdm_ref` 和
   `FIRTxPreset.fir_tx` 都写着 `object` 加一句注释说明真实类型，结果 9 个非 vendor
   mypy 错里 6 个出自这一条：`object` 让**穿过该字段的一切**也不可检查，

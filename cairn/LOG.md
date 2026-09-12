@@ -8,15 +8,17 @@
   92.8%、vendor 0 漂移、bandit 无中高危；短板全在工程外围。
 - **批次 1a**：加 ruff 闸门（CI `lint` job，版本钉死），并修掉它抓出的 3 处真
   引用丢失 + 18 处死导入。详见 `cairn/static-gates-and-refactor.md` 的决策与教训。
-- **批次 1b**：加 mypy。9 个非 vendor 错里 6 个同一根因——`ofdm_ref` / `fir_tx`
-  用 `object` 当占位，让穿过它的一切都不可检查。顺出两个潜在真问题：
-  `seed=None` 下带 pilot 的波形会死在算术里；蒙卡穿过抽象接口取 `.cfg`。
+- **批次 1b**：加 mypy。根因是 `ofdm_ref` / `fir_tx` 用 `object` 当占位，让穿过它的
+  一切都不可检查；顺出 `seed=None` 下带 pilot 的波形死在算术里等真问题。
 - **批次 2**：`docs/architecture.md` 补到文件级（cal/metrics/guiqt 共 14 个模块之前
   只有目录级概括），新增 `tests/test_docs_consistency.py` 两方向卡死，
   README 计数改为可核对的测试函数数。四个检查都做了变异验证。
 - **批次 3**：拆 `run_chain_report`（168 行 D(29) → A(3)），计算与绘图分离。
   验证不靠"套件还绿"：19 个配置的指标与图上每个 artist 逐值比对完全一致，
   协议记在 `cairn/static-gates-and-refactor.md` → 行为不变重构的验证协议。
+- **修订**：批次 1b 声称的"mypy clean"是假的——本地 mypy 装在 uv 独立环境里看不见
+  numpy/PySide6，把一切退化成 `Any`。CI 同环境跑出 9 个错（8 个真该修）。已在
+  `cairn/static-gates-and-refactor.md` 的教训区就地更正并写明堵法。
 - 未做（需授权）：合回 `main`、版本/classifiers/py.typed 等发布层（ROADMAP C1/C2）。
 
 ## 2026-08-25 · Android 面：Chaquopy + WebView，解释版与编译版
