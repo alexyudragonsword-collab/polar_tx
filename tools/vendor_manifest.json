@@ -16,14 +16,6 @@
       "mode": "extracted",
       "body_sha256": "472b11c7ef01b11ecd7ebd91a1444fad56f33f475f69ecaf8266c0abdcdd43fc",
       "reason": "FracConfig + frac_spur_offsets extracted from cppll.py so the vendored ADPLL does not drag in the analog charge-pump PLL blocks"
-    },
-    "pllsim/core/jitter.py": {
-      "repo": "pll_simulator",
-      "sha": "d7be4712",
-      "upstream_path": "src/pllsim/core/jitter.py",
-      "mode": "extended",
-      "body_sha256": "fbfaf832942f53e1e46923252e1a087f1d4c64e527d0d315ca198c8afabd052e",
-      "reason": "np.trapz -> np.trapezoid rename (numpy 2.0): upstream uses the new name only, but polartx declares numpy>=1.24 and Chaquopy's Android wheel for Python 3.10 is numpy 1.x, where every ADPLL preset died in analyze() with \"module 'numpy' has no attribute 'trapezoid'\". Aliased version-safely; belongs upstream."
     }
   }
 }

@@ -135,15 +135,21 @@ jobs:
       - uses: actions/checkout@v4
         with:
           path: polar_tx
-      # pin to the exact vendored commits so `git show <sha>` resolves; if the
-      # sha isn't reachable the checkout no-ops and vendor_check.py skips those
-      # files (still non-fatal), and the structural tests keep gating.
+      # fetch-depth: 0, and that is load-bearing.  The vendored pllsim files
+      # do NOT all sit on one commit: 39 are at 931cfaf, while arch/adpll.py
+      # and arch/frac.py stay at d7be4712 because polartx's per-cycle dp_cal
+      # hook does not fit upstream's jit kernels (ROADMAP C3).  A shallow
+      # checkout of one ref cannot resolve the other, and vendor_check would
+      # then SKIP exactly the two files that carry local changes -- a green
+      # job that checked nothing.  Full history makes both reachable, and
+      # --fail-on-skip below turns any remaining skip red.
       - name: Checkout pll_simulator (pinned)
         continue-on-error: true
         uses: actions/checkout@v4
         with:
           repository: alexyudragonsword-collab/pll_simulator
-          ref: d7be47124227b6d315e390cae3c7a0e92e58a3f8
+          ref: 931cfaf48aaaf693eefa7088d41c608ee3450b97
+          fetch-depth: 0
           path: _siblings/pll_simulator
       - name: Checkout PA_DPD (pinned)
         continue-on-error: true
@@ -159,6 +165,7 @@ jobs:
         working-directory: polar_tx
         run: >
           python tools/vendor_check.py
+          --fail-on-skip
           --siblings
           pll_simulator=${{ github.workspace }}/_siblings/pll_simulator
           PA_DPD=${{ github.workspace }}/_siblings/PA_DPD

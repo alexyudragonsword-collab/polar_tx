@@ -44,7 +44,8 @@ pip install -e .[guiqt]   # PySide6 原生桌面版
 polartx-gui               # 或 python -m polartx.guiqt
 ```
 
-**Android APK**：`android/` 用 Chaquopy 把真的 CPython + numpy/scipy/matplotlib 装进 APK，UI 是 WebView，计算全在本地，**零权限**。手动触发的 *Android APK* workflow 一次产出**两个** APK——解释版，以及把 42/101 个模块 Cython 编译成 `.so` 的编译版（`strings` 拿不到 docstring 了，但字面常量仍在——实测边界见 [`docs/android.md`](docs/android.md)）。两者由 `inspect_apk.py` 门禁证明确实不同。
+**Android APK**：`android/` 用 Chaquopy 把真的 CPython + numpy/scipy/matplotlib 装进 APK，UI 是 WebView，计算全在本地，**零权限**。手动触发的 *Android APK* workflow 一次产出**两个** APK——解释版，以及把模块 Cython 编译成 `.so` 的编译版（上一次真机构建实测 42/101，
+见 [`docs/android.md`](docs/android.md)；vendored 子树此后推进过，分母已是 103，分子待重测）（`strings` 拿不到 docstring 了，但字面常量仍在——实测边界见 [`docs/android.md`](docs/android.md)）。两者由 `inspect_apk.py` 门禁证明确实不同。
 
 **Windows 免安装 exe**：两条手动触发的 GitHub Actions 打包**两个 GUI × 两种打包器 = 4 个 onefile exe**，上传前都在 runner 上冒烟测试——`windows-exe`（PyInstaller：快、自解压）和 `windows-exe-nuitka`（Nuitka：MSVC 真编译、启动快、构建慢）。各自 qt/web 两个独立 job；从 Actions → Run workflow 触发，下载 `polartx-gui-qt[-nuitka]`（桌面，windowed）和 `polartx-gui-web[-nuitka]`（启动本地服务 + 开浏览器）。
 

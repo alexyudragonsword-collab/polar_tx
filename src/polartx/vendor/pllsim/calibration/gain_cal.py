@@ -1,4 +1,4 @@
-# Vendored from pll_simulator@d7be4712: src/pllsim/calibration/gain_cal.py
+# Vendored from pll_simulator@931cfaf: src/pllsim/calibration/gain_cal.py
 # Adapted-copy policy: see src/polartx/vendor/__init__.py
 """DCO-gain and TDC-gain calibration.
 
@@ -13,10 +13,62 @@ TdcPeriodCal — Staszewski period normalization: the TDC measures the DCO
 period every cycle; the running average of codes-per-period estimates
 T_dco/t_res_true, which the loop uses to convert codes to UI.  TDC gain error
 then cancels exactly in the code/codes-per-period ratio.
+
+The per-cycle updates are kernels (core.jit) over small state vectors, shared
+with the ADPLL's compiled loop; the classes are the object view.
 """
 from __future__ import annotations
 
 import numpy as np
+
+from ..core.jit import kernel
+
+# KdcoCal state vector (float64): cycle count, frequency accumulator, samples
+# in the accumulator, done flag, estimate, half-means filled, estimates filled
+KD_N, KD_ACC, KD_CNT, KD_DONE, KD_VALUE, KD_NHALF, KD_NEST = range(7)
+
+
+@kernel
+def kdco_perturbation(st: np.ndarray, amp: float, meas_n: int) -> float:
+    """OTW offset [LSB] for the current cal cycle (0 when done)."""
+    if st[KD_DONE] != 0.0:
+        return 0.0
+    return amp if (int(st[KD_N]) // meas_n) % 2 == 0 else -amp
+
+
+@kernel
+def kdco_step(st: np.ndarray, halves: np.ndarray, ests: np.ndarray, f_meas: float,
+              amp: float, meas_n: int, rounds: int, settle: int) -> float:
+    if st[KD_DONE] != 0.0:
+        return st[KD_VALUE]
+    n = int(st[KD_N])
+    if (n % meas_n) >= settle:
+        st[KD_ACC] += f_meas
+        st[KD_CNT] += 1.0
+    n += 1
+    st[KD_N] = n
+    if n % meas_n == 0 and st[KD_CNT] > 0.0:
+        nh = int(st[KD_NHALF])
+        halves[nh] = st[KD_ACC] / st[KD_CNT]
+        nh += 1
+        st[KD_NHALF] = nh
+        st[KD_ACC] = 0.0
+        st[KD_CNT] = 0.0
+        if nh % 2 == 0:
+            f_hi = halves[nh - 2]
+            f_lo = halves[nh - 1]
+            ne = int(st[KD_NEST])
+            ests[ne] = (f_hi - f_lo) / (2.0 * amp)
+            st[KD_NEST] = ne + 1
+    if n >= 2 * rounds * meas_n:
+        ne = int(st[KD_NEST])
+        if ne > 0:
+            s = 0.0
+            for i in range(ne):
+                s += ests[i]
+            st[KD_VALUE] = s / ne
+        st[KD_DONE] = 1.0
+    return st[KD_VALUE]
 
 
 class KdcoCal:
@@ -29,18 +81,27 @@ class KdcoCal:
 
     def __init__(self, kdco_init: float, amp_lsb: float = 8.0,
                  meas_n: int = 1024, rounds: int = 4, settle: int = 64):
-        self.value = float(kdco_init)
         self.amp = float(amp_lsb)
         self.meas_n = int(meas_n)
         self.rounds = int(rounds)
         self.settle = int(settle)
-        self.n = 0
-        self._acc = 0.0
-        self._cnt = 0
-        self._half_means: list[float] = []
-        self._ests: list[float] = []
-        self.done = False
+        self.st = np.zeros(7)
+        self.st[KD_VALUE] = float(kdco_init)
+        self.halves = np.zeros(2 * self.rounds)
+        self.ests = np.zeros(self.rounds)
         self.trace: list[float] = []
+
+    @property
+    def value(self) -> float:
+        return float(self.st[KD_VALUE])
+
+    @property
+    def n(self) -> int:
+        return int(self.st[KD_N])
+
+    @property
+    def done(self) -> bool:
+        return bool(self.st[KD_DONE] != 0.0)
 
     @property
     def total_cycles(self) -> int:
@@ -49,30 +110,13 @@ class KdcoCal:
     @property
     def perturbation(self) -> float:
         """OTW offset [LSB] for the current cal cycle (0 when done)."""
-        if self.done:
-            return 0.0
-        return self.amp if (self.n // self.meas_n) % 2 == 0 else -self.amp
+        return float(kdco_perturbation(self.st, self.amp, self.meas_n))
 
     def step(self, f_meas: float) -> float:
-        if self.done:
-            return self.value
-        if (self.n % self.meas_n) >= self.settle:
-            self._acc += f_meas
-            self._cnt += 1
-        self.n += 1
-        if self.n % self.meas_n == 0 and self._cnt > 0:
-            self._half_means.append(self._acc / self._cnt)
-            self._acc = 0.0
-            self._cnt = 0
-            if len(self._half_means) % 2 == 0:
-                f_hi, f_lo = self._half_means[-2], self._half_means[-1]
-                self._ests.append((f_hi - f_lo) / (2.0 * self.amp))
-        if self.n >= self.total_cycles:
-            if self._ests:
-                self.value = float(np.mean(self._ests))
-            self.done = True
-        self.trace.append(self.value)
-        return self.value
+        v = float(kdco_step(self.st, self.halves, self.ests, float(f_meas),
+                            self.amp, self.meas_n, self.rounds, self.settle))
+        self.trace.append(v)
+        return v
 
 
 class BandSelect:
@@ -113,18 +157,28 @@ class BandSelect:
         return self.band
 
 
+@kernel
+def tdc_period_step(st: np.ndarray, cpp_meas: float, ema: float) -> float:
+    st[0] += ema * (cpp_meas - st[0])
+    return st[0]
+
+
 class TdcPeriodCal:
     """EMA of TDC codes-per-DCO-period; .value converts code -> UI."""
 
     def __init__(self, cpp_init: float, ema: float = 1e-3):
-        self.value = float(cpp_init)       # codes per period estimate
+        self.st = np.array([float(cpp_init)])   # codes per period estimate
         self._ema = ema
         self.trace: list[float] = []
 
+    @property
+    def value(self) -> float:
+        return float(self.st[0])
+
     def step(self, cpp_meas: float) -> float:
-        self.value += self._ema * (cpp_meas - self.value)
-        self.trace.append(self.value)
-        return self.value
+        v = float(tdc_period_step(self.st, float(cpp_meas), float(self._ema)))
+        self.trace.append(v)
+        return v
 
     def code_to_ui(self, code: float) -> float:
         return code / self.value

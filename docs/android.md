@@ -107,6 +107,10 @@ gradle -p android :app:assembleDebug
 1. 建 wheel → 装进干净 venv → 磁盘上**没有任何 `.py` 可回退**（确认 `chain.so`
    旁边没有 `chain.py`）→ 跑全量。
 2. 结果：**42 / 101 个模块编译**，**242 passed / 12 skipped**。
+   （这是 2026-08-25 那次真机构建的实测值，当时包里是 101 个模块。
+   2026-09-13 vendored 的 pllsim 子树推进到上游 `931cfaf` 后多了两个模块，
+   分母变成 103——**分子没有重测**，编译集是由构建证明出来的，不是算出来的。
+   见 `ROADMAP.md` C5。）
 3. 顺带测掉一个真风险：`presets` 的 `make_waveform` 靠 `inspect.signature`
    分派 burst 长度。Cython 化后签名内省**仍然可用**——这是测出来的。
 4. 体积代价：wheel 1810 → 2030 KiB（40 → 42 个模块那一步）。

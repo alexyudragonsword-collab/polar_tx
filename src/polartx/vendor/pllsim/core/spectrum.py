@@ -1,4 +1,4 @@
-# Vendored from pll_simulator@d7be4712: src/pllsim/core/spectrum.py
+# Vendored from pll_simulator@931cfaf: src/pllsim/core/spectrum.py
 # Adapted-copy policy: see src/polartx/vendor/__init__.py
 """Phase-sequence spectrum estimation and spur extraction."""
 from __future__ import annotations

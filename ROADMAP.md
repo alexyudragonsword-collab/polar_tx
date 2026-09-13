@@ -119,11 +119,48 @@ auto-release"，可以照搬，但要先决定这个库要不要给外部用。
 均为手动 `workflow_dispatch`），产物正常。但它们和 release 没有联动——
 打 tag 不会自动出 exe，也不会出 APK（`android.yml` 同样是手动触发）。
 
-### C3. `np.trapezoid` 的修法属于上游
+### C3. ~~`np.trapezoid` 的修法属于上游~~ → 已了结（2026-09-13）
 
-`vendor/pllsim/core/jitter.py` 的 numpy 1.x 兼容别名是在本仓打的补丁（已按
-manifest 登记，`reason` 写清了）。**同一个问题上游 `pll_simulator` 也有**：它
-只用了 numpy 2.0 的新名字。正确的长期做法是推回上游，然后这里恢复 verbatim。
+原条目写的是"同一个问题上游 `pll_simulator` 也有，应当推回上游、这里恢复
+verbatim"。**去查证时发现前提已不成立**：上游在 `1b0f308`（"a real numpy
+floor"）里自己修了，写法是 `vars(np).get("trapezoid") or vars(np)["trapz"]`，
+两侧都走 `vars(np)`，比本仓当时的 `getattr(...) or np.trapz` 更稳——后者的
+`np.trapz` 是静态属性读取，numpy 2 里该属性不存在，类型检查器会判错（本仓
+`selector.py` 就撞到过）。上游还配了跑 numpy 1.24.4 的下限 job，并校验装到的
+确实是下限版本。扫过上游 `src/` 其余位置，没有同类残留。
+
+所以没有东西可推回。后半句"恢复 verbatim"已随下面的子树推进完成：`jitter.py`
+不再有本地改动，manifest 条目从 3 条降到 2 条。
+
+### C5. vendored `adpll.py` / `frac.py` 仍钉在 `d7be4712`
+
+2026-09-13 把 `vendor/pllsim/` 的其余 39 个文件推进到上游 `931cfaf`（八个月的
+演进，+2684/−516，19 个文件有实质变化；另新增上游依赖的 `core/jit.py` 与
+`core/boundaries.py`）。**16 个 preset + 3 个带损伤配置的报告逐值比对完全一致**，
+套件 272 passed 不变。
+
+这两个文件没有跟上，原因是结构性的、不是没排上：
+
+- 上游把逐周期循环搬进了 `@kernel` 装饰的函数（`core/jit.py`：装了 numba 就编译，
+  没装就纯 Python 跑，两条路径要求**逐位一致**，并明令 per-cycle 路径里不许有
+  numpy 数组操作）。
+- 本仓在 `adpll.py` 上的扩展恰恰是每参考周期回调一个 Python 对象
+  （`dp_cal.step(e_ui, mod_freq[n])`，在线两点增益校准），**装不进这种 kernel**。
+  要跟进就得把 LMS 状态摊成浮点数组穿过 kernel 签名重写一遍——那是改物理路径，
+  得单独做、单独验证。
+- `frac.py` 是从上游 `cppll.py` 抽出的 37 行，新版 `cppll.py` 也大改了，要重抽。
+
+因此 pin 是**混合**的：39 个文件 @`931cfaf`，2 个 @`d7be4712`。CI 的 sibling
+checkout 因此必须 `fetch-depth: 0`（浅 checkout 解析不到另一个 commit，
+`vendor_check` 会把这两个文件**跳过**——正好跳过唯一两个有本地改动的文件），
+并且现在传 `--fail-on-skip`：跳过即失败，不再当作通过。
+
+### C6. Android 编译集需要重测
+
+`docs/android.md` 的 **42 / 101 个模块编译** 是 2026-08-25 那次真机构建的实测值。
+vendored 子树推进后包里是 103 个模块，**分子没有重测**——编译集是由"删掉 `.py`
+后套件仍过"证明出来的，不是算出来的。下次手动跑 *Android APK* workflow 时顺带
+重新记一次。历史记录（CHANGELOG、`cairn/`）里的 42/101 是当时的实测，不要改。
 
 ### C4. `mode="event"` 的性能
 

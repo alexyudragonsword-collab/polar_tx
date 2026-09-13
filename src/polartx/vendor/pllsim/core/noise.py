@@ -1,4 +1,4 @@
-# Vendored from pll_simulator@d7be4712: src/pllsim/core/noise.py
+# Vendored from pll_simulator@931cfaf: src/pllsim/core/noise.py
 # Adapted-copy policy: see src/polartx/vendor/__init__.py
 """Noise source PSD models and output noise budgeting.
 
@@ -44,7 +44,7 @@ class FlickerFloorPhase(NoiseSource):
     fc: float = 0.0  # flicker corner [Hz]
 
     @classmethod
-    def from_spot(cls, name: str, l_floor_dbchz: float, fc: float = 0.0) -> "FlickerFloorPhase":
+    def from_spot(cls, name: str, l_floor_dbchz: float, fc: float = 0.0) -> FlickerFloorPhase:
         return cls(name=name, unit="rad^2/Hz", level=float(sphi_from_ldbc(l_floor_dbchz)), fc=fc)
 
     def psd(self, f: np.ndarray) -> np.ndarray:
@@ -67,7 +67,7 @@ class LeesonOscillator(NoiseSource):
 
     @classmethod
     def from_spot(cls, name: str, l_dbchz: float, f_offset: float,
-                  f_1f3: float = 0.0, floor_dbchz: float = -170.0) -> "LeesonOscillator":
+                  f_1f3: float = 0.0, floor_dbchz: float = -170.0) -> LeesonOscillator:
         """Spot L at f_offset assumed on the 1/f^2 asymptote."""
         s_spot = float(sphi_from_ldbc(l_dbchz))
         k2 = s_spot * f_offset**2
@@ -85,6 +85,12 @@ class CurrentNoise(NoiseSource):
 
     `duty` scales the PSD for sources active only a fraction of the period
     (e.g. charge-pump on-time): effective S = duty * S_on.
+
+    Convention warning: this models a source that runs CONTINUOUSLY at a
+    reduced duty cycle.  A gated source that injects one charge packet per
+    reference cycle is a *sampled* sequence and carries an extra factor of 2
+    from aliasing into [0, fs/2] — use SampledChargeNoise for that, or the
+    result lands 3 dB below what the time domain injects.
     """
 
     i2: float = 0.0
@@ -94,6 +100,26 @@ class CurrentNoise(NoiseSource):
     def psd(self, f: np.ndarray) -> np.ndarray:
         f = np.asarray(f, dtype=float)
         return self.duty * self.i2 * (1.0 + self.fc / f)
+
+
+@dataclass
+class SampledChargeNoise(NoiseSource):
+    """One charge packet per cycle from a current gated for `tau` seconds.
+
+    Per-cycle charge variance is i2*tau, and a sampled sequence aliases into
+    [0, fs/2], so the one-sided PSD is S_q = 2*i2*tau/fs  [C^2/Hz] — the same
+    factor 2 SampledKTC carries, and the reason this is a separate class from
+    CurrentNoise rather than another `duty` value.
+
+    Pair it with a rad/C transfer, i.e. 1/(A*gm*tau) for a sampling PD.
+    """
+
+    i2: float = 0.0        # current noise density while gated [A^2/Hz]
+    tau: float = 0.0       # gate width [s]
+    fs: float = 100e6      # sampling (reference) rate [Hz]
+
+    def psd(self, f: np.ndarray) -> np.ndarray:
+        return np.full(np.asarray(f).shape, 2.0 * self.i2 * self.tau / self.fs)
 
 
 @dataclass

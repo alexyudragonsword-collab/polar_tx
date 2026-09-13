@@ -308,7 +308,8 @@ def _existing_reason(rel: str) -> str:
 _STATUS_ORDER = ["DRIFT", "extended", "extracted", "adapted", "verbatim", "skip"]
 
 
-def report(results: list[FileResult], strict: bool) -> int:
+def report(results: list[FileResult], strict: bool,
+           fail_on_skip: bool = False) -> int:
     by = {s: [r for r in results if r.status == s] for s in _STATUS_ORDER}
     print("polartx vendor drift check")
     print("=" * 60)
@@ -339,8 +340,12 @@ def report(results: list[FileResult], strict: bool) -> int:
     if drift:
         print(f"DRIFT: {len(drift)} — see above")
         return 1
-    if skipped and strict:
-        print("strict: sibling repos missing")
+    if skipped and (strict or fail_on_skip):
+        # A skipped file is an unverified file.  In a dev environment that is
+        # merely inconvenient; in CI it is the difference between a gate and a
+        # green tick, so --fail-on-skip is what CI passes.
+        print(f"{len(skipped)} file(s) could not be verified — a skip here is "
+              "an unchecked file, not a pass")
         return 1
     if stale and strict:
         print("strict: stale pins present")
@@ -356,6 +361,10 @@ def main(argv=None) -> int:
                     help="regenerate vendor_manifest.json from the current tree")
     ap.add_argument("--strict", action="store_true",
                     help="also fail on stale pins or missing sibling repos")
+    ap.add_argument("--fail-on-skip", action="store_true",
+                    help="fail if any file could not be verified (what CI "
+                         "passes: an unverifiable file must not read as a "
+                         "pass), while still tolerating stale pins")
     ap.add_argument("--siblings", nargs="*", default=[],
                     metavar="repo=path",
                     help="override sibling repo locations")
@@ -378,7 +387,7 @@ def main(argv=None) -> int:
 
     manifest = json.loads(MANIFEST.read_text()) if MANIFEST.exists() else {}
     results = check(siblings, manifest)
-    return report(results, args.strict)
+    return report(results, args.strict, args.fail_on_skip)
 
 
 if __name__ == "__main__":

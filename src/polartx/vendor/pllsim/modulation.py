@@ -1,4 +1,4 @@
-# Vendored from pll_simulator@d7be4712: src/pllsim/modulation.py
+# Vendored from pll_simulator@931cfaf: src/pllsim/modulation.py
 # Adapted-copy policy: see src/polartx/vendor/__init__.py
 """Two-point PLL modulation: GMSK trajectories and EVM.
 
@@ -87,6 +87,7 @@ def evm(phase_actual: np.ndarray, phase_ideal: np.ndarray,
         rms, dd = _one(d[m:-m or None])
         if best is None or rms < best[0]:
             best = (rms, dd, lag)
+    assert best is not None      # `lags` is never empty, so the loop always ran
     rms, d, lag = best
     return {"evm_rms": rms, "evm_pct": 100.0 * rms,
             "evm_db": float(20.0 * np.log10(max(rms, 1e-12))),
@@ -103,3 +104,25 @@ def prbs(n: int, seed: int = 1) -> np.ndarray:
         state = ((state << 1) | bit) & 0x7FFF
         out[i] = bit
     return out
+
+
+def supports_two_point(pll) -> bool:
+    """Whether this instance's engine actually injects mod_freq.
+
+    Asked of the object rather than kept as a list of names, because the
+    answer depends on the mode as well as the class: ADPLL takes mod_freq in
+    TDC mode and rejects it in bang-bang mode.  Three places used to hold
+    their own copy of this fact (the selector, and each GUI's modulation
+    page), which is how the selector came to recommend architectures whose
+    engine cannot modulate.
+    """
+    import inspect
+    if "mod_freq" not in inspect.signature(type(pll).simulate).parameters:
+        return False
+    return getattr(pll.cfg, "mode", "tdc") != "dtc_bbpd"
+
+
+def two_point_presets() -> list[str]:
+    """Preset names whose engine can run a two-point modulation."""
+    from . import presets as _p
+    return [n for n, f in _p.ALL_PRESETS.items() if supports_two_point(f())]

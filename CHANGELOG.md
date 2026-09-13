@@ -42,6 +42,35 @@ preamble 的波形死在算术里；蒙卡穿过抽象 `PhaseModulator` 取 `.cf
 数据哈希，拆前拆后逐值比对**完全一致**。协议记在
 `cairn/static-gates-and-refactor.md`。
 
+### vendored pllsim 推进到上游 `931cfaf`，C3 了结（2026-09-13）
+
+起因是 ROADMAP C3："`np.trapezoid` 的兼容别名应当推回上游 `pll_simulator`"。
+**去查证时发现前提已不成立**——上游早在 `1b0f308` 自己修了，而且修得更稳：
+两侧都走 `vars(np)`，不像本仓当时的 `getattr(...) or np.trapz` 会让
+`np.trapz` 成为一次静态属性读取（numpy 2 里该属性不存在）。上游还配了真的
+numpy 下限 job。扫过上游 `src/` 无同类残留。所以**没有开 issue，也没有改上游
+任何一行**。
+
+C3 的后半句"这里恢复 verbatim"则顺势做掉了：`pllsim` 子树 39 个文件推进到
+`931cfaf`（八个月演进，+2684/−516，19 个文件有实质变化），并补入上游新依赖的
+`core/jit.py` 与 `core/boundaries.py`。`jitter.py` 的本地补丁随之删除，
+manifest 从 3 条降到 2 条。
+
+**行为完全没变，这是量出来的**：16 个 preset ＋ 3 个带损伤配置的全部指标、
+每个 axes 范围、每个 artist 的数据哈希，升级前后逐值比对 19/19 一致；
+272 passed / 11 skipped 不变；18 个 example 全过。
+
+`arch/adpll.py` 与 `arch/frac.py` **没有**跟进，原因是结构性的：上游把逐周期
+循环搬进了 jit kernel（numba 与纯 Python 两条路径要求逐位一致，per-cycle 路径
+禁用 numpy 数组操作），而本仓的扩展每周期回调一个 Python 对象做在线两点增益
+校准，装不进去。见 ROADMAP C5。
+
+由此 pin 变成混合的，带出一个真陷阱并已堵上：sibling checkout 若是浅的，
+校验器解析不到另一个 commit，会把这两个文件**跳过**——恰好是唯一两个有本地
+改动的文件，而跳过原本不算失败。现在 CI 用 `fetch-depth: 0`，并给
+`tools/vendor_check.py` 加了 `--fail-on-skip`（跳过即红，但仍容忍 stale pin）。
+开关做了变异验证：sibling 不可达时加开关退出 1、不加仍退出 0。
+
 ### 打包元数据：classifiers / urls / py.typed（2026-09-12）
 
 分发层此前只有名字、版本和依赖：**0 个 classifier、没有 urls、没有 `py.typed`**。

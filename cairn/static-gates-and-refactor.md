@@ -2,10 +2,10 @@
 type: project_topic
 status: active
 summary: "polartx 的静态检查闸门（ruff + mypy）为什么这样划范围，以及行为不变重构的验证协议：dump-比对，而不是'套件还绿'"
-tags: [polartx, 工程纪律, ruff, mypy, 重构]
+tags: [polartx, 工程纪律, ruff, mypy, 重构, vendor]
 contains: [decision, lesson, experience, open_question]
 created: "2026-09-12"
-updated: "2026-09-12（当日修订：见「本地 mypy 跑在空气上」）"
+updated: "2026-09-13（新增 vendor 子树推进的三条经验；9-12 当日修订见「本地 mypy 跑在空气上」）"
 related: []
 authoring_mode: ai_generated
 ---
@@ -91,10 +91,38 @@ authoring_mode: ai_generated
 之后，图上画的点和旁边印的 EVM 只可能来自同一次均衡（`_Constellation` 由指标阶段
 算出、图阶段只负责画）。
 
+## vendor 子树推进的三条经验（2026-09-13）
+
+把 `pllsim` 子树从 `d7be4712` 推到 `931cfaf` 时学到的，下次推 `padpd` 照用：
+
+- **先查上游是不是已经修了。** 这次的任务本来是"把本仓的 `np.trapezoid` 兼容
+  补丁推回上游"，查证发现上游八个月前就自修了，而且写法更稳（两侧都走
+  `vars(np)`，避免 `np.trapz` 变成一次静态属性读取）。**没有上报、没有改上游**。
+  一条以"上游也有这个问题"为前提的待办，隔几个月就该重新查证一次。
+- **"套件还绿"不能背书 vendor 升级**，理由和重构那节一样：19 个配置的指标与
+  图上每个 artist 逐值比对才是证据。这次 19/19 一致，所以敢说行为没变。
+- **混合 pin 会让校验器静默跳过最该查的文件。** 39 个文件到新 commit、2 个留在
+  旧 commit 之后，CI 的浅 checkout 解析不到旧 commit，`vendor_check` 把这两个
+  文件判为 skip——而 skip 原本不算失败。偏偏这两个正是唯一带本地改动的文件。
+  修法两条都要：sibling checkout 用 `fetch-depth: 0`，并给校验器加
+  `--fail-on-skip`（跳过即红，但仍容忍 stale pin，因为混合 pin 下 stale 是常态）。
+  又一次"检查通过 ≠ 检查了东西"。
+
+**为什么有两个文件推不动**（不是没排上）：上游把逐周期循环搬进了 `@kernel`
+函数，`core/jit.py` 的契约写死了 per-cycle 路径不许有 numpy 数组操作、且 numba
+与纯 Python 两条路径必须逐位一致；而本仓在 `adpll.py` 上的扩展每参考周期回调一个
+Python 对象（`dp_cal.step`）做在线两点增益校准。要跟进等于把 LMS 状态摊成浮点
+数组穿过 kernel 签名重写，是改物理路径，得单独做单独验。记在 ROADMAP C5。
+
 ## 待办
 
-- vendor 陈旧引脚 23 个、累计落后上游 1193 行，校验器目前只当 advisory
-  （`--strict` 才红）。方向是把本侧的修法推回上游（ROADMAP C3 的 `np.trapezoid`
-  就是一例），不是追平副本。
+- ~~vendor 陈旧引脚 23 个、累计落后上游 1193 行……方向是把本侧的修法推回上游~~
+  **（2026-09-13 更正，两处都错）**：一、"1193 行"是当时用错口径估的，实际
+  `d7be4712 → 931cfaf` 是 19 个文件 **+2684/−516**；二、"推回上游"的前提不成立，
+  上游早已自修（见上一节）。`pllsim` 子树已推进，只剩 `adpll.py` / `frac.py`
+  两个文件因 jit kernel 结构冲突留在旧 commit（ROADMAP C5）。
+- **`padpd` 子树还没推**：19 个 vendored 文件里 8 个上游有变化，合计
+  **+139 −16**（对比 `PA_DPD@3aa1c246`）。量级比 pllsim 小一个数量级，可以照
+  上一节的办法做，但同样要走 19 配置逐值比对。
 - `guiqt/` 是覆盖率最低的非 vendor 目录（widgets 65%、pages 76.5%），Qt 侧只有一个
   smoke 测试。

@@ -142,6 +142,15 @@ CPE **两种口径都不去除**；这些预设里 CPE 只有 0.01–0.6°（LO 
 commit 与路径，`tools/vendor_check.py` + CI 的 `vendor-drift` job 每次 push
 校验漂移。改 vendored 文件的规矩见 `CONTRIBUTING.md` §3。
 
+**pin 是按文件记的，而且现在是混合的**：`pllsim` 子树 39 个文件在上游
+`931cfaf`，`arch/adpll.py` 与 `arch/frac.py` 仍在 `d7be4712`（原因见
+`ROADMAP.md` C5：上游把逐周期循环搬进了 jit kernel，本仓的 `dp_cal` 钩子每周期
+回调 Python 对象，装不进去）。`padpd` 子树整体在 `44f9ee99`。
+
+混合 pin 有个陷阱值得记住：sibling checkout 必须是全历史（`fetch-depth: 0`），
+否则浅 checkout 解析不到另一个 commit，校验器会把那些文件**跳过**——而跳过的
+恰好是唯一两个有本地改动的文件。CI 因此传 `--fail-on-skip`，跳过即红。
+
 ## 6. 加东西时应该改哪里
 
 | 想加 | 改哪里 | 别忘了 |

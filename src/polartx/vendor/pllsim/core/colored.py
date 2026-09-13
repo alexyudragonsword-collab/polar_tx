@@ -1,4 +1,4 @@
-# Vendored from pll_simulator@d7be4712: src/pllsim/core/colored.py
+# Vendored from pll_simulator@931cfaf: src/pllsim/core/colored.py
 # Adapted-copy policy: see src/polartx/vendor/__init__.py
 """Time-domain colored-noise synthesis matched to target PSDs.
 
