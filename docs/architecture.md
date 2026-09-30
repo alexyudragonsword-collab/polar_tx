@@ -75,7 +75,8 @@ src/polartx/
 ├── measured.py       实测数据通路（OpenDPD 格式）→ 测量定标的 DPA 模型
 ├── montecarlo.py     良率分析（spec 化、进程池并行）
 ├── export/rtl.py     定点化 + Verilog/Verilog-AMS 导出 + 金向量
-├── selector.py       架构选择器：给定需求，DTC vs ADPLL 哪个更合适
+├── selector.py       架构选择器：给定需求，ADPLL / DTC / outphasing / RF-DAC 四候选解析打分
+│                     （EVM 预算 + 各自效率律在截断瑞利分布上的平均；先达标再比效率）
 ├── presets.py        ★ 端到端预设（标准链路 + 文献对标）
 ├── guiutil.py        ★ 三个前端共用的全部计算（可脱离前端测试）
 ├── appbridge.py      Android 的单函数 JSON 桥（薄封装；见 docs/android.md）
