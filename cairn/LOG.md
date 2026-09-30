@@ -2,6 +2,24 @@
 
 本文件按倒序记录实质性进展——最新的一条在这行下面。每条保持简短，只写摘要和指针；结论沉淀进 `cairn/<topic>.md`。
 
+## 2026-09-30 · Outphasing 拓扑阶段 1：抽象站住了
+
+- 按方案文档做：兄弟类 `OutphasingTX` 包住 `PolarTX` 跑两路恒包络分支，
+  `OutphasingCombiner`（isolated / Chireix）合路，预设 `.tx` 别名进注册表。
+  `chain.py` / `ChainConfig` / `PolarResult` 未改一行——抽象的核心检验。
+- 五条验收全部成测试并有实测值：理想链 EVM 差 0.000 dB；1° 相位失配退化 vs 闭式
+  预算差 0.35 dB 且单调；isolated 效率 = η_pa·E[cos²θ]（1e-9）、Chireix 43.9% >
+  isolated 10.9%；θ>80° 占比 21%；`env_skew_s` 逐位无效而极坐标退化 20 dB。
+- 同台表（ex19，真实 DTC + Rapp DPA）：EVM −37.1 vs −40.0，ACLR −49 vs −58，
+  效率 Chireix 40.0% / 极坐标 42.8%。3 dB 差的物理：两分支满功率、相噪不随包络
+  回退且两路独立不相消——这是拓扑本身的代价，不是实现 bug。
+- 判断：抽象站得住。"兄弟类 + 同名指标方法 + 预设别名"两次（FIR、outphasing）
+  都没碰主链；下一步该抽 `TXResult` Protocol 的信号是报告层出现 isinstance，
+  目前没有。已知取舍：Chireix 负载调制只进效率律。
+- 容器回收后环境被清空（pytest、Qt GL 库），`apt-get update` 后补装即可；
+  main 基线在此环境下是 265 passed / 7 errors 而非 272，全是 `libEGL` 缺失。
+- 分支 `feat/outphasing-tx`，一个 PR。详见 `CHANGELOG.md` 与 `docs/architecture.md` §6。
+
 ## 2026-09-13 · 查证 C3：上游已自行修复，顺势把 pllsim 子树推进到 931cfaf
 
 - 任务是"把 `np.trapezoid` 的修法推回上游、由上游 agent 决定"。**查证后没有上报**：
