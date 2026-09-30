@@ -34,7 +34,7 @@ Waveform → [CFR] → polar split → 包络路径（量化/skew/DPA 幅度码�
 
 ```bash
 pip install -e .          # numpy / scipy / matplotlib
-pytest tests/             # 281 个测试函数（参数化后实收更多）：物理量断言 + 与 padpd 逐位回归
+pytest tests/             # 284 个测试函数（参数化后实收更多）：物理量断言 + 与 padpd 逐位回归
 python examples/ex01_ble_gfsk_adpll.py      # 图落在 examples/out/
 
 pip install -e .[gui]     # Streamlit 网页工作台
@@ -165,8 +165,8 @@ src/polartx/
 | `ex16_architecture_selector.py` | **架构选择器（四候选）**：目标制式决策表（BLE/LTE→ADPLL，WiFi/NR→DTC；outphasing 与 RF-DAC 同表打分、报效率）+ EVM-带宽交叉图（校准两点 vs 未校准 ADPLL 曲线、~50 MHz 覆盖封顶、outphasing / RF-DAC 两条带宽无关曲线） |
 | `ex17_rtl_ams_datapath.py` | **更全 RTL/AMS 导出**：CFR 削波 + DTC 相位累加器 + DPA 温度计译码器（iverilog 零失配）+ DPA Verilog-AMS `wreal` RNM 模型（数字↔模拟协仿桥，LUT 自校验） |
 | `ex18_doherty_combining.py` | **多核/Doherty 合路**：效率-回退（单核 vs 2/3 路、理想-B vs class-C）、核间失配交接拐点 + 蒙卡良率、Doherty-DPA 入 WiFi 链（平均效率 43%→58% @ 同 EVM） |
-| `ex19_outphasing_vs_polar.py` | **Outphasing（LINC/Chireix）vs 极坐标同台**（`polartx.outphasing`，兄弟类包住同一条 WiFi 160 MHz 链跑两路恒包络分支）：同波形同 CFR 同 DTC 同 DPA 同 seed 的一张表——EVM −37.1 vs −40.0 dB、ACLR −49 vs −58 dBc、平均效率 Chireix 40% / isolated 10% vs 极坐标 43%、θ>80° 占比 21%；分支谱比信道宽得多；各自最敏感的旋钮（极坐标 AM/PM skew 对 outphasing 逐位无效；outphasing 的分支相位失配 1° 与闭式预算差 0.35 dB） |
-| `ex20_three_topologies.py` | **极坐标 vs outphasing vs 笛卡尔（RF-DAC）三架构同台**（`polartx.cartesian` + `polartx.rfdac`：I/Q 两组电流单元阵列直接画星座，无包络路径、无相位路径，与 DPA 共用同一套单元失配模型、同一个 LO 相噪）：一条命令一张表——EVM −40.0 / −37.1 / **−40.0** dB、ACLR −58 / −49 / −60 dBc、平均效率 **43% / 40% / 28%**（RF-DAC 付 \|I\|+\|Q\| 交 I²+Q²，6 dB 回退 42.5% vs SCPA 50.9%），再加各自最敏感旋钮的 **1 dB 容忍度**：极坐标 AM/PM skew 0.03 ns、outphasing 分支相位 0.74°、RF-DAC I/Q 相位 0.62°；全库效率律 vs 回退一张图；RF-DAC 的 I/Q 失配 EVM 贴着 −IRR 闭式（0.1 dB/1° → IRR 39.6 dB）；`env_skew_s` 传给 RF-DAC 链会**告警而不是静默无效** |
+| `ex19_outphasing_vs_polar.py` | **Outphasing（LINC/Chireix）vs 极坐标同台**（`polartx.outphasing`，兄弟类包住同一条 WiFi 160 MHz 链跑两路恒包络分支）：同波形同 CFR 同 DTC 同 DPA 同 seed 的一张表——EVM −39.8 vs −40.0 dB（两路分支共用一个 LO 后两者同被 LO 限住；阶段 1 两路独立抽 LO 相噪时是 −37.1）、ACLR −53 vs −58 dBc、平均效率 Chireix 40% / isolated 10% vs 极坐标 43%、θ>80° 占比 21%；分支谱比信道宽得多；各自最敏感的旋钮（极坐标 AM/PM skew 对 outphasing 逐位无效；outphasing 的分支相位失配 1° 与闭式预算差 0.35 dB） |
+| `ex20_three_topologies.py` | **极坐标 vs outphasing vs 笛卡尔（RF-DAC）三架构同台**（`polartx.cartesian` + `polartx.rfdac`：I/Q 两组电流单元阵列直接画星座，无包络路径、无相位路径，与 DPA 共用同一套单元失配模型、同一个 LO 相噪）：一条命令一张表——EVM −40.0 / −39.8 / **−40.0** dB（三者同被同一个 LO 限住）、ACLR −58 / −53 / −60 dBc、平均效率 **43% / 40% / 28%**（RF-DAC 付 \|I\|+\|Q\| 交 I²+Q²，6 dB 回退 42.5% vs SCPA 50.9%），再加各自最敏感旋钮的 **1 dB 容忍度**：极坐标 AM/PM skew 0.03 ns、outphasing 分支相位 0.51°、RF-DAC I/Q 相位 0.62°；全库效率律 vs 回退一张图；RF-DAC 的 I/Q 失配 EVM 贴着 −IRR 闭式（0.1 dB/1° → IRR 39.6 dB）；`env_skew_s` 传给 RF-DAC 链会**告警而不是静默无效** |
 
 ## 许可 / License
 

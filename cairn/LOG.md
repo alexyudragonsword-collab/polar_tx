@@ -2,6 +2,20 @@
 
 本文件按倒序记录实质性进展——最新的一条在这行下面。每条保持简短，只写摘要和指针；结论沉淀进 `cairn/<topic>.md`。
 
+## 2026-09-30 · B7 收口：outphasing 两路共用一个 LO，3 dB 差距整个消失
+
+- 修法绕开 `chain.py`：`DTCPMConfig.lo_pn_seed`（None 逐位不变；整数 = LO 样本走
+  `default_rng([seed, 1])` 独立流），`OutphasingTX.run` 每次浅拷贝分支链钉住本次 seed。
+  抖动/dither 仍独立；Ideal/ADPLL 无 LO 模型不受影响。改了 `phasemod/` 一个字段
+  三行逻辑——用户看过 B7 说"继续"，视为放行；`chain.py` 仍未动。
+- **更正**：阶段 1 说 outphasing 差 3 dB 是"两分支满功率、相噪不相消"，阶段 3 说
+  其中约 3 dB 是独立 LO。实测是**全部**：共用 LO 后 −39.84 vs −40.00（地板差 0.4 dB，
+  4 符号 −0.3），与选型器共模预算 0.44 一致；独立 LO 时 5.1 / 4.0 dB。原因：这条链
+  地板由 LO 主导（−49），DTC 量化/抖动（−67/−55）各多付 5.5 dB 也不露头。
+- 教训：分支级噪声"独立"要逐个来源问一遍，共享的硬件块（LO）不能跟着运行 seed 走。
+- 数字变动：ACLR −49 → −53 dBc，分支相位 1 dB 容忍度 0.74° → 0.51°；ex19/ex20/README
+  同步。ROADMAP B7 删除。分支 `feat/outphasing-shared-lo`，PR 待开。
+
 ## 2026-09-30 · 阶段 3：选型器四候选，两个建模缺口被对照测试揪出
 
 - `selector.py` 四候选：outphasing = DTC 地板逐项 +10log10(PAPR/2)（分支恒满幅）
