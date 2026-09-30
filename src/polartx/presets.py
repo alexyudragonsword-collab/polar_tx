@@ -489,7 +489,12 @@ def wifi_rfdac(bw: float = 160e6, qam: int = 1024, *, n_bits: int = 12,
         pm_cfg = getattr(base.tx.phasemod, "cfg", None)
         rfdac = RFDACConfig(n_bits=n_bits, n_thermo=6, sigma_cell=0.002,
                             jitter_rms_s=50e-15,
-                            fout=float(getattr(pm_cfg, "fout", 5.9e9)))
+                            fout=float(getattr(pm_cfg, "fout", 5.9e9)),
+                            # the same LO as the polar plan: its phase noise
+                            # multiplies the RF-DAC output exactly as it
+                            # multiplies the DTC's
+                            lo_pn=getattr(pm_cfg, "lo_pn", None),
+                            lo_loop_bw=float(getattr(pm_cfg, "lo_loop_bw", 200e3)))
     ctx = CartesianTX(ChainConfig(cfr_papr_db=c.cfr_papr_db,
                                   env_skew_s=c.env_skew_s), RFDAC(rfdac))
     return CartesianTxPreset(cartesian_tx=ctx, polar_tx=base.tx,

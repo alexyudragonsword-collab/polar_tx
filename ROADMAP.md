@@ -92,6 +92,16 @@ response 模式不能背书杂散结论）。
 还没量过的：手势手感、刘海与安全区；双抽头 FIR（osr=50）在 x86 runner 上
 2.1 s，手机上是否需要更小的默认值。
 
+### B7. Outphasing 链的两路 LO 相噪是独立抽的
+
+`OutphasingTX` 把每路分支当一条完整的 `PolarTX` 跑（`seed` / `seed+1`），于是
+LO 相噪也各抽一份。真机两路 DTC 挂在同一个 PLL 上，LO 相噪是共模的，只有
+DTC 量化/抖动/INL 才独立。后果：链路里 outphasing 比极坐标差 ~5 dB（地板口径），
+其中约 3 dB 是这个建模选择造成的；选型器默认按共模 LO 打分
+（`outphasing_shared_lo=True`），与链路对照的测试显式用 `False`。要修得让两路
+分支共享一份 LO 相噪样本——`PolarTX.run` 目前没有注入相噪序列的口子，改它就
+碰到主链，所以留在这里而不是顺手改。
+
 ### B6. 剩 24 处 docstring
 
 都是 GUI 内部件和父函数已解释的嵌套闭包。低价值，列出来只是为了闭环。

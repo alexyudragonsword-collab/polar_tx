@@ -96,6 +96,30 @@ def test_clock_jitter_is_white_phase_scaled_by_fout_and_gated_by_noise():
     assert np.std(phi2) == pytest.approx(2 * np.std(phi), rel=0.02)
 
 
+def test_lo_phase_noise_uses_the_dtc_generator_and_needs_fs():
+    """The RF-DAC's carrier has the same Leeson phase noise the DTC's LO
+    has: same OscConfig, same locked-LO flattening, gated by noise.  With
+    the WiFi plan's LO it sets the RF-DAC chain's floor at the polar
+    chain's level (test_selector pins the two floors equal)."""
+    from polartx.vendor.pllsim.blocks.oscillator import OscConfig
+    lo = OscConfig(f0=5.9e9, gain=1.0, pn_dbchz=-115.0, pn_foffset=1e6,
+                   pn_f1f3=2e5, pn_floor_dbchz=-155.0)
+    d = RFDAC(RFDACConfig(n_bits=14, lo_pn=lo, lo_loop_bw=400e3))
+    n, fs = 65536, 640e6
+    code = np.full(n, d.cfg.full_scale_code)
+    zero = np.zeros(n, dtype=np.int64)
+    with pytest.raises(ValueError):
+        d(code, zero, noise=True)                         # fs is required
+    y = d(code, zero, noise=True, seed=2, fs=fs)
+    phi = np.unwrap(np.angle(y))
+    # the phase noise integrated over the 640 MHz Nyquist band, LO-limited:
+    # -115 dBc/Hz at 1 MHz falling as 1/f^2 to the -155 floor -> a few mrad
+    assert 1e-3 < np.std(phi) < 3e-2
+    assert np.all(d(code, zero, noise=False) == 1.0)      # gated off
+    d0 = RFDAC(RFDACConfig(n_bits=14))
+    assert np.all(d0(code, zero, noise=True, seed=2) == 1.0)   # no LO given
+
+
 # -------------------------------------- same mismatch model as the DPA
 def test_cell_mismatch_reproduces_the_polar_dpa_inl_dnl_exactly():
     """Acceptance 3.  Built from a DPA's (n_bits, n_thermo, sigma_cell,

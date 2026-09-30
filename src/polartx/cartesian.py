@@ -164,7 +164,7 @@ class CartesianTX:
         fs_scale = float(max(np.abs(x.real).max(), np.abs(x.imag).max()))
         i_code = self.rfdac.encode(x.real / fs_scale)
         q_code = self.rfdac.encode(x.imag / fs_scale)
-        y = self.rfdac(i_code, q_code, noise=noise, seed=seed) * fs_scale
+        y = self.rfdac(i_code, q_code, noise=noise, seed=seed, fs=wf.fs) * fs_scale
         info["fs_scale"] = fs_scale
         info["backoff_db"] = self.rfdac.average_efficiency(i_code, q_code)["backoff_db"]
         return CartesianResult(y=y, fs=wf.fs, wf=wf, i_code=i_code,
