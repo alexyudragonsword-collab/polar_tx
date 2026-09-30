@@ -151,6 +151,15 @@ jobs:
           ref: 931cfaf48aaaf693eefa7088d41c608ee3450b97
           fetch-depth: 0
           path: _siblings/pll_simulator
+          # pll_simulator is a PRIVATE repository; the workflow's own
+          # GITHUB_TOKEN is scoped to polar_tx and gets "Repository not found"
+          # for it (PR #1, run 58), after which every pllsim file is skipped
+          # and --fail-on-skip turns the job red -- correctly.  A fine-grained
+          # PAT with Contents:read on pll_simulator, stored as the repository
+          # secret SIBLING_READ_TOKEN, lets this step read it; without the
+          # secret the expression falls back to the default token, which is
+          # enough whenever the sibling is public.
+          token: ${{ secrets.SIBLING_READ_TOKEN || github.token }}
       - name: Checkout PA_DPD (pinned)
         continue-on-error: true
         uses: actions/checkout@v4
