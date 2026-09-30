@@ -19,7 +19,8 @@
 - 一个模型边界：截断瑞利在 PAPR 3.4 dB（8DPSK）时削顶质量 11%，自身 PAPR 3.9 dB。
 - ex20 加"最敏感旋钮 1 dB 容忍度"列：skew 0.03 ns / 分支相位 0.74° / I/Q 相位 0.62°。
   三前端经 `run_selector_report` 同步拿四行 + 效率 + 四曲线，`appbridge.py` 未动。
-- 分支 `feat/selector-three-topologies`（叠在 `feat/rfdac-tx` 上），PR 待开。
+- 分支 `feat/selector-three-topologies`（叠在 `feat/rfdac-tx` 上），PR #3，base 先指
+  #2 的分支，#2 合并后自动转 main。本地 317 passed / 11 skipped（+README 计数已修）。
 
 ## 2026-09-30 · RF-DAC 拓扑阶段 2：第三种架构进同一张表
 
