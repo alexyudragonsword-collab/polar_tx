@@ -17,7 +17,7 @@ BENCH_PRESETS = ["Bench: Staszewski'05 EDGE", "Bench: Madoglio'14 LTE-20",
 def test_benchmarks_are_registered_presets():
     for name in BENCH_PRESETS:
         assert name in PRESETS
-    assert len(PRESETS) == 10 + len(BENCH_PRESETS)   # 10 standard chains
+    assert len(PRESETS) == 11 + len(BENCH_PRESETS)   # 11 standard chains
 
 
 def test_every_benchmark_is_reachable_from_the_gui():
