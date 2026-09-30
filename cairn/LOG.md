@@ -2,6 +2,26 @@
 
 本文件按倒序记录实质性进展——最新的一条在这行下面。每条保持简短，只写摘要和指针；结论沉淀进 `cairn/<topic>.md`。
 
+## 2026-09-30 · RF-DAC 拓扑阶段 2：第三种架构进同一张表
+
+- 按方案文档做：`rfdac.py`（I/Q 两阵列，失配复用 `dpa/mismatch.py`，I/Q 失衡 /
+  LO 泄漏 / 抖动，`iq_cells` 效率律）+ `cartesian.py`（`CartesianTX` 吃同一个
+  `ChainConfig` 只读 `cfr_papr_db`，其余字段非默认即 `UserWarning` 点名）。
+  `CartesianResult` 自实现同名指标——这是第三个结果类，仍没有 isinstance 分派。
+  `chain.py` / `ChainConfig` / `PolarResult` 未改一行。
+- 五条验收成测试并有实测值：理想链 EVM 差 0.001 dB；单音镜像 = 解析 IRR 39.61 dB
+  （精确），调制 EVM 退化贴 −IRR；I 阵列 INL/DNL 与 `DPA.inl_dnl()` 逐元素相等；
+  6 dB 回退 42.5% < SCPA 50.9%、burst 平均 28.3% < 42.8%；`env_skew_s` 告警且逐位相同。
+- 一个断言前提被实测推翻：10 bit 6+4 分段阵列 1% 失配只让误差到 −72 dB，比 CFR
+  地板低 30 dB，EVM 不动。改为断言误差功率随 σ_cell 20 dB/十倍（实测 20.0），
+  EVM 不变反而是分段的物理结论。另：4× 过采样把 3/4 量化噪声推到带外，8 bit
+  只差 0.3 dB，分辨率测试用 6 bit（差 3 dB）。
+- ex20 同台表（加噪）：极坐标 −40.0 / −58 / 42.8%；outphasing −37.1 / −49 / 40.0%；
+  RF-DAC −42.4 / −60 / 28.0%。线性最好效率最差，教科书取舍成立。
+- 判断：抽象第三次站住。下一步抽 `TXResult` Protocol 的信号仍是报告层出现
+  isinstance，`ex20` 里的 `hasattr(res, "rfdac")` 是目前唯一一处分派，留待后定。
+- 分支 `feat/rfdac-tx`，PR 待开。
+
 ## 2026-09-30 · Outphasing 拓扑阶段 1：抽象站住了
 
 - 按方案文档做：兄弟类 `OutphasingTX` 包住 `PolarTX` 跑两路恒包络分支，
