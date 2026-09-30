@@ -10,6 +10,30 @@ release 分组。
 
 ## 未发布 / Unreleased
 
+### Outphasing 发射机拓扑（阶段 1：验证抽象）（2026-09-30）
+
+第二种发射机拓扑，与极坐标链**同波形、同 CFR、同相位调制器、同 DPA 模型、
+同指标**对比。不加第二个架构开关：照 `fir.py` 的先例，`outphasing.py` 的
+`OutphasingTX` 是包住 `PolarTX` 的兄弟类，把信号分解成两路恒包络分支
+（φ±θ，θ = arccos(A/A_max)），各跑一次同一条链（DPA 满码），在
+`dpa/combiner.py` 新增的 `OutphasingCombiner`（isolated / Chireix）里合路；
+`OutphasingResult` 借 `_as_polar()` 复用 `PolarResult` 全部指标；
+`wifi_outphasing` 预设带 `.tx` 别名进注册表 "WiFi 160 MHz (outphasing)"。
+`chain.py`、`ChainConfig`、`PolarResult` 一行未改。
+
+五条验收全部是测试（`tests/test_outphasing.py`，实测值写在断言旁）：
+理想链下 EVM 与极坐标理想链**相差 0.000 dB**（分解恒等式 s1+s2=x 逐位成立）；
+分支相位失配 1° 的 EVM 退化与闭式预算差 **0.35 dB**、随角度单调；
+isolated 平均效率 = η_pa·E[cos²θ]（相对误差 1e-9 内）、Chireix 高于 isolated
+（43.9% vs 10.9%）；报告 θ 分布，θ>80° 占比 **21%**（去掉 CFR 更高）；
+`env_skew_s` 对 outphasing 输出**逐位无影响**，而同一旋钮让极坐标退化 20 dB。
+
+`ex19_outphasing_vs_polar.py` 的同台表（真实 DTC 11 bit + Rapp DPA，加噪）：
+极坐标 EVM −40.0 / ACLR −58 / 效率 42.8%；outphasing −37.1 / −49 / Chireix 40.0%、
+isolated 10.0%。EVM 差 3 dB 的物理原因：两路分支始终满功率，相位噪声不随包络
+回退，且两路独立不相消。已知取舍：Chireix 的负载调制只进效率律，信号路径与
+isolated 相同（有限 PA 输出阻抗带来的幅相失真留待后定）。
+
 ### 静态检查闸门 + 文档锚定 + 拆报告层（2026-09-12）
 
 一次工程体检之后的三批整改。体检本身的结论是**主干是健康的**——277 项测试
