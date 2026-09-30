@@ -179,7 +179,7 @@ jobs:
           pll_simulator=${{ github.workspace }}/_siblings/pll_simulator
           PA_DPD=${{ github.workspace }}/_siblings/PA_DPD
 
-  # The 18 examples are the library's worked documentation, and nothing
+  # The examples (20 at last count) are the library's worked documentation, and nothing
   # else exercised them — an API change could rot every one of them
   # silently. They cost ~60 s in total, so there is no reason not to.
   examples:
