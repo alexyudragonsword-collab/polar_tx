@@ -34,6 +34,8 @@ from dataclasses import dataclass
 import numpy as np
 
 from .dpa.mismatch import code_amplitude_table, inl_dnl
+from .vendor.pllsim.blocks.oscillator import OscConfig
+from .vendor.pllsim.core.colored import synth_from_psd
 
 TWOPI = 2.0 * np.pi
 
@@ -70,6 +72,14 @@ class RFDACConfig:
         LO clock jitter [s] and the RF output frequency it is scaled by,
         the DTC modulator's convention: white phase of ``2π·fout·σ_τ`` rad
         per sample, random, gated by ``noise``.
+    lo_pn / lo_loop_bw
+        The LO's Leeson phase noise (``OscConfig``) and the PLL loop
+        bandwidth below which it is flattened — exactly ``DTCPMConfig``'s
+        fields and generator, because the RF-DAC's carrier comes from the
+        same kind of synthesizer and multiplies the output the same way.
+        ``None`` = a noiseless LO (the stage-2 default, which made the
+        RF-DAC look ~15 dB better than its LO allows; the ``wifi_rfdac``
+        preset now carries the plan's LO).  Gated by ``noise``.
     eff
         ``("iq_cells", eta_peak)``: the load takes ``I² + Q²`` while the two
         arrays draw ``|I| + |Q|``, so ``η = η_peak · (I² + Q²) / (|I| + |Q|)``
@@ -88,6 +98,8 @@ class RFDACConfig:
     lo_leakage_dbc: float | None = None
     jitter_rms_s: float = 0.0
     fout: float = 5.9e9
+    lo_pn: OscConfig | None = None
+    lo_loop_bw: float = 200e3
     eff: tuple = ("iq_cells", 0.85)
 
     @property
@@ -129,10 +141,13 @@ class RFDAC:
         return np.sign(code) * table[np.abs(code)]
 
     def __call__(self, i_code: np.ndarray, q_code: np.ndarray, *,
-                 noise: bool = True, seed: int = 0) -> np.ndarray:
+                 noise: bool = True, seed: int = 0,
+                 fs: float | None = None) -> np.ndarray:
         """Complex-baseband output for the two code streams, axis full
         scale = 1: mismatch, I/Q imbalance, LO leakage and (noise=True)
-        clock jitter applied, in that order."""
+        clock jitter and LO phase noise applied, in that order.  ``fs`` is
+        the sample rate the LO phase-noise PSD is synthesized on; it is
+        required when ``lo_pn`` is set and ``noise`` is on."""
         c = self.cfg
         i = self._amp(i_code, self.amp_table_i)
         q = self._amp(q_code, self.amp_table_q)
@@ -140,10 +155,22 @@ class RFDAC:
         y = i + 1j * k * q
         if c.lo_leakage_dbc is not None:
             y = y + 10.0 ** (c.lo_leakage_dbc / 20.0)
-        if noise and c.jitter_rms_s > 0.0:
+        if noise:
             rng = np.random.default_rng(seed)
-            y = y * np.exp(1j * rng.normal(0.0, TWOPI * c.fout * c.jitter_rms_s,
-                                           y.shape))
+            phi = np.zeros(y.shape, float)
+            if c.jitter_rms_s > 0.0:
+                phi += rng.normal(0.0, TWOPI * c.fout * c.jitter_rms_s, y.shape)
+            if c.lo_pn is not None:
+                if fs is None:
+                    raise ValueError("RFDAC with lo_pn needs fs= to synthesize "
+                                     "the LO phase noise")
+                src = c.lo_pn.leeson("lo")
+                # locked-LO approximation, as in DTCPhaseModulator: inside
+                # the PLL loop BW the oscillator's f^-2/f^-3 slopes flatten
+                phi += synth_from_psd(
+                    lambda f: src.psd(np.maximum(f, c.lo_loop_bw)),
+                    fs, y.size, rng)
+            y = y * np.exp(1j * phi)
         return y
 
     # --------------------------------------------------------- diagnostics
