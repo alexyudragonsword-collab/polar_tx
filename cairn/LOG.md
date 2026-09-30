@@ -18,7 +18,11 @@
   目前没有。已知取舍：Chireix 负载调制只进效率律。
 - 容器回收后环境被清空（pytest、Qt GL 库），`apt-get update` 后补装即可；
   main 基线在此环境下是 265 passed / 7 errors 而非 272，全是 `libEGL` 缺失。
-- 分支 `feat/outphasing-tx`，一个 PR。详见 `CHANGELOG.md` 与 `docs/architecture.md` §6。
+- 分支 `feat/outphasing-tx`，PR #1。CI 11/12 绿；`vendor-drift` 红的根因是
+  `pll_simulator` 已转 private，Actions 默认 token 取不到（`PA_DPD` 同 job 正常），
+  `--fail-on-skip` 正确拒绝了 22 个不可校验文件——与本 PR 无关，main 同样会红。
+  已加 `SIBLING_READ_TOKEN || github.token` 回退，需仓库 secret 或改回 public。
+  详见 `CHANGELOG.md` 与 `docs/architecture.md` §6。
 
 ## 2026-09-13 · 查证 C3：上游已自行修复，顺势把 pllsim 子树推进到 931cfaf
 
