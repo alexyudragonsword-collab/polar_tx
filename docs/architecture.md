@@ -47,9 +47,11 @@ src/polartx/
 │   ├── dpa.py        码表化 DPA（预计算后向量化）
 │   ├── mismatch.py   温度计+二进制阵列失配 → 幅度表/INL/DNL
 │   ├── characteristics.py  AM-AM/AM-PM：ideal | scpa | lut
-│   └── combiner.py   Doherty / 多核合路
+│   └── combiner.py   Doherty / 多核合路 + Outphasing 合路（isolated / Chireix）
 ├── chain.py          ★ ChainConfig + PolarTX + PolarResult（见 §3）
 ├── fir.py            双抽头 FIR TX（RFIC'26 类 MLO 陷波），与主链同口径
+├── outphasing.py     Outphasing（LINC/Chireix）TX：兄弟类包住 PolarTX 跑两路恒包络分支，
+│                     合路器在 dpa/combiner.py；与主链同口径（见 §6 "新发射机拓扑"）
 ├── impairments.py    分数延迟 skew 注入、ZOH、包络量化
 ├── cal/              校准
 │   ├── skew.py       AM/PM 路径延迟失配：估计 + 修正
@@ -161,6 +163,7 @@ commit 与路径，`tools/vendor_check.py` + CI 的 `vendor-drift` job 每次 pu
 | 新指标 | `metrics/` | 声明测量口径；输入不足要抛异常，不返回 NaN |
 | 新对标预设 | `presets.py` 的 `bench_*` + `polartx.__all__` | 必须进 `guiutil.PRESETS`（有测试挡） |
 | 新 GUI 页面 | `guiutil.py` 放计算 | **两个桌面/网页前端都要接**，两边都要有测试 |
+| 新发射机拓扑 | 兄弟类包住 `PolarTX`（照 `fir.py` / `outphasing.py`），自带结果类并提供同名指标方法 `evm/aclr/psd/check_mask/avg_efficiency` + `evm_equalize_default`，预设带 `.tx` 别名进 `guiutil.PRESETS` | **不在 `ChainConfig` 加开关、不改 `chain.py`**；理想链下 EVM 必须与极坐标理想链一致（有测试挡），不适用的 `ChainConfig` 字段在 docstring 里列明 |
 | Android 能力 | `appbridge.py` 加方法 + `app.js` 加 render | 必须**同一次改动**里配对，`test_android_parity.py` 双向卡死 |
 
 ## 7. 已知边界

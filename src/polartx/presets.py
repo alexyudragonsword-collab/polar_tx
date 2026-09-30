@@ -6,7 +6,9 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Callable
 
 from .chain import ChainConfig, PolarTX
+from .dpa.combiner import OutphasingCombiner
 from .dpa.dpa import DPA, DPAConfig
+from .outphasing import OutphasingTX
 from .phasemod.adpll_tp import ADPLLTwoPoint
 from .phasemod.dtc_openloop import DTCPhaseModulator, DTCPMConfig
 from .vendor.pllsim.arch.adpll import ADPLL, ADPLLConfig, DLFConfig
@@ -388,6 +390,51 @@ def bench_wifi7_mlo_fir_borokhovich26(bw: float = 40e6, *,
 
     return FIRTxPreset(fir_tx=fir_tx, single_tx=base.tx,
                        fs_bb=base.fs_bb, make_waveform=make_waveform)
+
+
+@dataclass
+class OutphasingTxPreset:
+    """An OutphasingTX plus its waveform factory and the polar chain it was
+    derived from — the same frequency plan, phase modulator, DPA and CFR,
+    decomposed polar instead of outphasing — so the two topologies can be
+    A/B'd on one waveform.
+
+    ``.tx`` aliases the outphasing chain so this preset is interchangeable
+    with ``TxPreset`` anywhere the report and GUI layers are used (the
+    preset registry included); ``.polar_tx`` stays available for the
+    comparison."""
+    outphasing_tx: OutphasingTX  # the two-branch chain
+    polar_tx: PolarTX            # same plan, polar decomposition (A/B reference)
+    fs_bb: float
+    make_waveform: Callable[..., Waveform]
+
+    @property
+    def tx(self) -> OutphasingTX:
+        """The outphasing chain, aliased so this preset is drop-in compatible
+        with ``TxPreset`` throughout the report and GUI layers."""
+        return self.outphasing_tx
+
+
+def wifi_outphasing(bw: float = 160e6, qam: int = 1024, *,
+                    combiner: OutphasingCombiner | None = None,
+                    **kw) -> OutphasingTxPreset:
+    """WiFi 6/7 outphasing TX on the ``wifi_dtc`` frequency plan.
+
+    Every keyword ``wifi_dtc`` accepts is forwarded unchanged (n_bits,
+    jitter, LO, CFR target, DPA, ...), so the outphasing and polar chains
+    are built from one description and differ only in the decomposition.
+    ``combiner`` selects the combining network; the default is a Chireix
+    combiner compensated at 60° with 0.4 dB insertion loss, no imbalance.
+    Envelope-path knobs passed here (``env_skew_s``, ``env_floor``) reach
+    the polar reference chain only — outphasing has no envelope path, see
+    ``outphasing`` module docstring.
+    """
+    base = wifi_dtc(bw=bw, qam=qam, **kw)
+    if combiner is None:
+        combiner = OutphasingCombiner(mode="chireix")
+    return OutphasingTxPreset(outphasing_tx=OutphasingTX(base.tx, combiner),
+                              polar_tx=base.tx, fs_bb=base.fs_bb,
+                              make_waveform=base.make_waveform)
 
 
 def bench_wifi11n_polar() -> TxPreset:

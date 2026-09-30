@@ -28,6 +28,12 @@ def _registry():
         "WiFi 320 MHz": lambda **o: P.wifi_dtc(bw=320e6, **o),
         "NR FR1 100 MHz": lambda **o: P.nr_dtc(bw=100e6, **o),
         "NR FR2 200 MHz": lambda **o: P.nr_dtc(bw=200e6, **o),
+        # outphasing topology on the WiFi 160 MHz plan: an OutphasingTxPreset,
+        # interchangeable here via its .tx alias (same mechanism as the FIR
+        # bench preset).  Not "Bench:" — it is a standard chain, A/B'd
+        # against "WiFi 160 MHz" on the same waveform.
+        "WiFi 160 MHz (outphasing)":
+            lambda **o: P.wifi_outphasing(bw=160e6, **o),
         "Bench: Staszewski'05 EDGE": lambda **o: P.bench_edge_polar_staszewski05(),
         "Bench: Madoglio'14 LTE-20": lambda **o: P.bench_lte20_polar_madoglio14(),
         "Bench: BenBassat'20 WiFi6": lambda **o: P.bench_wifi6_polar_benbassat20(),

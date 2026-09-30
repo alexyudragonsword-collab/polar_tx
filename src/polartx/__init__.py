@@ -19,14 +19,17 @@ from .cal.polar_dpd import PolarDPD
 from .montecarlo import MCResult, run_mc, wifi_chip_builder
 from .polar import bandwidth_expansion, polar_recombine, polar_split
 from .fir import FIRDualTapTX, delay_for_notch, notch_offsets
+from .dpa.combiner import OutphasingCombiner
+from .outphasing import OutphasingResult, OutphasingTX, outphasing_decompose
 from .selector import Requirement, SelectorReport, select
-from .presets import (FIRTxPreset, TxPreset, bench_edge_polar_staszewski05,
+from .presets import (FIRTxPreset, OutphasingTxPreset, TxPreset,
+                      bench_edge_polar_staszewski05,
                       bench_lte20_polar_madoglio14,
                       bench_wifi6_polar_benbassat20,
                       bench_wifi7_mlo_fir_borokhovich26,
                       bench_wifi7_polar_degani24, bench_wifi11n_polar,
                       ble_1m_adpll, ble_2m_adpll, ble_adpll, bt_edr_adpll,
-                      lte20_adpll, nr_dtc, wifi_dtc)
+                      lte20_adpll, nr_dtc, wifi_dtc, wifi_outphasing)
 from .waveforms import (Waveform, edr_dpsk, gfsk_ble, ofdm_waveform,
                         wifi_waveform)
 from .waveforms.ofdm import lte_waveform, nr_waveform
@@ -45,6 +48,8 @@ __all__ = [
     "bench_wifi6_polar_benbassat20", "bench_wifi7_polar_degani24",
     "bench_wifi7_mlo_fir_borokhovich26", "bench_wifi11n_polar",
     "FIRTxPreset", "FIRDualTapTX", "delay_for_notch", "notch_offsets",
+    "OutphasingTxPreset", "OutphasingTX", "OutphasingResult",
+    "OutphasingCombiner", "outphasing_decompose", "wifi_outphasing",
     "Requirement", "SelectorReport", "select",
     "Waveform", "edr_dpsk", "gfsk_ble", "lte_waveform", "nr_waveform",
     "ofdm_waveform", "wifi_waveform",

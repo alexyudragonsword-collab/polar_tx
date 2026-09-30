@@ -16,7 +16,7 @@
 | [`ROADMAP.md`](ROADMAP.md) | 想知道**还差什么** | 只写未完成项：被外部阻塞的、已知模型缺口、明确不做的 |
 | [`docs/android.md`](docs/android.md) | 要**改 Android 版** | 可行性闸门、版本集、编译版实测买到了什么、刻意不做的功能 |
 | [`AGENTS.md`](AGENTS.md) | 用 AI agent 开发 | 仓库级规则与导航（Project Cairn 入口）。`CLAUDE.md` 只有一行 `@AGENTS.md`，Codex 直接读 `AGENTS.md` |
-| `examples/ex01`–`ex18` | 想看**可执行的例子** | 18 个成套脚本，CI 每次 push 全部跑一遍 |
+| `examples/ex01`–`ex19` | 想看**可执行的例子** | 19 个成套脚本，CI 每次 push 全部跑一遍 |
 
 ```
 Waveform → [CFR] → polar split → 包络路径（量化/skew/DPA 幅度码）─┐
@@ -34,7 +34,7 @@ Waveform → [CFR] → polar split → 包络路径（量化/skew/DPA 幅度码�
 
 ```bash
 pip install -e .          # numpy / scipy / matplotlib
-pytest tests/             # 235 个测试函数（参数化后实收更多）：物理量断言 + 与 padpd 逐位回归
+pytest tests/             # 246 个测试函数（参数化后实收更多）：物理量断言 + 与 padpd 逐位回归
 python examples/ex01_ble_gfsk_adpll.py      # 图落在 examples/out/
 
 pip install -e .[gui]     # Streamlit 网页工作台
@@ -165,6 +165,7 @@ src/polartx/
 | `ex16_architecture_selector.py` | **架构选择器**：目标制式决策表（BLE/LTE→ADPLL，WiFi/NR→DTC）+ EVM-带宽交叉图（校准两点 vs 未校准 ADPLL 曲线、~50 MHz 覆盖封顶） |
 | `ex17_rtl_ams_datapath.py` | **更全 RTL/AMS 导出**：CFR 削波 + DTC 相位累加器 + DPA 温度计译码器（iverilog 零失配）+ DPA Verilog-AMS `wreal` RNM 模型（数字↔模拟协仿桥，LUT 自校验） |
 | `ex18_doherty_combining.py` | **多核/Doherty 合路**：效率-回退（单核 vs 2/3 路、理想-B vs class-C）、核间失配交接拐点 + 蒙卡良率、Doherty-DPA 入 WiFi 链（平均效率 43%→58% @ 同 EVM） |
+| `ex19_outphasing_vs_polar.py` | **Outphasing（LINC/Chireix）vs 极坐标同台**（`polartx.outphasing`，兄弟类包住同一条 WiFi 160 MHz 链跑两路恒包络分支）：同波形同 CFR 同 DTC 同 DPA 同 seed 的一张表——EVM −37.1 vs −40.0 dB、ACLR −49 vs −58 dBc、平均效率 Chireix 40% / isolated 10% vs 极坐标 43%、θ>80° 占比 21%；分支谱比信道宽得多；各自最敏感的旋钮（极坐标 AM/PM skew 对 outphasing 逐位无效；outphasing 的分支相位失配 1° 与闭式预算差 0.35 dB） |
 
 ## 许可 / License
 
