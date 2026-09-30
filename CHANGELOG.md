@@ -10,6 +10,35 @@ release 分组。
 
 ## 未发布 / Unreleased
 
+### 选型器四候选 + 三架构同台表（阶段 3：同台对比）（2026-09-30）
+
+`selector.py` 从两候选（ADPLL / DTC）扩到四候选：`_score_outphasing`——DTC 地板
+逐项加 10log10(PAPR/2) dB（两路分支恒满幅，独立噪声按功率比放大；共模 LO 不加，
+`outphasing_shared_lo=False` 时也加），再加分支相位失配闭式项
+`20log10 δ + 10log10((PAPR−1)/4) + quad_inband_db`（带内占比 −7.5 dB 是在
+WiFi 160 MHz 波形上按 `phase_mismatch_evm_budget_db` 实测的常数，测试对照 1°/2°
+差 < 0.1 dB）；`_score_rfdac`——两轴量化 2Δ²/12 摊到过采样率上（6 bit 链路实测
+−41.5 vs 闭式 −41.1）、LO 抖动、镜像 −IRR。每个候选新增 `eta_avg`：各自效率律
+（SCPA / Chireix / iq_cells 相位平均 4a/π）在截断瑞利包络分布上积分，与链路
+实测差 < 0.01（0.428/0.402/0.270 vs 0.428/0.400/0.280）。
+
+**排序规则（本阶段决定）**：不可行垫底 → 达标者优先 → 达标者中效率最高 →
+EVM 最低；`Requirement.eta_avg_min` 把效率变硬门槛。理由：达标之后的 EVM
+裕度不值钱，效率值钱。验收：BLE 仍选 ADPLL；320 MHz 4096-QAM 不选 outphasing
+（比 DTC 差 7.3 dB 且效率更低）；`run_selector_report` 三个前端同步拿到四行
+和效率、交叉图四条曲线，`appbridge.py` 未动。
+
+阶段 3 的对照测试揪出两个建模缺口：**RF-DAC 链没有 LO 相噪**——阶段 2 的
+`RFDAC` 只有 50 fs 抖动，同台表里 −42.4 dB 比选型器乐观 15 dB。已补
+`RFDACConfig.lo_pn / lo_loop_bw`（与 `DTCPMConfig` 同字段同生成器），
+`wifi_rfdac` 带上同一计划的 LO；同台表 RF-DAC 改为 **−40.0 dB**，与极坐标
+相同——两者都被同一个 LO 限住。**outphasing 链两路 LO 相噪独立抽**（真机共模），
+链路里 ~3 dB 是它造成的；修它要碰主链，记入 ROADMAP B7，选型器默认按共模打分。
+
+`ex20` 表新增"最敏感旋钮的 1 dB 容忍度"列（4 符号 burst 二分）：极坐标 skew
+0.03 ns、outphasing 分支相位 0.74°、RF-DAC I/Q 相位 0.62°。`ex16` 决策表与
+交叉图同步四候选。
+
 ### 笛卡尔（RF-DAC）发射机拓扑（阶段 2：第三种架构）（2026-09-30）
 
 第三种发射机拓扑：数字 I/Q 发射机。`rfdac.py` 的 `RFDAC` 是 I/Q 两组电流单元

@@ -2,6 +2,25 @@
 
 本文件按倒序记录实质性进展——最新的一条在这行下面。每条保持简短，只写摘要和指针；结论沉淀进 `cairn/<topic>.md`。
 
+## 2026-09-30 · 阶段 3：选型器四候选，两个建模缺口被对照测试揪出
+
+- `selector.py` 四候选：outphasing = DTC 地板逐项 +10log10(PAPR/2)（分支恒满幅）
+  + 失配闭式（带内占比 −7.5 dB 为链路实测常数）；RF-DAC = 两轴量化/OSR + 抖动
+  + 镜像 −IRR。效率各按自己的律在截断瑞利分布上积分，与链路差 < 0.01。
+- **决定**（方案文档"阶段 3 前得定"）：排序 = 可行 → 达标 → 达标者中效率最高 →
+  EVM 最低；`eta_avg_min` 为硬门槛。达标后的 EVM 裕度不值钱、效率值钱。
+  验收：BLE 仍 ADPLL；320 MHz 4096-QAM 不选 outphasing（差 7.3 dB、效率更低）。
+- **更正阶段 2**：RF-DAC 链没有 LO 相噪，同台表 −42.4 dB 比选型器乐观 15 dB。
+  补 `RFDACConfig.lo_pn/lo_loop_bw`（同 DTC 字段与生成器），预设带同一 LO；
+  RF-DAC 改为 −40.0 dB，与极坐标持平——两者同被 LO 限住。抽象没变，数字变了。
+- **更正阶段 1 的认识**：outphasing 链两路 LO 相噪独立抽（seed/seed+1），真机共模；
+  链路里 outphasing 比极坐标差的 ~5 dB 中约 3 dB 由此而来。修它要碰主链，记
+  ROADMAP B7；选型器默认共模（`outphasing_shared_lo`），对照测试显式用 False。
+- 一个模型边界：截断瑞利在 PAPR 3.4 dB（8DPSK）时削顶质量 11%，自身 PAPR 3.9 dB。
+- ex20 加"最敏感旋钮 1 dB 容忍度"列：skew 0.03 ns / 分支相位 0.74° / I/Q 相位 0.62°。
+  三前端经 `run_selector_report` 同步拿四行 + 效率 + 四曲线，`appbridge.py` 未动。
+- 分支 `feat/selector-three-topologies`（叠在 `feat/rfdac-tx` 上），PR 待开。
+
 ## 2026-09-30 · RF-DAC 拓扑阶段 2：第三种架构进同一张表
 
 - 按方案文档做：`rfdac.py`（I/Q 两阵列，失配复用 `dpa/mismatch.py`，I/Q 失衡 /
