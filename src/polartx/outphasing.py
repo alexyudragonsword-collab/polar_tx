@@ -39,7 +39,9 @@ What the wrapped chain's ``ChainConfig`` means here:
 """
 from __future__ import annotations
 
+import copy
 from dataclasses import dataclass, field, replace
+from typing import Any
 
 import numpy as np
 
@@ -186,12 +188,21 @@ class OutphasingTX:
 
     ``run()`` applies the base chain's CFR to the composite, decomposes it
     into two constant-envelope branches (``outphasing_decompose``), runs the
-    base chain once per branch with independent noise (``seed`` and
+    base chain once per branch with independent branch noise (``seed`` and
     ``seed + 1``, as ``FIRDualTapTX`` does) and combines the two outputs
     through ``combiner``.  The branch runs use the base chain's phase
     modulator and DPA, with the envelope-path knobs neutralized (see the
     module docstring); ``branch_tx`` is that derived chain, kept public so
     it can be inspected.
+
+    The two branches hang off ONE LO: when the phase modulator carries an
+    LO phase-noise model (``DTCPMConfig.lo_pn``), both branch runs draw the
+    same LO sample (``lo_pn_seed = seed``) while their DTC edge jitter and
+    dither stay independent.  Two independent LO draws (the stage-1
+    behaviour) were the whole ~5 dB outphasing-over-polar floor penalty on
+    the WiFi 160 MHz burst: with one LO the two chains are both LO-limited
+    and within 0.4 dB of each other.  ``shared_lo`` reports whether the
+    sharing is in effect.
     """
 
     def __init__(self, tx: PolarTX, combiner: OutphasingCombiner | None = None):
@@ -205,6 +216,21 @@ class OutphasingTX:
             replace(tx.cfg, cfr_papr_db=None, env_floor=0.0, env_skew_s=0.0,
                     env_headroom=1.0, fs_scale_fixed=None),
             tx.phasemod, tx.dpa, dpd=None, memory=tx.memory)
+        pm_cfg = getattr(tx.phasemod, "cfg", None)
+        self.shared_lo = (getattr(pm_cfg, "lo_pn", None) is not None
+                          and hasattr(pm_cfg, "lo_pn_seed"))
+
+    def _branch_chain(self, seed: int) -> PolarTX:
+        """The branch chain for one run: the template, with the phase
+        modulator's LO sample pinned to this run's seed when there is an
+        LO to share — a shallow copy, so calibration state is kept."""
+        if not self.shared_lo:
+            return self.branch_tx
+        pm: Any = copy.copy(self.branch_tx.phasemod)   # a DTC: has .cfg
+        pm.cfg = replace(pm.cfg, lo_pn_seed=int(seed))
+        btx = copy.copy(self.branch_tx)
+        btx.phasemod = pm
+        return btx
 
     def a_max(self, x: np.ndarray) -> float:
         """Full-scale amplitude the decomposition is referenced to: the
@@ -218,8 +244,9 @@ class OutphasingTX:
         """Run both branches and combine them.
 
         Branch 1 uses ``seed``, branch 2 ``seed + 1``: their deterministic
-        content is the decomposition, their random noise (LO, jitter, DTC
-        dither) is independent, as it is in two physical branches.
+        content is the decomposition, their branch noise (DTC jitter,
+        dither) is independent, as it is in two physical branches; the LO
+        phase-noise sample is common to both (one LO, ``shared_lo``).
         """
         c = self.tx.cfg
         info: dict = {}
@@ -229,10 +256,12 @@ class OutphasingTX:
             info["cfr_papr_db"] = c.cfr_papr_db
         a_max = self.a_max(x)
         s1, s2, theta = outphasing_decompose(x, a_max)
-        r1 = self.branch_tx.run(replace(wf, x=s1), noise=noise, seed=seed)
-        r2 = self.branch_tx.run(replace(wf, x=s2), noise=noise, seed=seed + 1)
+        btx = self._branch_chain(seed)
+        r1 = btx.run(replace(wf, x=s1), noise=noise, seed=seed)
+        r2 = btx.run(replace(wf, x=s2), noise=noise, seed=seed + 1)
         y = self.combiner.combine(r1.y, r2.y)
         info["a_max"] = a_max
+        info["shared_lo"] = self.shared_lo
         info["theta"] = theta_stats(theta)
         info["combining_loss_db"] = self.combiner.combining_loss_db()
         info["phasemod"] = (r1.info.get("phasemod"), r2.info.get("phasemod"))

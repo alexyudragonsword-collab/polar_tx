@@ -278,8 +278,8 @@ def test_rfdac_quantization_term_matches_the_chain(burst):
 def test_technology_floors_track_the_three_chains(burst):
     """Noise on, floors only: the analytic RF-DAC and polar floors are equal
     (same LO, both LO-limited) and the chains agree; the outphasing penalty
-    over polar matches the chain, which draws each branch's LO noise
-    independently (``outphasing_shared_lo=False``)."""
+    over polar matches the chain, whose two branches share one LO
+    (``outphasing_shared_lo=True``, the default)."""
     p, wf, _, papr, floor = burst
     o = wifi_outphasing(bw=160e6, qam=1024)
     with warnings.catch_warnings():
@@ -290,14 +290,14 @@ def test_technology_floors_track_the_three_chains(burst):
     req = Requirement("w", 160e6, "ofdm", fout=5.9e9, dtc_bits=11, dac_bits=12,
                       papr_db=papr, dtc_inl_floor_db=float("-inf"),
                       iq_gain_err_db=0.0, iq_phase_err_deg=0.0,
-                      branch_phase_mismatch_deg=0.0, outphasing_shared_lo=False,
+                      branch_phase_mismatch_deg=0.0, outphasing_shared_lo=True,
                       synth_loop_bw=400e3)
     d = _by_arch(select(req))
     ana = {"polar": d["dtc_open_loop"].evm_db, "outph": d["outphasing"].evm_db,
            "rfdac": d["rfdac_cartesian"].evm_db}
     assert abs((ana["rfdac"] - ana["polar"]) - (meas["rfdac"] - meas["polar"])) < 1.0
     assert abs((ana["outph"] - ana["polar"]) - (meas["outph"] - meas["polar"])) < 2.0
-    # measured (4 symbols): polar -43.1, outphasing -39.1, RF-DAC -43.1
+    # measured (4 symbols, shared LO): polar -43.1, outphasing -43.4, RF-DAC -43.1
     for k in meas:
         assert abs(ana[k] - meas[k]) < 5.0, (k, ana[k], meas[k])
 

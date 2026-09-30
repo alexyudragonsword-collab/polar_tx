@@ -210,3 +210,52 @@ def test_preset_shares_the_frequency_plan_with_wifi_dtc():
     r = o.tx.run(o.make_waveform(n_symbols=3, seed=0), noise=True, seed=1)
     assert r.evm_equalize_default == "scalar"        # same convention as polar
     assert r.evm().db < -30.0                         # measured -36.3 dB
+
+
+# --------------------------------------- one LO for both branches (B7)
+def test_branches_share_one_lo_and_the_penalty_matches_the_shared_lo_budget():
+    """The two DTC branches hang off one PLL, so their LO phase noise is
+    common: the outphasing floor over the polar floor must then be the
+    selector's shared-LO budget (independent floors +10log10(PAPR/2) only,
+    the synth term unchanged) rather than the independent-LO one, which
+    the stage-1 chain simulated and which was ~5 dB too pessimistic.  The
+    CFR floor is subtracted in power so only the technology floors are
+    compared, on the same 4-symbol burst."""
+    from polartx import CartesianTX, RFDAC, RFDACConfig
+    from polartx.selector import Requirement, select
+    p = wifi_dtc(bw=160e6, qam=1024)
+    wf4 = p.make_waveform(n_symbols=4, seed=0)
+    x = cfr_clip_filter(wf4.x, CFR_DB, wf4.fs, wf4.bw)
+    papr = float(10 * np.log10(np.abs(x).max() ** 2 / np.mean(np.abs(x) ** 2)))
+    floor = CartesianTX(ChainConfig(cfr_papr_db=CFR_DB),
+                        RFDAC(RFDACConfig(n_bits=14))).run(wf4, noise=False).evm().db
+
+    def floors_only(evm_db):
+        return 10 * np.log10(10 ** (evm_db / 10) - 10 ** (floor / 10))
+
+    o = OutphasingTX(p.tx, OutphasingCombiner(mode="chireix"))
+    assert o.shared_lo
+    r = o.run(wf4, noise=True, seed=1)
+    assert r.info["shared_lo"] is True
+    gap = floors_only(r.evm().db) - floors_only(p.tx.run(wf4, noise=True, seed=1).evm().db)
+    kw = dict(bw_hz=160e6, modulation="ofdm", fout=5.9e9, dtc_bits=11, papr_db=papr,
+              dtc_inl_floor_db=float("-inf"), branch_phase_mismatch_deg=0.0,
+              synth_loop_bw=400e3)
+    def budget(shared):
+        d = {c.arch: c for c in select(Requirement("w", outphasing_shared_lo=shared,
+                                                    **kw)).candidates}
+        return d["outphasing"].evm_db - d["dtc_open_loop"].evm_db
+    assert abs(gap - budget(True)) < 1.5, (gap, budget(True))    # -0.3 vs 0.44 (8 sym: 0.4)
+    assert gap < budget(False) - 1.5                              # not the 5.9 dB case
+    # the two branch modulators are the base one with the LO pinned; the
+    # base chain and its calibration state are untouched
+    assert o.branch_tx.phasemod is p.tx.phasemod
+    assert o.branch_tx.phasemod.cfg.lo_pn_seed is None
+    assert o._branch_chain(5).phasemod.cfg.lo_pn_seed == 5
+
+
+def test_no_lo_model_means_nothing_to_share(ideal):
+    polar, _ = ideal
+    o = OutphasingTX(polar, _lossless())
+    assert not o.shared_lo
+    assert o._branch_chain(3) is o.branch_tx
