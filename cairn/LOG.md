@@ -20,7 +20,7 @@
   RF-DAC −42.4 / −60 / 28.0%。线性最好效率最差，教科书取舍成立。
 - 判断：抽象第三次站住。下一步抽 `TXResult` Protocol 的信号仍是报告层出现
   isinstance，`ex20` 里的 `hasattr(res, "rfdac")` 是目前唯一一处分派，留待后定。
-- 分支 `feat/rfdac-tx`，PR 待开。
+- 分支 `feat/rfdac-tx`，PR #2，CI 全绿（含 vendor-drift）。本地 303 passed / 11 skipped。
 
 ## 2026-09-30 · Outphasing 拓扑阶段 1：抽象站住了
 
