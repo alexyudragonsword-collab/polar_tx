@@ -34,6 +34,10 @@ def _registry():
         # against "WiFi 160 MHz" on the same waveform.
         "WiFi 160 MHz (outphasing)":
             lambda **o: P.wifi_outphasing(bw=160e6, **o),
+        # digital I/Q (RF-DAC) topology on the same plan; a CartesianTxPreset
+        # via its .tx alias.  The shared "n_bits" knob means DAC bits here.
+        "WiFi 160 MHz (RF-DAC)":
+            lambda **o: P.wifi_rfdac(bw=160e6, **o),
         "Bench: Staszewski'05 EDGE": lambda **o: P.bench_edge_polar_staszewski05(),
         "Bench: Madoglio'14 LTE-20": lambda **o: P.bench_lte20_polar_madoglio14(),
         "Bench: BenBassat'20 WiFi6": lambda **o: P.bench_wifi6_polar_benbassat20(),

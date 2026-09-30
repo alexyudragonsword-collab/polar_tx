@@ -52,6 +52,10 @@ src/polartx/
 ├── fir.py            双抽头 FIR TX（RFIC'26 类 MLO 陷波），与主链同口径
 ├── outphasing.py     Outphasing（LINC/Chireix）TX：兄弟类包住 PolarTX 跑两路恒包络分支，
 │                     合路器在 dpa/combiner.py；与主链同口径（见 §6 "新发射机拓扑"）
+├── rfdac.py          RF-DAC：I/Q 两组电流单元阵列（失配复用 dpa/mismatch.py）、I/Q 失衡、
+│                     LO 泄漏、时钟抖动（DTC 口径）、I²+Q² / (|I|+|Q|) 效率律
+├── cartesian.py      数字 I/Q TX：CartesianTX 只读 ChainConfig 的 cfr_papr_db，包络/相位路径
+│                     字段忽略并告警；CartesianResult 自带同名指标方法
 ├── impairments.py    分数延迟 skew 注入、ZOH、包络量化
 ├── cal/              校准
 │   ├── skew.py       AM/PM 路径延迟失配：估计 + 修正
@@ -163,7 +167,7 @@ commit 与路径，`tools/vendor_check.py` + CI 的 `vendor-drift` job 每次 pu
 | 新指标 | `metrics/` | 声明测量口径；输入不足要抛异常，不返回 NaN |
 | 新对标预设 | `presets.py` 的 `bench_*` + `polartx.__all__` | 必须进 `guiutil.PRESETS`（有测试挡） |
 | 新 GUI 页面 | `guiutil.py` 放计算 | **两个桌面/网页前端都要接**，两边都要有测试 |
-| 新发射机拓扑 | 兄弟类包住 `PolarTX`（照 `fir.py` / `outphasing.py`），自带结果类并提供同名指标方法 `evm/aclr/psd/check_mask/avg_efficiency` + `evm_equalize_default`，预设带 `.tx` 别名进 `guiutil.PRESETS` | **不在 `ChainConfig` 加开关、不改 `chain.py`**；理想链下 EVM 必须与极坐标理想链一致（有测试挡），不适用的 `ChainConfig` 字段在 docstring 里列明 |
+| 新发射机拓扑 | 兄弟类包住 `PolarTX`（照 `fir.py` / `outphasing.py`），自带结果类并提供同名指标方法 `evm/aclr/psd/check_mask/avg_efficiency` + `evm_equalize_default`，预设带 `.tx` 别名进 `guiutil.PRESETS` | **不在 `ChainConfig` 加开关、不改 `chain.py`**；理想链下 EVM 必须与极坐标理想链一致（有测试挡），不适用的 `ChainConfig` 字段在 docstring 里列明，且被设成非默认值时要**告警**而不是静默忽略（照 `cartesian.py` 的 `ignored_chain_settings`，有测试挡） |
 | Android 能力 | `appbridge.py` 加方法 + `app.js` 加 render | 必须**同一次改动**里配对，`test_android_parity.py` 双向卡死 |
 
 ## 7. 已知边界

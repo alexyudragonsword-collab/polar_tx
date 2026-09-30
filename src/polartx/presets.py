@@ -6,9 +6,11 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Callable
 
 from .chain import ChainConfig, PolarTX
+from .cartesian import CartesianTX
 from .dpa.combiner import OutphasingCombiner
 from .dpa.dpa import DPA, DPAConfig
 from .outphasing import OutphasingTX
+from .rfdac import RFDAC, RFDACConfig
 from .phasemod.adpll_tp import ADPLLTwoPoint
 from .phasemod.dtc_openloop import DTCPhaseModulator, DTCPMConfig
 from .vendor.pllsim.arch.adpll import ADPLL, ADPLLConfig, DLFConfig
@@ -435,6 +437,63 @@ def wifi_outphasing(bw: float = 160e6, qam: int = 1024, *,
     return OutphasingTxPreset(outphasing_tx=OutphasingTX(base.tx, combiner),
                               polar_tx=base.tx, fs_bb=base.fs_bb,
                               make_waveform=base.make_waveform)
+
+
+@dataclass
+class CartesianTxPreset:
+    """A CartesianTX plus its waveform factory and the polar chain built
+    from the same description — same frequency plan, same CFR — so the
+    two topologies can be A/B'd on one waveform.
+
+    ``.tx`` aliases the Cartesian chain so this preset is interchangeable
+    with ``TxPreset`` anywhere the report and GUI layers are used;
+    ``.polar_tx`` stays available for the comparison."""
+    cartesian_tx: CartesianTX    # the I/Q chain
+    polar_tx: PolarTX            # same plan, polar decomposition (A/B reference)
+    fs_bb: float
+    make_waveform: Callable[..., Waveform]
+
+    @property
+    def tx(self) -> CartesianTX:
+        """The Cartesian chain, aliased so this preset is drop-in compatible
+        with ``TxPreset`` throughout the report and GUI layers."""
+        return self.cartesian_tx
+
+
+def wifi_rfdac(bw: float = 160e6, qam: int = 1024, *, n_bits: int = 12,
+               rfdac: RFDACConfig | None = None, **kw) -> CartesianTxPreset:
+    """WiFi 6/7 digital I/Q (RF-DAC) TX on the ``wifi_dtc`` frequency plan.
+
+    ``n_bits`` is the RF-DAC's per-axis magnitude resolution (12 by
+    default; the GUI's shared "n_bits" knob lands here, where it means DAC
+    bits rather than DTC bits).  ``rfdac`` supplies the full RF-DAC
+    configuration — mismatch, I/Q imbalance, LO leakage, jitter — and
+    overrides ``n_bits``; the default is a 12-bit, 6-thermometer-bit array
+    with 0.2 % cell mismatch, 50 fs clock jitter on the plan's ``fout``
+    and no I/Q imbalance or leakage (impairments are opt-in, so a number
+    in the comparison table is attributable to a knob someone set).
+
+    Every other keyword is forwarded to ``wifi_dtc`` to build the polar
+    reference chain from the same description.  The Cartesian chain is
+    handed only the architecture-agnostic part of that chain's
+    ``ChainConfig`` (``cfr_papr_db``) plus ``env_skew_s`` — so a skew
+    someone passes here is warned about by ``CartesianTX`` rather than
+    silently dropped, while the polar preset's own envelope defaults
+    (hole punching) are not carried across.
+    """
+    base = wifi_dtc(bw=bw, qam=qam, **kw)
+    c = base.tx.cfg
+    if rfdac is None:
+        # the plan's RF frequency lives on the DTC config; the protocol type
+        # does not promise one, hence the getattr
+        pm_cfg = getattr(base.tx.phasemod, "cfg", None)
+        rfdac = RFDACConfig(n_bits=n_bits, n_thermo=6, sigma_cell=0.002,
+                            jitter_rms_s=50e-15,
+                            fout=float(getattr(pm_cfg, "fout", 5.9e9)))
+    ctx = CartesianTX(ChainConfig(cfr_papr_db=c.cfr_papr_db,
+                                  env_skew_s=c.env_skew_s), RFDAC(rfdac))
+    return CartesianTxPreset(cartesian_tx=ctx, polar_tx=base.tx,
+                             fs_bb=base.fs_bb, make_waveform=base.make_waveform)
 
 
 def bench_wifi11n_polar() -> TxPreset:
