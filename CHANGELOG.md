@@ -10,6 +10,34 @@ release 分组。
 
 ## 未发布 / Unreleased
 
+### 笛卡尔（RF-DAC）发射机拓扑（阶段 2：第三种架构）（2026-09-30）
+
+第三种发射机拓扑：数字 I/Q 发射机。`rfdac.py` 的 `RFDAC` 是 I/Q 两组电流单元
+阵列（符号-幅度码，I 阵列用 `seed`、Q 阵列用 `seed+1`，单元失配**复用**
+`dpa/mismatch.py` 的 `code_amplitude_table`），带笛卡尔架构特有的损伤：I/Q
+增益/相位失衡（镜像，`iq_image_rejection_db` 给精确 IRR）、LO 泄漏（DC 项）、
+时钟抖动（DTC 口径 2π·fout·σ_τ，受 `noise` 门控）；效率律 `("iq_cells", η_peak)`：
+负载拿 I²+Q²，阵列付 |I|+|Q|。`cartesian.py` 的 `CartesianTX(cfg, rfdac)` 吃同一个
+`ChainConfig`，但只读 `cfr_papr_db`；其余十个包络/相位路径字段被设成非默认值时
+**告警**（`UserWarning` 点名字段）而不是静默无效——这是本仓反复踩的"旋钮看着接了
+其实没接"的反面。`CartesianResult` 自带同名指标方法（没有极坐标运行可借），
+`wifi_rfdac` 预设带 `.tx` 别名进注册表 "WiFi 160 MHz (RF-DAC)"。
+`chain.py`、`ChainConfig`、`PolarResult` 仍一行未改。
+
+五条验收全部是测试（`tests/test_rfdac.py`、`tests/test_cartesian_chain.py`）：
+无失配 14 bit 下 EVM 与极坐标理想链**相差 0.001 dB**（6 bit 差 3 dB、16 bit 无变化，
+证明地板是 CFR 的）；0.1 dB/1° 失衡的单音镜像与解析 IRR **精确一致**（39.61 dB，
+与教科书 4/(g²+φ²) 差 0.01 dB），调制链上 EVM 退化贴着 −IRR；同 `(n_bits, n_thermo,
+sigma_cell, gradient, seed)` 下 I 阵列的 INL/DNL 向量与 `DPA.inl_dnl()` **逐元素相等**，
+失配误差功率随 σ_cell **20 dB/十倍**（6+4 分段 10 bit 在 1% 时低于 CFR 地板 30 dB，
+所以不动 EVM——断言的是误差本身）；6 dB 回退 RF-DAC 轴上 42.5% < SCPA 50.9%，
+同一 burst 平均 28.3% < 42.8%；`env_skew_s ≠ 0` 触发告警且输出**逐位相同**。
+
+`ex20_three_topologies.py` 三架构同台（真实预设，加噪）：极坐标 −40.0 dB / −58 dBc /
+42.8%；outphasing −37.1 / −49 / 40.0%；RF-DAC **−42.4 / −60 / 28.0%**。RF-DAC 线性
+最好、效率最差，正是这三种拓扑的教科书取舍。已知取舍：效率律不含单元充放电项
+（乐观的 RF-DAC 律）；`backoff_db` 以轴上满码为基准，对角峰可高出 √2。
+
 ### Outphasing 发射机拓扑（阶段 1：验证抽象）（2026-09-30）
 
 第二种发射机拓扑，与极坐标链**同波形、同 CFR、同相位调制器、同 DPA 模型、
