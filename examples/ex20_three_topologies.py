@@ -7,7 +7,14 @@ same ``ChainConfig`` (only ``cfr_papr_db`` is read; everything else names
 a path it does not have and is warned about) and the same unit-cell
 mismatch model as the polar DPA.  One table:
 
-    EVM | ACLR | mask OOB margin | average efficiency
+    EVM | ACLR | mask OOB margin | average efficiency | 1-dB tolerance
+
+The last column is each topology's tolerance to ITS OWN sharpest knob:
+the largest value of that knob that still keeps the EVM within 1 dB of the
+chain's unimpaired number (bisection on a 4-symbol burst) — AM/PM path
+skew for polar, branch phase mismatch for outphasing, I/Q phase error for
+the RF-DAC.  Three different units, on purpose: they are the numbers a
+calibration has to hit, and they are not comparable across topologies.
 
 Part 1  the table (also on stdout), real impairments, noise on.
 Part 2  spectra of the three outputs.
@@ -23,6 +30,7 @@ Part 4  the RF-DAC's own sharpest knob: I/Q imbalance.  EVM against the
 """
 import os
 import warnings
+from dataclasses import replace
 
 import matplotlib
 matplotlib.use("Agg")
@@ -65,20 +73,64 @@ def eta_avg(res):
     return r["eta_avg"]
 
 
+# ----------------------------------- each topology's sharpest knob
+CFR = polar_p.tx.cfg.cfr_papr_db
+wf4 = polar_p.make_waveform(n_symbols=4, seed=0)     # the tolerance search burst
+
+
+def polar_with_skew(s_ns):
+    return wifi_dtc(bw=BW, qam=QAM, env_skew_s=s_ns * 1e-9).tx
+
+
+def outphasing_with_mismatch(d_deg):
+    return OutphasingTX(polar_p.tx, OutphasingCombiner(
+        mode="chireix", chireix_theta_c_deg=60.0, phase_imbalance_deg=(0.0, d_deg)))
+
+
+def rfdac_with_iq_phase(d_deg):
+    return CartesianTX(ChainConfig(cfr_papr_db=CFR),
+                       RFDAC(replace(rfdac_p.tx.rfdac.cfg, iq_phase_deg=d_deg)))
+
+
+def tolerance_1db(make_tx, hi, n_iter=8):
+    """Largest knob value whose EVM stays within 1 dB of the knob-at-zero
+    EVM (same burst, same seed): bisection between 0 and ``hi``."""
+    evm0 = make_tx(0.0).run(wf4, noise=True, seed=SEED).evm().db
+    lo = 0.0
+    for _ in range(n_iter):
+        mid = 0.5 * (lo + hi)
+        if make_tx(mid).run(wf4, noise=True, seed=SEED).evm().db <= evm0 + 1.0:
+            lo = mid
+        else:
+            hi = mid
+    return lo
+
+
+knobs = {
+    "polar (DTC + DPA)": ("AM/PM skew", "ns", polar_with_skew, 2.0),
+    "outphasing, Chireix 60°": ("branch phase", "deg", outphasing_with_mismatch, 10.0),
+    "Cartesian (RF-DAC 12 bit)": ("I/Q phase", "deg", rfdac_with_iq_phase, 10.0),
+}
+
 # ------------------------------------------------------ Part 1: the table
-print(f"=== WiFi {BW / 1e6:.0f} MHz {QAM}-QAM, 8 symbols, CFR "
-      f"{polar_p.tx.cfg.cfr_papr_db} dB, seed {SEED}, noise on ===")
-hdr = f"{'chain':28} {'EVM dB':>8} {'ACLR dBc':>9} {'OOB margin dB':>14} {'eta_avg %':>10}"
+print(f"=== WiFi {BW / 1e6:.0f} MHz {QAM}-QAM, 8 symbols, CFR {CFR} dB, "
+      f"seed {SEED}, noise on ===")
+hdr = (f"{'chain':28} {'EVM dB':>8} {'ACLR dBc':>9} {'OOB margin dB':>14} "
+       f"{'eta_avg %':>10}  1-dB tolerance of its sharpest knob")
 print(hdr)
 print("-" * len(hdr))
-results = {}
+results, tol = {}, {}
 for name, tx in chains.items():
     r = tx.run(wf, noise=True, seed=SEED)
     results[name] = r
+    label, unit, make, hi = knobs[name]
+    tol[name] = tolerance_1db(make, hi)
     print(f"{name:28} {r.evm().db:8.2f} {r.aclr()['upper_dbc']:9.1f} "
-          f"{oob_margin_db(r):14.1f} {eta_avg(r) * 100:10.1f}")
+          f"{oob_margin_db(r):14.1f} {eta_avg(r) * 100:10.1f}  "
+          f"{label} {tol[name]:.2f} {unit}")
 print("(RF-DAC impairments in this row: 0.2 % cell mismatch on both arrays, "
-      "50 fs LO jitter; no I/Q imbalance, no LO leakage -- opt-in knobs)")
+      "50 fs LO jitter, the plan's LO phase noise; no I/Q imbalance, no LO "
+      "leakage -- opt-in knobs)")
 
 # ------------------------------------------------ Part 2: spectra
 fig, ax = plt.subplots(2, 2, figsize=(13, 9))
