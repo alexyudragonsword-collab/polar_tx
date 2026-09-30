@@ -1,5 +1,6 @@
 """Open-loop DTC phase modulator: quantization, dither, INL spurs, ZOH."""
 import numpy as np
+import pytest
 
 from polartx.analysis.responses import (dtc_quant_phase_rms, inl_sin_spur_dbc,
                                         zoh_image_dbc)
@@ -73,3 +74,38 @@ def test_zoh_update_clock_images():
     img_bin = n - int(round((f_up - f_sig) * n / FS))   # negative frequency
     meas = spec[img_bin - 2: img_bin + 3].max()
     assert abs(meas - zoh_image_dbc(f_sig, f_up)) < 2.0
+
+
+def test_lo_pn_seed_pins_the_lo_sample_independently_of_the_run_seed():
+    """One LO shared by two modulators: with ``lo_pn_seed`` set, two runs
+    with different run seeds draw the IDENTICAL LO phase-noise sample (no
+    jitter here, so the outputs are equal); with it unset the LO follows
+    the run seed and the two differ.  Jitter, when on, must stay on the
+    run seed: the difference between the two runs is then white."""
+    from polartx.vendor.pllsim.blocks.oscillator import OscConfig
+    lo = OscConfig(f0=5.9e9, gain=1.0, pn_dbchz=-115.0, pn_foffset=1e6,
+                   pn_f1f3=2e5, pn_floor_dbchz=-155.0)
+    ph = _cw_phase(10e6, n=1 << 14)
+    pinned = DTCPhaseModulator(DTCPMConfig(n_bits=11, lo_pn=lo, lo_loop_bw=4e5,
+                                           lo_pn_seed=7))
+    a = pinned.modulate(ph, FS, noise=True, seed=0).phase_out
+    b = pinned.modulate(ph, FS, noise=True, seed=1).phase_out
+    assert np.array_equal(a, b)
+    assert np.std(a - ph) > 1e-4                         # the LO noise is there
+    free = DTCPhaseModulator(DTCPMConfig(n_bits=11, lo_pn=lo, lo_loop_bw=4e5))
+    assert not np.array_equal(free.modulate(ph, FS, noise=True, seed=0).phase_out,
+                              free.modulate(ph, FS, noise=True, seed=1).phase_out)
+    # unset -> bit-identical to the pre-existing single-LO behaviour: the
+    # LO draw follows the jitter draw on the run seed
+    same = DTCPhaseModulator(DTCPMConfig(n_bits=11, lo_pn=lo, lo_loop_bw=4e5,
+                                         lo_pn_seed=None))
+    assert np.array_equal(free.modulate(ph, FS, noise=True, seed=3).phase_out,
+                          same.modulate(ph, FS, noise=True, seed=3).phase_out)
+    # jitter stays per run: two runs sharing the LO differ by white noise
+    # of variance 2 sigma^2
+    tau, fout = 50e-15, 5.9e9
+    jit = DTCPhaseModulator(DTCPMConfig(n_bits=11, lo_pn=lo, lo_loop_bw=4e5,
+                                        lo_pn_seed=7, jitter_rms_s=tau, fout=fout))
+    d = (jit.modulate(ph, FS, noise=True, seed=0).phase_out
+         - jit.modulate(ph, FS, noise=True, seed=1).phase_out)
+    assert np.std(d) == pytest.approx(np.sqrt(2) * TWOPI * fout * tau, rel=0.05)

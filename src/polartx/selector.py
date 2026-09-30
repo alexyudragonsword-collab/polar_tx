@@ -31,9 +31,9 @@ distribution.  The four candidates:
   at full scale regardless of the envelope, so every *independent* branch
   noise is worth ``10·log10(PAPR/2)`` dB more EVM than on the polar path
   (the shared LO's noise is common to both branches and costs the same as
-  on polar — ``outphasing_shared_lo=False`` scores the independent-LO case
-  the stage-1 ``OutphasingTX`` simulates).  Its own knob is the static
-  branch phase mismatch, whose error
+  on polar, which is what ``OutphasingTX`` simulates;
+  ``outphasing_shared_lo=False`` scores a separate LO per branch).  Its
+  own knob is the static branch phase mismatch, whose error
   vector ``(e^{jδ} − 1)·s2`` is mostly wideband; the in-band share the OFDM
   EVM sees is a measured constant (``quad_inband_db``).  Bandwidth-agnostic
   like the DTC; the combiner sets its efficiency law.
@@ -168,9 +168,9 @@ class Requirement:
     #                                     error, measured on WiFi 160 MHz 1024-QAM
     #                                     at osr 4 (test_selector pins it)
     outphasing_shared_lo: bool = True   # both DTC branches off ONE LO (its
-    #                                     phase noise is common); False = each
-    #                                     branch draws its own, which is what
-    #                                     OutphasingTX simulates (seed, seed+1)
+    #                                     phase noise is common, as OutphasingTX
+    #                                     simulates); False = a separate LO per
+    #                                     branch, its noise +penalty too
     # --- RF-DAC -----------------------------------------------------------
     dac_bits: int = 12                  # per-axis magnitude resolution
     dac_jitter_s: float = 50e-15        # LO clock jitter at the DAC (rms)

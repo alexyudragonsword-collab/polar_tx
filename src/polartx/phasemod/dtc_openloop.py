@@ -61,6 +61,13 @@ class DTCPMConfig:
         the loop bandwidth.  This is why CPE is negligible in these
         presets: the residual phase noise is high-pass shaped above the
         symbol rate.
+    lo_pn_seed
+        ``None`` (default): the LO noise is drawn from the run's ``seed``
+        stream, after the jitter — one modulator, one LO.  An integer
+        pins the LO sample to its own stream, independent of the run
+        seed, so two modulators that share ONE physical LO (the two
+        outphasing branches) draw the identical LO sample while their
+        edge jitter stays independent.  ``OutphasingTX`` sets it per run.
     """
 
     n_bits: int = 10                # phase resolution over the full range
@@ -75,6 +82,8 @@ class DTCPMConfig:
     lo_pn: OscConfig | None = None  # fixed-LO Leeson phase noise
     lo_loop_bw: float = 200e3       # LO is PLL-locked: PSD flattened below
                                     # the loop BW (in-band suppression)
+    lo_pn_seed: int | None = None   # pin the LO sample to its own stream
+                                    # (shared-LO branches); None = run seed
 
     @property
     def range_rad(self) -> float:
@@ -178,9 +187,15 @@ class DTCPhaseModulator(PhaseModulator):
                 src = c.lo_pn.leeson("lo")
                 # locked-LO approximation: inside the PLL loop BW the
                 # oscillator's f^-2/f^-3 slopes are flattened
+                if c.lo_pn_seed is None:
+                    lo_rng = rng                 # one modulator, one LO
+                else:
+                    # a stream of its own, keyed off the LO seed with a
+                    # tag so it never coincides with a run's jitter stream
+                    lo_rng = np.random.default_rng([int(c.lo_pn_seed), 1])
                 pn = synth_from_psd(
                     lambda f: src.psd(np.maximum(f, c.lo_loop_bw)),
-                    fs_bb, out.size, rng)
+                    fs_bb, out.size, lo_rng)
                 out = out + pn
                 diag["lo_pn"] = True
         return PhaseModResult(phase_out=out, diagnostics=diag)
