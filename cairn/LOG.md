@@ -14,7 +14,7 @@
   地板由 LO 主导（−49），DTC 量化/抖动（−67/−55）各多付 5.5 dB 也不露头。
 - 教训：分支级噪声"独立"要逐个来源问一遍，共享的硬件块（LO）不能跟着运行 seed 走。
 - 数字变动：ACLR −49 → −53 dBc，分支相位 1 dB 容忍度 0.74° → 0.51°；ex19/ex20/README
-  同步。ROADMAP B7 删除。分支 `feat/outphasing-shared-lo`，PR 待开。
+  同步。ROADMAP B7 删除。分支 `feat/outphasing-shared-lo`，PR #4。
 
 ## 2026-09-30 · 阶段 3：选型器四候选，两个建模缺口被对照测试揪出
 
