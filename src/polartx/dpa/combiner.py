@@ -212,3 +212,126 @@ def imbalance_montecarlo(base: DohertyCombiner, *, sigma_gain: float = 0.02,
                               "p05": float(np.percentile(loss_a, 5))},
         "n_trials": n_trials,
     }
+
+
+# ====================================================================
+# Outphasing (LINC / Chireix) combining
+# ====================================================================
+
+@dataclass
+class OutphasingCombiner:
+    """Two-branch outphasing combiner: isolated (Wilkinson) or Chireix.
+
+    Both branch PAs run at constant, full drive; the output amplitude is set
+    purely by the outphasing angle θ between them, ``|y| = 2|s| cos θ``.
+    Where the two topologies differ is what happens to the power the load
+    does NOT take:
+
+    ``mode="isolated"``
+        A Wilkinson / hybrid combiner presents each PA a constant load and
+        dumps the difference signal into the isolation resistor.  Delivered
+        power ∝ cos²θ while the DC draw is constant, so the drain efficiency
+        is ``η_pa · cos²θ`` — the textbook reason isolated outphasing is poor
+        at high PAPR.
+    ``mode="chireix"``
+        A non-isolating combiner lets each PA see the other's current: the
+        load admittance seen by branch k is ``Y0 (cos²θ ∓ j sinθ cosθ)``, and a
+        compensating shunt reactance ``±jB`` cancels the imaginary part at
+        one angle θ_c (``chireix_theta_c_deg``).  A saturated (voltage-source)
+        class-B PA into a load of angle ψ runs at ``η_pa · cos ψ``, so
+        ``η(θ) = η_pa · cos²θ / sqrt(cos⁴θ + (½ sin 2θ − ½ sin 2θ_c)²)`` — peaks
+        of η_pa at θ_c and 90°−θ_c, the classic Chireix double hump.
+
+    Signal path (both modes): the ideal vector sum ``y = g1·y1 + g2·y2``
+    scaled by the insertion loss, with ``gain_imbalance`` (fractional) and
+    ``phase_imbalance_deg`` per branch — the same three knobs, names and
+    units as ``DohertyCombiner``.  The Chireix load modulation is carried
+    in the efficiency law only; the amplitude/phase distortion a finite PA
+    output impedance would add under load modulation is deliberately not
+    modeled at this stage (see ROADMAP).
+
+    Efficiency figures are per-branch-PA peak ``eta_pa`` (the DPA's own
+    full-drive number, so the comparison with the polar chain uses the
+    same PA model) times the combiner's power factor, times insertion loss.
+    """
+
+    mode: str = "isolated"              # "isolated" (Wilkinson) | "chireix"
+    chireix_theta_c_deg: float = 60.0   # compensation angle [deg], chireix only
+    combiner_loss_db: float = 0.4       # transformer / hybrid insertion loss
+    gain_imbalance: tuple = ()          # per-branch fractional gain error (len 2)
+    phase_imbalance_deg: tuple = ()     # per-branch phase error [deg] (len 2)
+
+    def __post_init__(self):
+        if self.mode not in ("isolated", "chireix"):
+            raise ValueError(f"mode must be 'isolated' or 'chireix', got {self.mode!r}")
+        gi = list(self.gain_imbalance) or [0.0, 0.0]
+        pi_ = list(self.phase_imbalance_deg) or [0.0, 0.0]
+        if len(gi) != 2 or len(pi_) != 2:
+            raise ValueError("gain/phase_imbalance must have length 2")
+        self._gain = np.array(gi, float)
+        self._phase = np.deg2rad(np.array(pi_, float))
+        # normalized compensating susceptance: cancels the reactive part at θ_c
+        self._b = 0.5 * np.sin(2.0 * np.deg2rad(self.chireix_theta_c_deg))
+
+    # ------------------------------------------------------- signal path
+    def combine(self, y1: np.ndarray, y2: np.ndarray) -> np.ndarray:
+        """Complex combined output of the two constant-envelope branches,
+        including gain/phase imbalance and insertion loss.  Balanced and
+        lossless this is exactly ``y1 + y2``, i.e. the decomposed signal."""
+        g = (1.0 + self._gain) * np.exp(1j * self._phase)
+        y = g[0] * np.asarray(y1) + g[1] * np.asarray(y2)
+        return y * 10.0 ** (-self.combiner_loss_db / 20.0)
+
+    def combining_loss_db(self) -> float:
+        """Loss at θ = 0 (both branches in phase) referenced to the coherent
+        sum of the actual branch magnitudes — same convention as
+        ``DohertyCombiner``: gain imbalance alone costs nothing, phase
+        misalignment and insertion loss do.  Always <= 0."""
+        mags = 1.0 + self._gain
+        coherent = mags.sum()
+        actual = np.abs((mags * np.exp(1j * self._phase)).sum())
+        mismatch = 20.0 * np.log10(actual / coherent) if coherent else 0.0
+        return float(mismatch - self.combiner_loss_db)
+
+    # -------------------------------------------------------- efficiency
+    def power_factor(self, theta: np.ndarray) -> np.ndarray:
+        """Efficiency multiplier vs outphasing angle θ [rad], before the
+        insertion loss: cos²θ (isolated) or the Chireix load-angle cosine."""
+        th = np.asarray(theta, float)
+        c2 = np.cos(th) ** 2
+        if self.mode == "isolated":
+            return c2
+        b_eff = 0.5 * np.sin(2.0 * th) - self._b
+        return c2 / np.sqrt(c2 * c2 + b_eff * b_eff)
+
+    def efficiency(self, theta: np.ndarray, eta_pa: float) -> np.ndarray:
+        """Instantaneous drain efficiency vs θ for branch PAs of peak
+        efficiency ``eta_pa``, including insertion loss."""
+        loss = 10.0 ** (-self.combiner_loss_db / 10.0)
+        return eta_pa * self.power_factor(theta) * loss
+
+    def average_efficiency(self, theta: np.ndarray, eta_pa: float) -> dict:
+        """Modulated average over a θ trajectory: ``sum(P_out) / sum(P_dc)``.
+
+        P_out ∝ cos²θ in both modes (the load sees the vector sum).  P_dc
+        follows the mode: constant for the isolated combiner (the PAs never
+        see the load change), ``sqrt(cos⁴θ + b_eff²) / eta_pa`` for Chireix
+        (a voltage-source PA into a load of angle ψ draws current ∝ |Y|).
+        Written out per mode rather than as P_out/η so θ → 90° is finite.
+        Same keys as ``DPA.average_efficiency`` so the two chains report
+        alike; ``backoff_db`` is relative to the two-PA coherent peak.
+        """
+        th = np.asarray(theta, float)
+        c2 = np.cos(th) ** 2
+        loss = 10.0 ** (-self.combiner_loss_db / 10.0)
+        p_out = c2 * loss
+        if self.mode == "isolated":
+            p_dc = np.full_like(c2, 1.0 / eta_pa)
+        else:
+            b_eff = 0.5 * np.sin(2.0 * th) - self._b
+            p_dc = np.sqrt(c2 * c2 + b_eff * b_eff) / eta_pa
+        tot_dc = float(p_dc.sum())
+        return {"eta_avg": float(p_out.sum() / tot_dc) if tot_dc else 0.0,
+                "p_out_norm": float(p_out.mean()),
+                "backoff_db": float(-10 * np.log10(max(p_out.mean(), 1e-30))),
+                "eta_pa": float(eta_pa), "mode": self.mode}
