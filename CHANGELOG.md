@@ -10,6 +10,24 @@ release 分组。
 
 ## 未发布 / Unreleased
 
+### Outphasing 两路分支共用一个 LO（ROADMAP B7 收口）（2026-09-30）
+
+阶段 3 记下的缺口：`OutphasingTX` 每路分支各抽一份 LO 相噪，真机两路 DTC 挂在
+同一个 PLL 上。修法没碰 `chain.py`：`DTCPMConfig` 加 `lo_pn_seed`（None = LO 相噪
+跟随运行 seed、逐位不变；整数 = LO 样本走自己的流 `default_rng([seed, 1])`，
+与抖动流分离），`OutphasingTX.run` 每次运行浅拷贝分支链，把 `lo_pn_seed` 钉成
+本次 seed——两路分支 LO 样本相同、DTC 抖动与 dither 仍各自独立；无 LO 模型的
+调制器（Ideal / ADPLL）不受影响，`shared_lo` 字段与 `info["shared_lo"]` 报告是否生效。
+
+**更正阶段 1 和阶段 3 的判断**：阶段 1 把 outphasing 比极坐标差 3 dB 归因于
+"两分支满功率、相噪不随包络回退且两路独立不相消"；阶段 3 估计其中约 3 dB 来自
+独立 LO。实测是**整个差距都来自独立 LO**：共用 LO 后 8 符号 burst 上 outphasing
+−39.84 dB vs 极坐标 −40.00 dB（地板口径差 0.4 dB），4 符号上 −0.3 dB，与选型器
+共模 LO 预算 0.44 dB 一致；独立 LO 时地板差 5.1 / 4.0 dB。物理上说得通：这条链
+的 EVM 地板由 LO 相噪主导（−49 dB 项），DTC 量化/抖动地板（−67 / −55）即使各
+多付 5.5 dB 也不露头。ACLR 随之 −49 → −53 dBc，分支相位 1 dB 容忍度 0.74° → 0.51°
+（自身地板更低，同一失配更显眼）。ex19 / ex20 / README 表同步。
+
 ### 选型器四候选 + 三架构同台表（阶段 3：同台对比）（2026-09-30）
 
 `selector.py` 从两候选（ADPLL / DTC）扩到四候选：`_score_outphasing`——DTC 地板
