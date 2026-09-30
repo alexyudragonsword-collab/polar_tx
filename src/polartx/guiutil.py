@@ -419,8 +419,9 @@ def run_selector_report(bw_hz: float = 80e6, *, standard: str = "custom",
                         fout: float = 5.8e9, dtc_bits: int = 11,
                         two_point_gain_match: float = 2e-3,
                         constant_envelope: bool = False) -> dict:
-    """Architecture selector: rank ADPLL two-point vs open-loop DTC and
-    chart the EVM-vs-bandwidth crossover around the requested point."""
+    """Architecture selector: rank the four topologies (ADPLL two-point,
+    open-loop DTC, outphasing, Cartesian RF-DAC) and chart the
+    EVM-vs-bandwidth crossover around the requested point."""
     import matplotlib
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
@@ -436,25 +437,31 @@ def run_selector_report(bw_hz: float = 80e6, *, standard: str = "custom",
     rows = {}
     for c in rep.candidates:
         rows[c.arch] = ("excluded" if not c.feasible
-                        else f"{c.evm_db:.1f} dB")
+                        else f"{c.evm_db:.1f} dB, eta {c.eta_avg*100:.0f} %")
     rows["recommendation"] = rep.recommendation
     rows["closest preset"] = rep.suggest_preset()
 
     bws = np.logspace(6, np.log10(320e6), 40)
-    adpll, dtc = [], []
+    curves: dict[str, list] = {"adpll_two_point": [], "dtc_open_loop": [],
+                               "outphasing": [], "rfdac_cartesian": []}
     for b in bws:
         r = select(Requirement(standard="s", bw_hz=b, modulation=modulation,
                                evm_db_max=evm_db_max, fout=fout,
                                dtc_bits=dtc_bits,
-                               two_point_gain_match=two_point_gain_match))
-        a = next(c for c in r.candidates if c.arch == "adpll_two_point")
-        d = next(c for c in r.candidates if c.arch == "dtc_open_loop")
-        adpll.append(a.evm_db if a.feasible else np.nan)
-        dtc.append(d.evm_db)
+                               two_point_gain_match=two_point_gain_match,
+                               constant_envelope=constant_envelope))
+        for c in r.candidates:
+            curves[c.arch].append(c.evm_db if c.feasible else np.nan)
 
     fig, ax = plt.subplots(figsize=(8, 4.6))
-    ax.semilogx(bws / 1e6, adpll, "-o", ms=3, label="ADPLL two-point")
-    ax.semilogx(bws / 1e6, dtc, "-^", ms=3, label="open-loop DTC")
+    ax.semilogx(bws / 1e6, curves["adpll_two_point"], "-o", ms=3,
+                label="ADPLL two-point")
+    ax.semilogx(bws / 1e6, curves["dtc_open_loop"], "-^", ms=3,
+                label="open-loop DTC")
+    ax.semilogx(bws / 1e6, curves["outphasing"], "-s", ms=3,
+                label="outphasing (2 DTC branches)")
+    ax.semilogx(bws / 1e6, curves["rfdac_cartesian"], "-d", ms=3,
+                label="Cartesian RF-DAC")
     ax.axvline(bw_hz / 1e6, color="k", ls=":", lw=1,
                label=f"request {bw_hz/1e6:.0f} MHz")
     ax.axhline(evm_db_max, color="r", ls="--", lw=1, label="EVM target")
