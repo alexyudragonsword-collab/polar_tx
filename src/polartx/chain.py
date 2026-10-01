@@ -197,7 +197,14 @@ class PolarTX:
         Polar predistortion (AM-AM inverse + AM-PM correction LUTs).
     memory : optional
         Post-DPA memory model, for studying effects the static polar LUTs
-        cannot correct.
+        cannot correct.  A callable ``y -> y`` applied to the chain output
+        AFTER the DPA sum has been multiplied back by ``fs_scale`` — i.e.
+        on the same scale as the chain's input envelope (nominal gain
+        one).  A model fitted from measurements (``measured.
+        fit_residual_memory``) is only valid at the scale it was fitted
+        at: build the chain with ``fs_scale_fixed`` equal to that
+        capture's full scale, or its |y|^k terms are evaluated at the
+        wrong amplitude.
 
     ``run()`` returns a :class:`PolarResult` carrying every intermediate
     tap, so any stage can be inspected or scored on its own.

@@ -64,13 +64,24 @@ response 模式不能背书杂散结论）。
 
 **先定位原因再决定走哪条**，别直接开始写多速率引擎。
 
-### B2. 器件记忆效应是解析式的，不是实测拟合的
+### B2. 快记忆已从实测反演，慢状态待完整源容器
 
-`ex09` 给出的差距是明确的：同一组实测数据，**静态极坐标模型 NMSE ≈ −20 dB，
-含记忆的 GMP 是 −39 dB**——这 19 dB 就是器件记忆。但链路里的记忆模型
-（`chain.memory`、供电推压）是解析构造的，参数不是从实测反演的。
+快记忆（GMP 级，几十个采样内）**已经从 OpenDPD 实测反演进链路**：
+`measured.fit_residual_memory` 把"静态 LUT 输出 → 实测输出"的残差拟成 GMP-510，
+挂在 `PolarTX(memory=...)`。DPA_160MHz 验证集：静态 LUT −19.95 dB、加无记忆
+5 阶多项式 −19.97（0.02 dB，说明 19 dB 的差距确实全是记忆）、加残差 GMP-510
+**−37.5 dB**（PA_DPD 直拟 −38.7，发表 −39.2）；DPA_200MHz −20.54 → −33.3
+（发表 −33.7）。入链后极坐标 DPD 只买回 0.2 dB，整链 ILA 买回 16.7 dB。
+坑与口径见 `cairn/measured-memory.md`。
 
-想让链路级预测对得上实测，得把这段补上。
+还没做的是**慢状态**（热 / 偏置，µs 级）：需要 PA_DPD `data/complete.py` 定义的
+"完整源"容器（burst / step / cal_rx / atten / op 五组采集）才能辨识 τ 并训练
+`StateConditionedSpline`；OpenDPD 数据只有平稳采集，慢状态在平稳激励下不可观。
+vendored 代码（`spline_state.py`、`gain_modulation.py`、`data/complete.py`）已就位，
+缺的是数据。先用 `ThermalReferencePA` 合成完整源走通流程，再接真采集。
+另两条留待后定：静态提取从 64 箱 LUT 换样条（纯静态器件上 64 箱的地板 −35 dB，
+来源是顶部稀疏箱丢弃后的钳位）；供电推压（`SupplyConfig`）仍是解析构造，
+而且它的 τ 是 AM→PM 的供电网络时间常数，不能拿 AM→AM 的热 τ 去填。
 
 ### B3. 远端噪底只有解析预算
 
