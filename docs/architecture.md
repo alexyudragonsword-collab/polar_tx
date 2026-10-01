@@ -116,6 +116,12 @@ src/polartx/
 几个旋钮（`env_skew_s`、`env_floor`、`cfr_papr_db`、`fs_scale_fixed`、
 `phase_slew_max_hz`）在 dataclass 的 docstring 里有量化说明。
 
+`PolarTX(memory=...)` 是 DPA 合路、乘回 `fs_scale` 之后的最后一级，接任何
+`y -> y` 可调用对象。从实测反演的残差记忆模型（`measured.fit_residual_memory`，
+一个 vendored padpd `PAModel`）就挂在这里；它只在拟合时的尺度与采样率下有效，
+所以调用方必须 `fs_scale_fixed=ch["fs_scale"]`、波形峰值放到同一满量程、
+`wf.fs == ch["fs"]`（见 `cairn/measured-memory.md`）。
+
 **`PolarResult`**（`chain.py`）——一次运行的输出 **加上每一级的中间抽头**，
 什么都不丢：`env_cmd` vs `env_code` 看幅度量化，`phase_cmd` vs `phase_out`
 单独看相位调制器，`info["phasemod"]` 拿调制器自己的诊断。指标方法

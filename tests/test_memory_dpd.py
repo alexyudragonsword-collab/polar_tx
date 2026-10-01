@@ -46,3 +46,30 @@ def test_fixed_full_scale_is_required():
     r1 = run_with_ila(tx, wf, dpd, noise=False)
     gain_nonstatic = r0.evm().db - r1.evm().db
     assert gain_nonstatic < 15.0                     # measured: ~4 dB only
+
+
+def test_ila_linearizes_the_measured_dpa_with_its_residual_memory():
+    """The real device's memory, inverted from the OpenDPD capture, in the
+    chain: the whole-chain ILA (given the residual's own GMP-510
+    structure) must still linearize it by >= 15 dB.  needs the data."""
+    import pytest
+    from dataclasses import replace
+    from polartx.measured import find_opendpd_root, load_measured_dpa
+    from polartx.vendor.padpd.pa import gmp_opendpd_510
+    if find_opendpd_root() is None:
+        pytest.skip("OpenDPD dataset clone not found")
+    dpa, ch = load_measured_dpa("DPA_160MHz", with_memory=True)
+    wf = wifi_waveform(160e6, 1024, n_symbols=4, seed=1)
+    wf = replace(wf, x=wf.x / np.abs(wf.x).max() * ch["fs_scale"])   # the capture's drive
+    assert abs(wf.fs - ch["fs"]) < 1.0                                 # and its sample rate
+    tx = PolarTX(ChainConfig(env_floor=0.02, fs_scale_fixed=ch["fs_scale"]),
+                 IdealPhaseModulator(), dpa, memory=ch["memory"])
+    r0 = tx.run(wf, noise=False)
+    dpd = fit_chain_ila(tx, wf, model_factory=gmp_opendpd_510)
+    r1 = run_with_ila(tx, wf, dpd, noise=False)
+    assert r1.evm().db < r0.evm().db - 15.0          # measured -19.75 -> -36.5
+    a0 = aclr(r0.y, r0.fs, wf.bw)["upper_dbc"]
+    a1 = aclr(r1.y, r1.fs, wf.bw)["upper_dbc"]
+    assert a1 > a0                                   # measured -38.0 -> -33.8: the ILA trades
+    # ACLR for EVM here (ex09 shows the same); the memory's spectral regrowth is NOT
+    # reduced by this inverse -- recorded, not hidden

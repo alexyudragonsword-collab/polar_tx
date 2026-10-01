@@ -34,7 +34,7 @@ Waveform → [CFR] → polar split → 包络路径（量化/skew/DPA 幅度码�
 
 ```bash
 pip install -e .          # numpy / scipy / matplotlib
-pytest tests/             # 285 个测试函数（参数化后实收更多）：物理量断言 + 与 padpd 逐位回归
+pytest tests/             # 293 个测试函数（参数化后实收更多）：物理量断言 + 与 padpd 逐位回归
 python examples/ex01_ble_gfsk_adpll.py      # 图落在 examples/out/
 
 pip install -e .[gui]     # Streamlit 网页工作台
@@ -155,7 +155,7 @@ src/polartx/
 | `ex06_lte20_polar_chain.py` | LTE20 全链路：DPD on/off/拟合、两点校准、E-UTRA ACLR/SEM、RX 频段预算、DPA 特性反演 |
 | `ex07_nr_polar_and_cal.py` | NR FR1/FR2 链路与星座、DTC LUT 校准前后频谱、在线两点 LMS 收敛轨迹、DPA 交织镜像 |
 | `ex08_m4_dpd_mc_rtl.py` | ACP 搜索 skew 校准、整链 ILA-GMP 记忆 DPD、Monte Carlo 良率直方图、DPD LUT RTL 导出+iverilog |
-| `ex09_measured_dpa.py` | **OpenDPD 真实 DPA 实测数据**：AM-AM/AM-PM 提取、静态极坐标 NMSE（≈−20 dB，与含记忆 GMP 的 −39 dB 差距即器件记忆）、实测特性入链 + polar DPD（−32→−50 dB）。需 `git clone --depth 1 https://github.com/lab-emi/OpenDPD.git ../OpenDPD` |
+| `ex09_measured_dpa.py` | **OpenDPD 真实 DPA 实测数据**：AM-AM/AM-PM 提取、静态极坐标 NMSE（≈−20 dB，与含记忆 GMP 的 −39 dB 差距即器件记忆）、实测特性入链 + polar DPD（−32→−50 dB）；**记忆从同一份实测反演成残差 GMP-510 进 `chain.memory`**（`polartx.measured.fit_residual_memory`）：验证集 NMSE 静态 LUT −19.95 / 加无记忆多项式 −19.97（0.02 dB——19 dB 确实全是记忆）/ 加残差 **−37.5**（200 MHz −33.3，发表 −39.2 / −33.7）、SplineGMP 同精度条件数低 24×；记忆进链后极坐标 DPD 只买 0.2 dB，整链 ILA 买回 16.7 dB。需 `git clone --depth 1 https://github.com/lab-emi/OpenDPD.git ../OpenDPD` |
 | `ex10_dpa_efficiency.py` | **效率——polar 存在的理由**：SCPA vs class-B 回退效率律、各预设调制平均效率（恒包络 85% → WiFi CFR8.5 43%）、CFR 深度的效率-EVM 权衡 |
 | `ex11_benchmarks.py` | 文献级对标（数字 polar TX 代际扫描 2005→2024）：Staszewski JSSC'05 EDGE（DEVM 2.0% vs ~2–3%）、Madoglio ISSCC'14 LTE-20（−31.1 vs ~−30 dB）、**Ben Bassat ISSCC/JSSC'20 Intel WiFi 6**（160 MHz 1024-QAM，裸 −28.6 / DPD −38 dB）、**Degani RFIC'24 Intel WiFi 7**（16nm FinFET，3.3V SC-DPA，320 MHz 4096-QAM/MCS13，EVM −37 属 −38 dB class，SCPA 峰值效率 34.7%）；802.11n 老对标保留为可导入历史锚点 |
 | `ex15_fir_notch_mlo.py` | **Borokhovich RFIC'26 Intel FIR+Doherty polar DTX（WiFi MLO）**：双抽头混合域 FIR 陷波器（`polartx.fir`，两条 DPA 链延迟合路，`H=1+e^{-jωD}`），陷波偏移可配（陷在共存 RX 信道抑制发射机带外噪声），实测机理——**FIR 只陷相关内容**故实际深度受随机噪底限制（确定性 ~25 dB，含随机噪底 ~9 dB）；恒 BW·Δf 律；数字 Doherty 6 dB 回退效率凸起（35% vs SCPA 23%） |
