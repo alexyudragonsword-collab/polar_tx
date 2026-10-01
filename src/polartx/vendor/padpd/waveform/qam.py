@@ -1,4 +1,4 @@
-# Vendored from PA_DPD@44f9ee99: src/padpd/waveform/qam.py
+# Vendored from PA_DPD@44cbcb3: src/padpd/waveform/qam.py
 # Adapted-copy policy: see src/polartx/vendor/__init__.py
 """Gray-coded square QAM mapping/demapping.
 
@@ -59,6 +59,9 @@ def qam_demodulate(points: np.ndarray, order: int) -> np.ndarray:
     Uses per-axis PAM slicing (O(N) instead of an O(N*order) full search),
     which matters for 4096-QAM.
     """
+    if order not in _SUPPORTED:
+        raise ValueError(f"unsupported QAM order {order}; "
+                         f"choose from {_SUPPORTED}")
     m_side = int(np.sqrt(order))
     levels = _pam_levels(m_side)
     # gray label -> amplitude is `levels`; build amplitude-sorted lookup

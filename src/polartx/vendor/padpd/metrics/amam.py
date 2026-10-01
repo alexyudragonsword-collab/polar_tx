@@ -1,4 +1,4 @@
-# Vendored from PA_DPD@44f9ee99: src/padpd/metrics/amam.py
+# Vendored from PA_DPD@44cbcb3: src/padpd/metrics/amam.py
 # Adapted-copy policy: see src/polartx/vendor/__init__.py
 """AM-AM / AM-PM characteristic extraction from input/output IQ data."""
 

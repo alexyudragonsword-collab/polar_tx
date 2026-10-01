@@ -84,7 +84,17 @@ src/polartx/
 │   ├── app.py        主窗口与入口（`polartx-gui`）
 │   ├── pages.py      各功能页；计算一律经 guiutil，页面里不放物理
 │   └── widgets.py    共用控件：worker 线程、图框、指标表
-└── vendor/           改编移植区（见 §5）
+└── vendor/           改编移植区（见 §5）；下面只列 polartx 代码直接调用的 padpd 模块
+    └── padpd/
+        ├── pa/base.py · gmp.py · memory_polynomial.py   PAModel 接口、lstsq_fit、GMP / MP
+        ├── pa/spline.py · spline_state.py   B 样条 MP / GMP（低条件数）与慢状态调度（阶段 2）
+        ├── pa/presets.py     gmp_opendpd_510 / mp_opendpd_500（抽取；DDR-Volterra 未 vendor）
+        ├── pa/saleh.py · hb_import.py   Saleh、Wiener-Hammerstein（HB 导入）
+        ├── gain_modulation.py   阶跃探针录音离线辨识慢增益调制 τ（阶段 2）
+        ├── data/complete.py   "完整源"npz 容器：burst / step / cal_rx / atten / op 五组采集
+        ├── data/align.py · dataset.py · io.py · opendpd.py   对齐、IQDataset、CSV/MAT/OpenDPD 读入
+        ├── dpd/ila.py        ILA 预失真（cal/memory_dpd.py 用）
+        ├── metrics/*.py · cfr.py · waveform/*.py · deploy/fixed_point.py   指标、CFR、OFDM/QAM、定点
 ```
 
 带 ★ 的是新人最先要读的五个文件。
@@ -152,7 +162,16 @@ commit 与路径，`tools/vendor_check.py` + CI 的 `vendor-drift` job 每次 pu
 **pin 是按文件记的，而且现在是混合的**：`pllsim` 子树 39 个文件在上游
 `931cfaf`，`arch/adpll.py` 与 `arch/frac.py` 仍在 `d7be4712`（原因见
 `ROADMAP.md` C5：上游把逐周期循环搬进了 jit kernel，本仓的 `dp_cal` 钩子每周期
-回调 Python 对象，装不进去）。`padpd` 子树整体在 `44f9ee99`。
+回调 Python 对象，装不进去）——这两条在 manifest 里带 `pin_frozen` 原因，
+校验器报 *frozen* 而不是 *stale*，`--strict` 因此能过而又不丢信息。`padpd` 子树
+整体在 `44cbcb3`——注意这是 PA_DPD `claude/digital-polar-tx-dev-r0c338` 分支的头，
+不是它的 `main`（当时 `3aa1c24`，落后 21 个提交；样条 / 慢状态 / 完整源模块只在
+那条分支上），CI 的 sibling checkout 因此钉全 sha 并 `fetch-depth: 0`（2026-10-01
+从 `44f9ee99` 推进：当时三个 `pa/*.py` 与上游主干
+差 42 / 15 / 20 行，逐字节对照钉定 blob 后确认**全是上游前进、本地零改动**，
+故整体重拷；同批新 vendor `pa/spline.py`、`pa/spline_state.py`、
+`gain_modulation.py`、`data/complete.py`，抽取 `pa/presets.py`）。`__init__.py`
+是"裁剪版"包装（见 `vendor/__init__.py`），校验器不跟踪它们。
 
 混合 pin 有个陷阱值得记住：sibling checkout 必须是全历史（`fetch-depth: 0`），
 否则浅 checkout 解析不到另一个 commit，校验器会把那些文件**跳过**——而跳过的

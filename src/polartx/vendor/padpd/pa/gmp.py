@@ -1,4 +1,4 @@
-# Vendored from PA_DPD@44f9ee99: src/padpd/pa/gmp.py
+# Vendored from PA_DPD@44cbcb3: src/padpd/pa/gmp.py
 # Adapted-copy policy: see src/polartx/vendor/__init__.py
 """Generalized Memory Polynomial (GMP) model.
 
@@ -23,7 +23,14 @@ from .memory_polynomial import delayed
 class GMPModel(PAModel):
     def __init__(self, order: int = 7, memory_depth: int = 4,
                  lag_order: int = 3, lag_memory: int = 2, lag_span: int = 2,
-                 lead_order: int = 3, lead_memory: int = 2, lead_span: int = 2):
+                 lead_order: int = 3, lead_memory: int = 2,
+                 lead_span: int = 2):
+        if order < 1 or memory_depth < 1:
+            raise ValueError("order and memory_depth must be >= 1")
+        if min(lag_order, lag_memory, lag_span,
+               lead_order, lead_memory, lead_span) < 0:
+            raise ValueError("lag/lead orders, memories and spans "
+                             "must be >= 0")
         self.order = order
         self.memory_depth = memory_depth
         self.lag_order = lag_order
@@ -51,13 +58,13 @@ class GMPModel(PAModel):
                 cols.append(xm * am**k)
         for m in range(self.lag_memory):
             xm = delayed(x, m)
-            for l in range(1, self.lag_span + 1):
+            for l in range(1, self.lag_span + 1):  # noqa: E741 - basis index
                 al = delayed(a, m + l)
                 for k in range(1, self.lag_order + 1):
                     cols.append(xm * al**k)
         for m in range(self.lead_memory):
             xm = delayed(x, m)
-            for l in range(1, self.lead_span + 1):
+            for l in range(1, self.lead_span + 1):  # noqa: E741 - basis index
                 al = delayed(a, m - l)
                 for k in range(1, self.lead_order + 1):
                     cols.append(xm * al**k)
@@ -70,7 +77,7 @@ class GMPModel(PAModel):
                 + self.lead_order * self.lead_memory * self.lead_span)
 
     def fit(self, x: np.ndarray, y: np.ndarray,
-            regularization: float = 0.0) -> "GMPModel":
+            regularization: float = 0.0) -> GMPModel:
         self.coeffs = lstsq_fit(self.basis_matrix(x), y, regularization)
         return self
 

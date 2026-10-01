@@ -1,4 +1,4 @@
-# Vendored from PA_DPD@44f9ee99: src/padpd/dpd/ila.py
+# Vendored from PA_DPD@44cbcb3: src/padpd/dpd/ila.py
 # Adapted-copy policy: see src/polartx/vendor/__init__.py
 """Indirect Learning Architecture (ILA) digital predistortion.
 
@@ -16,7 +16,7 @@ ReferencePA today, a Cadence/measurement replay tomorrow.
 
 from __future__ import annotations
 
-from typing import Callable
+from collections.abc import Callable
 
 import numpy as np
 
@@ -46,7 +46,7 @@ class ILAPredistorter:
         self.fit_kwargs = fit_kwargs or {}
 
     def fit(self, pa: Callable[[np.ndarray], np.ndarray],
-            x: np.ndarray) -> "ILAPredistorter":
+            x: np.ndarray) -> ILAPredistorter:
         """Learn the predistorter against a black-box PA on signal ``x``."""
         u = x
         for it in range(self.n_iterations):
@@ -57,10 +57,11 @@ class ILAPredistorter:
             model = self.model_factory()
             model.fit(y / self.target_gain, u, **self.fit_kwargs)
             self.dpd_model = model
-            u = model(x)
+            if it < self.n_iterations - 1:   # final pass's u is never used
+                u = model(x)
         return self
 
-    def fit_measured(self, x: np.ndarray, y: np.ndarray) -> "ILAPredistorter":
+    def fit_measured(self, x: np.ndarray, y: np.ndarray) -> ILAPredistorter:
         """Single-shot ILA from a measured input/output pair.
 
         Fits the post-inverse directly on measured data (y/G -> x) without
@@ -88,21 +89,38 @@ class ILAPredistorter:
         return pa(self(x))
 
     def save(self, path: str) -> None:
-        """Persist the fitted predistorter (model + target gain) as .npz."""
+        """Persist the fitted predistorter (model + target gain) as .npz.
+
+        Only linear-in-parameters models (coeffs + get_config) persist
+        here; a neural predistorter saves through its own ``save()``.
+        """
         if self.dpd_model is None:
             raise RuntimeError("predistorter is not fitted; nothing to save")
+        if getattr(self.dpd_model, "coeffs", None) is None:
+            raise TypeError(
+                f"{type(self.dpd_model).__name__} is not a coefficients "
+                "model; persist it with its own save() instead")
         np.savez(path,
                  class_name=type(self.dpd_model).__name__,
                  config=repr(self.dpd_model.get_config()),
                  coeffs=self.dpd_model.coeffs,
-                 target_gain=np.complex128(self.target_gain))
+                 target_gain=np.complex128(self.target_gain),
+                 n_iterations=self.n_iterations)
 
     @classmethod
-    def load(cls, path: str) -> "ILAPredistorter":
-        """Load a predistorter saved with :meth:`save`."""
+    def load(cls, path: str) -> ILAPredistorter:
+        """Load a predistorter saved with :meth:`save`.
+
+        Restores the model factory (same class/config as the saved
+        model) and iteration count, so a later ``fit()`` refits the same
+        structure instead of silently falling back to the defaults.
+        """
         from ..pa import load_model
-        dpd = cls()
-        dpd.dpd_model = load_model(path)
+        model = load_model(path)
         d = np.load(path, allow_pickle=False)
+        dpd = cls(model_factory=lambda m=model: type(m)(**m.get_config()),
+                  n_iterations=(int(d["n_iterations"])
+                                if "n_iterations" in d else 2))
+        dpd.dpd_model = model
         dpd.target_gain = complex(d["target_gain"])
         return dpd

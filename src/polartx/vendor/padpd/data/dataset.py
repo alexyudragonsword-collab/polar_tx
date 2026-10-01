@@ -1,4 +1,4 @@
-# Vendored from PA_DPD@44f9ee99: src/padpd/data/dataset.py
+# Vendored from PA_DPD@44cbcb3: src/padpd/data/dataset.py
 # Adapted-copy policy: see src/polartx/vendor/__init__.py
 """IQ input/output dataset container.
 
@@ -32,7 +32,7 @@ class IQDataset:
     def __len__(self) -> int:
         return len(self.x)
 
-    def split(self, fractions=0.8) -> tuple["IQDataset", ...]:
+    def split(self, fractions=0.8) -> tuple[IQDataset, ...]:
         """Contiguous split (preserves memory-effect continuity).
 
         ``fractions`` may be a single float f (two-way split f / 1-f) or a
@@ -57,7 +57,7 @@ class IQDataset:
             start = stop
         return tuple(parts)
 
-    def normalized(self) -> "IQDataset":
+    def normalized(self) -> IQDataset:
         """Return a copy with x scaled to unit average power.
 
         y is scaled by the same factor so the PA gain is preserved.
@@ -73,7 +73,7 @@ class IQDataset:
                             meta=np.array(repr(self.meta)))
 
     @classmethod
-    def load(cls, path: str) -> "IQDataset":
+    def load(cls, path: str) -> IQDataset:
         import ast
         d = np.load(path, allow_pickle=False)
         meta = ast.literal_eval(str(d["meta"])) if "meta" in d else {}

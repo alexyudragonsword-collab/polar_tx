@@ -10,6 +10,23 @@ release 分组。
 
 ## 未发布 / Unreleased
 
+### padpd 子树重新 vendor 到 44cbcb3（记忆反演阶段 0）（2026-10-01）
+
+`vendor/padpd/` 整体从 `44f9ee99` 推进到上游主干 `44cbcb3`。推进前先把三个
+`pa/*.py` 与钉定 blob 逐字节对照：**零差异**，所谓 42/15/20 行差异全是上游前进，
+本地没改过，所以直接重拷，不走 manifest 也不需要回游。上游带来的能力：
+`lstsq_fit` 的加权与结构惩罚（keyword-only，默认不变）、`basis_cond`、MP 的
+`gain_curve`、ILA 持久化恢复工厂、PSD 有限地板。新 vendor 四个文件——
+`pa/spline.py`、`pa/spline_state.py`（B 样条 MP/GMP 与慢状态调度）、
+`gain_modulation.py`（阶跃探针 τ 辨识）、`data/complete.py`（完整源容器）——
+以及抽取版 `pa/presets.py`（只取 `gmp_opendpd_510` / `mp_opendpd_500`）；
+`pa/__init__.py` 的 `load_model` 注册表扩到全部 vendored 模型类。
+
+验证按 dump-比对协议：ILA 链、OpenDPD 静态提取、PSD/CFR/对齐输出的数字与哈希
+在重拷前后**逐字节相同**。`tools/vendor_check.py` 新增 `pin_frozen`：pllsim 两条
+故意停留的 pin 报 *frozen* 而非 *stale*，`--strict` 从"永远红"变成可用的门。
+加跨库往返测试：PA_DPD 侧写的 GMP npz 由 vendored `load_model` 读回逐位同输出。
+
 ### Outphasing 两路分支共用一个 LO（ROADMAP B7 收口）（2026-09-30）
 
 阶段 3 记下的缺口：`OutphasingTX` 每路分支各抽一份 LO 相噪，真机两路 DTC 挂在

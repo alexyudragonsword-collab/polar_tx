@@ -1,4 +1,4 @@
-# Vendored from PA_DPD@44f9ee99: src/padpd/data/io.py
+# Vendored from PA_DPD@44cbcb3: src/padpd/data/io.py
 # Adapted-copy policy: see src/polartx/vendor/__init__.py
 """Loaders for external PA data sources.
 
@@ -19,6 +19,22 @@ import csv
 import numpy as np
 
 from .dataset import IQDataset
+
+
+def read_csv_columns(path: str) -> dict[str, np.ndarray]:
+    """Read a numeric CSV into {lowercased_header: float array}.
+
+    Shared by the Cadence loader, the HB importer and the two-tone table
+    loader; utf-8-sig handles BOM'd exports. Raises ValueError on an
+    empty or header-only file.
+    """
+    try:
+        cols = _read_csv_columns(path)
+    except (StopIteration, IndexError):
+        raise ValueError(f"{path}: empty CSV") from None
+    if not cols or not len(next(iter(cols.values()))):
+        raise ValueError(f"{path}: empty CSV")
+    return cols
 
 
 def _read_csv_columns(path: str) -> dict[str, np.ndarray]:
@@ -44,7 +60,10 @@ def load_cadence_csv(path: str) -> IQDataset:
         raise ValueError(f"Cadence CSV is missing columns: {sorted(missing)}")
     t = cols["time"]
     dt = np.diff(t)
-    if not np.allclose(dt, dt[0], rtol=1e-6):
+    # atol=0 matters: numpy's default 1e-8 s exceeds the sample period
+    # above ~100 MHz, so a jittered export would pass and the sample
+    # rate would be taken from its first (arbitrary) step
+    if not np.allclose(dt, dt[0], rtol=1e-6, atol=0.0):
         raise ValueError("time column is not uniformly sampled")
     fs = 1.0 / dt[0]
     x = cols["i_in"] + 1j * cols["q_in"]

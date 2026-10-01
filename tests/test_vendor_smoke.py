@@ -50,3 +50,30 @@ def test_ofdm_qam_evm_loopback():
                                   n_symbols=4, seed=3))
     r = evm_of_signal(wf.x, wf, equalize="scalar")
     assert r.db < -80.0
+
+
+def test_load_model_reads_an_npz_written_by_upstream_padpd():
+    """Cross-library round trip.  tests/data/padpd_gmp_roundtrip.npz was
+    written by PA_DPD's own ``GMPModel.save`` (commit recorded in the
+    companion _io.npz, 44cbcb3 at creation); the vendored ``load_model``
+    must rebuild the same class with the same config and reproduce the
+    output upstream computed on the stored input — same basis, same
+    coefficients.  To floating-point precision, not bit for bit: the
+    basis @ coeffs product goes through BLAS, whose summation order
+    differs between platforms (the bit-exact form passed on x86 Linux
+    and failed on macOS arm64 and the dependency-floor job)."""
+    import os
+    import numpy as np
+    from polartx.vendor.padpd.pa import GMPModel, load_model
+    here = os.path.join(os.path.dirname(__file__), "data")
+    model = load_model(os.path.join(here, "padpd_gmp_roundtrip.npz"))
+    io = np.load(os.path.join(here, "padpd_gmp_roundtrip_io.npz"))
+    assert isinstance(model, GMPModel)
+    assert model.get_config() == {"order": 3, "memory_depth": 2,
+                                  "lag_order": 2, "lag_memory": 1, "lag_span": 1,
+                                  "lead_order": 2, "lead_memory": 1, "lead_span": 1}
+    assert model.coeffs.size == int(io["n_coeffs"]) == model.n_coeffs
+    y = model(io["x"])
+    assert np.allclose(y, io["y_model"], rtol=1e-12, atol=1e-14)
+    assert np.max(np.abs(y - io["y_model"])) < 1e-13 * np.max(np.abs(y))
+    assert str(io["padpd_commit"]) == "44cbcb3"
