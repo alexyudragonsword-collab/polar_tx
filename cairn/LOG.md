@@ -2,6 +2,27 @@
 
 本文件按倒序记录实质性进展——最新的一条在这行下面。每条保持简短，只写摘要和指针；结论沉淀进 `cairn/<topic>.md`。
 
+## 2026-10-01 · 记忆反演阶段 0：padpd 子树重拷到 44cbcb3，差异归因为"全是上游前进"
+
+- 疑问是 `pa/{base,gmp,memory_polynomial}.py` 与上游主干差 42/15/20 行是谁动的。
+  全克隆 PA_DPD 后逐字节对照钉定 blob 44f9ee99：三个文件（以及其余 8 个 stale 文件）
+  的 vendored 副本与钉定 blob **零差异**，本地从未改过——不需要回游，也不进 manifest。
+- 上游变化内容：`lstsq_fit` 加 keyword-only 的 weights / penalty（默认同旧行为）、
+  `basis_cond`、MP 的 `n_coeffs`/`gain_curve`、ILA 跳过末轮无用的 `model(x)`、
+  psd 加 −200 dB 地板、hb_import 改用 `data/io.read_csv_columns`。重拷全部 19 个
+  padpd 文件到 44cbcb3，新 vendor `pa/spline.py`、`pa/spline_state.py`、
+  `gain_modulation.py`、`data/complete.py`，抽取 `pa/presets.py`（manifest 记 hash）。
+- 验证走 dump-比对协议（`static-gates-and-refactor.md`）：ILA 链 EVM −20.12→−68.64、
+  ACLR −27.21→−52.99、OpenDPD 160/200 静态 NMSE −19.93/−20.60、PSD/CFR/对齐输出
+  哈希——重拷前后 JSON 逐字节相同。test_memory_dpd / test_measured / test_vendor_* 全绿。
+- 校验器新增 `pin_frozen`：pllsim 的 adpll/frac 两条 pin 是**故意**停在 d7be4712
+  （C5），以前 `--strict` 永远红；现在报 *frozen* 并带原因，`--strict` 可过而信息不丢。
+  `__init__.py` 校验器不跟踪（裁剪版包装），`pa/__init__` 的注册表扩到全部 vendored 模型。
+- 跨库往返：PA_DPD 侧写的 GMP npz 进 `tests/data/`，vendored `load_model` 读回后输出一致到
+  浮点精度（BLAS 求和顺序在 macOS / 下限 job 差 1 ulp，`array_equal` 被 CI 抓到）。基线 323 passed。
+- 坑：44cbcb3 是 PA_DPD `claude/digital-polar-tx-dev-r0c338` 的头，**不在其 main**（3aa1c24，
+  落后 21 个提交）；CI 的 sibling checkout 要钉全 sha + `fetch-depth: 0`。
+
 ## 2026-09-30 · B7 收口：outphasing 两路共用一个 LO，3 dB 差距整个消失
 
 - 修法绕开 `chain.py`：`DTCPMConfig.lo_pn_seed`（None 逐位不变；整数 = LO 样本走

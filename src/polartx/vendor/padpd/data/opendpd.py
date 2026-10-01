@@ -1,4 +1,4 @@
-# Vendored from PA_DPD@44f9ee99: src/padpd/data/opendpd.py
+# Vendored from PA_DPD@44cbcb3: src/padpd/data/opendpd.py
 # Adapted-copy policy: see src/polartx/vendor/__init__.py
 """Loader for OpenDPD-format dataset folders.
 

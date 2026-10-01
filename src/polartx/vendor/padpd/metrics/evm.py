@@ -1,4 +1,4 @@
-# Vendored from PA_DPD@44f9ee99: src/padpd/metrics/evm.py
+# Vendored from PA_DPD@44cbcb3: src/padpd/metrics/evm.py
 # Adapted-copy policy: see src/polartx/vendor/__init__.py
 """Error Vector Magnitude.
 
@@ -32,7 +32,8 @@ class EVMResult:
 
 def _evm_from_error(err: np.ndarray, ref: np.ndarray) -> EVMResult:
     ratio = np.sqrt((np.abs(err) ** 2).mean() / (np.abs(ref) ** 2).mean())
-    return EVMResult(db=float(20 * np.log10(ratio)), percent=float(100 * ratio))
+    return EVMResult(db=float(20 * np.log10(ratio)),
+                     percent=float(100 * ratio))
 
 
 def evm(rx: np.ndarray, tx: np.ndarray, equalize: str = "scalar") -> EVMResult:
@@ -47,7 +48,8 @@ def evm(rx: np.ndarray, tx: np.ndarray, equalize: str = "scalar") -> EVMResult:
         err = rx / g - tx
     elif equalize == "per_tone":
         if rx.ndim != 2:
-            raise ValueError("per_tone equalization needs (n_symbols, n_tones)")
+            raise ValueError(
+                "per_tone equalization needs (n_symbols, n_tones)")
         g = (np.conj(tx) * rx).sum(axis=0) / (np.abs(tx) ** 2).sum(axis=0)
         err = rx / g - tx
     else:

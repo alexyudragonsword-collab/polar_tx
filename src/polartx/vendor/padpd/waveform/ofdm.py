@@ -1,4 +1,4 @@
-# Vendored from PA_DPD@44f9ee99: src/padpd/waveform/ofdm.py
+# Vendored from PA_DPD@44cbcb3: src/padpd/waveform/ofdm.py
 # Adapted-copy policy: see src/polartx/vendor/__init__.py
 """802.11be-style OFDM waveform generation and demodulation.
 

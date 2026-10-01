@@ -1,4 +1,4 @@
-# Vendored from PA_DPD@44f9ee99: src/padpd/metrics/spectrum.py
+# Vendored from PA_DPD@44cbcb3: src/padpd/metrics/spectrum.py
 # Adapted-copy policy: see src/polartx/vendor/__init__.py
 """Power spectral density and simplified 802.11-style spectral mask check."""
 
@@ -7,14 +7,29 @@ from __future__ import annotations
 import numpy as np
 from scipy import signal as sig
 
+# Display floor for the PSD, in dB below the peak. A bin can be exactly
+# zero - a constant-envelope probe puts all its power in one bin and welch
+# returns hard zeros for the rest - and log10(0) is -inf, which then
+# propagates into plot autoscaling and into the float32 arrays the Android
+# charts read, where a single -inf collapses the whole y range. 200 dB is
+# far below anything a real measurement resolves.
+PSD_FLOOR_DB = -200.0
+
 
 def psd(x: np.ndarray, fs: float, nfft: int = 4096):
-    """Welch PSD, fftshifted. Returns (freqs_hz, psd_db) with 0 dB = peak."""
+    """Welch PSD, fftshifted. Returns (freqs_hz, psd_db) with 0 dB = peak.
+
+    Values are floored at ``PSD_FLOOR_DB`` so the result is always finite.
+    """
     freqs, pxx = sig.welch(x, fs=fs, nperseg=min(nfft, len(x)),
                            return_onesided=False, detrend=False)
     order = np.argsort(freqs)
     freqs, pxx = freqs[order], pxx[order]
-    pxx_db = 10 * np.log10(pxx / pxx.max())
+    peak = pxx.max()
+    if peak <= 0:            # all-zero input: no peak to normalize against
+        return freqs, np.full(pxx.shape, PSD_FLOOR_DB)
+    floor = 10.0 ** (PSD_FLOOR_DB / 10.0)
+    pxx_db = 10 * np.log10(np.maximum(pxx / peak, floor))
     return freqs, pxx_db
 
 

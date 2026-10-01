@@ -1,4 +1,4 @@
-# Vendored from PA_DPD@44f9ee99: src/padpd/deploy/fixed_point.py
+# Vendored from PA_DPD@44cbcb3: src/padpd/deploy/fixed_point.py
 # Adapted-copy policy: see src/polartx/vendor/__init__.py
 """Fixed-point (bit-true) evaluation of linear-in-parameters models.
 
@@ -83,6 +83,33 @@ class FixedPointPolyModel:
     @property
     def n_coeffs(self) -> int:
         return len(self.wq)
+
+
+def spline_mac_cost(n_branches: int, sample_rate_hz: float,
+                    degree: int = 3) -> dict:
+    """Runtime cost of a spline branch model — the spline selling point.
+
+    Only ``degree+1`` basis functions are non-zero at any amplitude, so
+    per branch the *spline-form* datapath costs ``2*(degree+1)`` real
+    MACs (real basis weights x complex control points) plus one complex
+    multiply (4 real MACs) for ``x * gain`` — independent of knot count.
+    The *LUT-form* datapath (after :func:`padpd.deploy.lut.lut_from_model`)
+    is cheaper still: one linear interpolation (2 real MACs) plus the
+    complex multiply. Compare with :func:`mac_cost`'s ``4 * n_coeffs``
+    for a polynomial evaluated coefficient-by-coefficient.
+    """
+    spline_per_branch = 2 * (degree + 1) + 4
+    lut_per_branch = 2 + 4
+    return {
+        "n_branches": n_branches,
+        "active_bases": degree + 1,
+        "real_macs_per_sample_spline": spline_per_branch * n_branches,
+        "real_macs_per_sample_lut": lut_per_branch * n_branches,
+        "real_gmac_per_s_spline":
+            spline_per_branch * n_branches * sample_rate_hz / 1e9,
+        "real_gmac_per_s_lut":
+            lut_per_branch * n_branches * sample_rate_hz / 1e9,
+    }
 
 
 def mac_cost(n_coeffs: int, sample_rate_hz: float) -> dict:

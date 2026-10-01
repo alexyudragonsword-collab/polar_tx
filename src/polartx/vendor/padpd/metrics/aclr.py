@@ -1,4 +1,4 @@
-# Vendored from PA_DPD@44f9ee99: src/padpd/metrics/aclr.py
+# Vendored from PA_DPD@44cbcb3: src/padpd/metrics/aclr.py
 # Adapted-copy policy: see src/polartx/vendor/__init__.py
 """Adjacent Channel Leakage Ratio."""
 

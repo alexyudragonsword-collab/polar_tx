@@ -1,4 +1,4 @@
-# Vendored from PA_DPD@44f9ee99: src/padpd/data/align.py
+# Vendored from PA_DPD@44cbcb3: src/padpd/data/align.py
 # Adapted-copy policy: see src/polartx/vendor/__init__.py
 """Time alignment of PA input/output captures.
 

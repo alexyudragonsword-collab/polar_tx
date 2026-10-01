@@ -1,4 +1,4 @@
-# Vendored from PA_DPD@44f9ee99: src/padpd/pa/saleh.py
+# Vendored from PA_DPD@44cbcb3: src/padpd/pa/saleh.py
 # Adapted-copy policy: see src/polartx/vendor/__init__.py
 """Saleh memoryless AM-AM / AM-PM model.
 

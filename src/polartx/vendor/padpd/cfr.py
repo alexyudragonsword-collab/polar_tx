@@ -1,4 +1,4 @@
-# Vendored from PA_DPD@44f9ee99: src/padpd/cfr.py
+# Vendored from PA_DPD@44cbcb3: src/padpd/cfr.py
 # Adapted-copy policy: see src/polartx/vendor/__init__.py
 """Crest Factor Reduction by iterative clipping and filtering (ICF).
 
