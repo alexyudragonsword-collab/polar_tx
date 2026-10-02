@@ -2,6 +2,23 @@
 
 本文件按倒序记录实质性进展——最新的一条在这行下面。每条保持简短，只写摘要和指针；结论沉淀进 `cairn/<topic>.md`。
 
+## 2026-10-02 · 记忆反演阶段 2：慢状态在合成完整源上走通，三条认识被实测改掉
+
+- `fit_residual_memory(ch, source=)`：step 组离线辨识 τ，burst 组训练残差
+  `StateConditionedSpline`；`dpa_from_complete_source`、`synthetic_thermal_source`
+  （新 vendor `pa/thermal.py`、`drift.py`、`reference_pa.py`，逐字节）。
+- 验收：τ 5.13 / 29.59 µs（真值 5 / 30）；burst 上状态比 SplineGMP 好 8.6 dB；预热平稳
+  主采集上差 0.12 dB；缺组报错点名；入链对实测 burst −32.0 dB。故意弄坏：不预热 → 对照
+  差 3.1 dB 变红；τ ×0.01 → 增益 0.4 dB 变红。
+- 改掉的认识：①平稳对照要预热且够长（PA_DPD 示例主采集冷启动 54 µs，假性好 5.4 dB——
+  已写进 PA_DPD `docs/02_data_interface.md` §9，PA_DPD 63cd700）；②虚拟 DUT 分块 FIR 重启
+  自带 −34.9 dB 地板，阶段 2 的 NMSE 受它限制（上游问题，未改 vendored 副本，测试钉住）；
+  ③状态样条按结构秩亏 49/180，条件数改报张成空间上的值，阶段 1 数字不变。
+- τ 用错：×0.3～×3 不敏感，×10 太慢反而差 12 dB——要测不要猜。
+- **更正阶段 0 的 LOG**：44cbcb3 所在分支 `claude/digital-polar-tx-dev-r0c338` 后来被删，现在
+  从 `claude/lucid-einstein-58n326` 可达，仍不在 main；文档改为"分支名会变、SHA 不会"。
+- 分支 `feat/slow-memory`，PR #6。笔记 `cairn/measured-memory.md` 新增阶段 2 一节。
+
 ## 2026-10-01 · 记忆反演阶段 1：残差 GMP 进 chain.memory，"19 dB 是记忆"经住了对照
 
 - `measured.py`：`static_prediction` / `fit_residual_memory` / `load_measured_dpa(with_memory)`，
