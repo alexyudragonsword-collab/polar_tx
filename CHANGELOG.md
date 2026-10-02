@@ -10,6 +10,40 @@ release 分组。
 
 ## 未发布 / Unreleased
 
+### 慢状态记忆从"完整源"反演（记忆反演阶段 2）（2026-10-02）
+
+`fit_residual_memory(ch, source=...)` 接 PA_DPD"完整源"npz（`load_complete_npz`）：
+`step` 组离线辨识增益调制 τ，`burst` 组过静态模型后训练残差 `StateConditionedSpline`，
+状态 α 取辨识值；缺组时报错并点名缺哪组，step 无显著调制时拒绝拟合。一键形式
+`dpa_from_complete_source(path)`；无硬件时用 `synthetic_thermal_source`——vendored
+自加热虚拟 DUT（新 vendor `pa/thermal.py`、`drift.py`、`reference_pa.py`，逐字节）
+录出主 / burst / step 三组并写盘读回。报告新增 `taus_heat_s`、`state_alphas`、
+`fast_only_nmse_db`（同一对数据上无状态的 SplineGMP）、`state_gain_db`，以及
+`rank_deficiency` / `dead_columns`。
+
+验收全部是测试（`tests/test_slow_memory.py`，不需要数据、不 skip）：
+
+| 项 | 实测 | 门槛 |
+|---|---|---|
+| 离线 τ（真值 5 / 30 µs） | 5.13 / 29.59 µs | 误差 ≤ 10% |
+| burst：状态残差 vs SplineGMP 残差 | −31.91 vs −23.33 dB（+8.6） | ≥ 6 dB |
+| 预热平稳主采集：两者之差 | 0.12 dB | ≤ 1 dB |
+| 缺 burst / step | 报错并点名 | — |
+| 入链（DPA + 状态记忆，冷启动）对实测 burst | −32.0 dB（模型自身 −31.9） | 差 < 1 dB |
+
+三个过程中被实测改掉的认识，详见 `cairn/measured-memory.md`：**平稳对照要求主采集预热
+且够长**（冷启动 54 µs 的主采集是加热暂态，状态模型假性好 5.4 dB；PA_DPD 示例文件就是
+这样录的，已在 PA_DPD 数据接口文档里写明）；**虚拟 DUT 自带 −34.9 dB 地板**（分块推进时
+FIR 每 128 采样重启，块首三个采样出错；平稳残差 −34.0 正落在上面，所以阶段 2 的 NMSE
+受 DUT 限制、8.6 dB 是下界——上游问题，vendored 副本未改）；**状态样条按结构秩亏**（单位
+分解 + 共用 `q_scale`，180 系数秩亏 49），条件数改报张成空间上的值（1.6e4），满秩模型
+上与旧值完全相同。τ 用错的代价也量了：×0.3～×3 增益不变，×10 太慢时反而差 12 dB。
+
+另：更正阶段 0 的记录——padpd pin 44cbcb3 在 vendor 时是 PA_DPD
+`claude/digital-polar-tx-dev-r0c338` 的头，该分支后来被删过；现在可从
+`claude/lucid-einstein-58n326` 到达，仍不在 `main`。`vendor/__init__.py`、architecture §5、
+CI 注释改为"分支名会变、SHA 不会"的写法。
+
 ### 快记忆从实测反演：残差模型进 `chain.memory`（记忆反演阶段 1）（2026-10-01）
 
 `measured.py` 三个新函数：`static_prediction(ch, x)`（静态 LUT 模型的输出，

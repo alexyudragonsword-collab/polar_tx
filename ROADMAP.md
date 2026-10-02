@@ -64,7 +64,7 @@ response 模式不能背书杂散结论）。
 
 **先定位原因再决定走哪条**，别直接开始写多速率引擎。
 
-### B2. 快记忆已从实测反演，慢状态待完整源容器
+### B2. 快记忆已从实测反演；慢状态流程已在合成源上走通，等一份真采集
 
 快记忆（GMP 级，几十个采样内）**已经从 OpenDPD 实测反演进链路**：
 `measured.fit_residual_memory` 把"静态 LUT 输出 → 实测输出"的残差拟成 GMP-510，
@@ -74,11 +74,18 @@ response 模式不能背书杂散结论）。
 （发表 −33.7）。入链后极坐标 DPD 只买回 0.2 dB，整链 ILA 买回 16.7 dB。
 坑与口径见 `cairn/measured-memory.md`。
 
-还没做的是**慢状态**（热 / 偏置，µs 级）：需要 PA_DPD `data/complete.py` 定义的
-"完整源"容器（burst / step / cal_rx / atten / op 五组采集）才能辨识 τ 并训练
-`StateConditionedSpline`；OpenDPD 数据只有平稳采集，慢状态在平稳激励下不可观。
-vendored 代码（`spline_state.py`、`gain_modulation.py`、`data/complete.py`）已就位，
-缺的是数据。先用 `ThermalReferencePA` 合成完整源走通流程，再接真采集。
+**慢状态**（热 / 偏置，µs 级）的流程 2026-10-02 已走通，但只在**合成**完整源上：
+`measured.dpa_from_complete_source` 从 `step` 组离线辨识 τ（虚拟 DUT 5.13 / 29.59 µs，
+真值 5 / 30），用 `burst` 组训练残差 `StateConditionedSpline`，比无状态的 SplineGMP
+残差好 **8.6 dB**；在预热过的平稳主采集上两者差 0.12 dB（慢状态不可观，模型没有
+凭空变好）。见 `examples/ex21_slow_memory.py`、`cairn/measured-memory.md`。
+
+缺的是**一份真的完整源采集**：OpenDPD 只有平稳采集，慢状态在其中不可观。要的是
+PA_DPD `data/complete.py` 格式的 npz，至少含 `step` 与 `burst` 两组，主采集预热后
+录、长度为最慢 τ 的数倍，`x` 在极坐标 DPA 的输入幅度域。有了它，
+`dpa_from_complete_source("file.npz")` 直接能跑。另一个已知限制：合成源的 NMSE
+被虚拟 DUT 自己的分块 FIR 重启伪影钉在约 −35 dB（PA_DPD 上游问题，见 cairn 笔记）。
+
 另两条留待后定：静态提取从 64 箱 LUT 换样条（纯静态器件上 64 箱的地板 −35 dB，
 来源是顶部稀疏箱丢弃后的钳位）；供电推压（`SupplyConfig`）仍是解析构造，
 而且它的 τ 是 AM→PM 的供电网络时间常数，不能拿 AM→AM 的热 τ 去填。

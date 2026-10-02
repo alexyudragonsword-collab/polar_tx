@@ -72,7 +72,9 @@ src/polartx/
 │   ├── ofdm_rx.py    接收机式 OFDM EVM：preamble 信道估计 + pilot CPE 跟踪
 │   └── rxband.py     双工偏置处的 RX 频段噪声——FDD polar TX 的经典预算
 ├── analysis/responses.py  解析对照：环路响应、量化噪底、ZOH sinc 与镜像、噪声预算
-├── measured.py       实测数据通路（OpenDPD 格式）→ 测量定标的 DPA 模型
+├── measured.py       实测数据通路 → 测量定标的 DPA 模型 + 残差记忆：OpenDPD 采集给快记忆
+│                     （GMP-510），"完整源" npz 的 step / burst 组给慢状态（τ 辨识 +
+│                     StateConditionedSpline）；`synthetic_thermal_source` 是无硬件的合成源
 ├── montecarlo.py     良率分析（spec 化、进程池并行）
 ├── export/rtl.py     定点化 + Verilog/Verilog-AMS 导出 + 金向量
 ├── selector.py       架构选择器：给定需求，ADPLL / DTC / outphasing / RF-DAC 四候选解析打分
@@ -88,6 +90,7 @@ src/polartx/
     └── padpd/
         ├── pa/base.py · gmp.py · memory_polynomial.py   PAModel 接口、lstsq_fit、GMP / MP
         ├── pa/spline.py · spline_state.py   B 样条 MP / GMP（低条件数）与慢状态调度（阶段 2）
+        ├── pa/thermal.py · drift.py · reference_pa.py   自加热虚拟 DUT（两极热网络驱动漂移状态）与它的 W-H 内核
         ├── pa/presets.py     gmp_opendpd_510 / mp_opendpd_500（抽取；DDR-Volterra 未 vendor）
         ├── pa/saleh.py · hb_import.py   Saleh、Wiener-Hammerstein（HB 导入）
         ├── gain_modulation.py   阶跃探针录音离线辨识慢增益调制 τ（阶段 2）
@@ -170,9 +173,11 @@ commit 与路径，`tools/vendor_check.py` + CI 的 `vendor-drift` job 每次 pu
 `ROADMAP.md` C5：上游把逐周期循环搬进了 jit kernel，本仓的 `dp_cal` 钩子每周期
 回调 Python 对象，装不进去）——这两条在 manifest 里带 `pin_frozen` 原因，
 校验器报 *frozen* 而不是 *stale*，`--strict` 因此能过而又不丢信息。`padpd` 子树
-整体在 `44cbcb3`——注意这是 PA_DPD `claude/digital-polar-tx-dev-r0c338` 分支的头，
-不是它的 `main`（当时 `3aa1c24`，落后 21 个提交；样条 / 慢状态 / 完整源模块只在
-那条分支上），CI 的 sibling checkout 因此钉全 sha 并 `fetch-depth: 0`（2026-10-01
+整体在 `44cbcb3`——注意它**不在 PA_DPD 的 `main` 上**（`main` 是 `3aa1c24`，落后
+21 个提交；样条 / 慢状态 / 热 DUT / 完整源模块只在这条历史线上）。vendor 时它是
+`claude/digital-polar-tx-dev-r0c338` 分支的头，那条分支后来被删过；2026-10-02 查证
+时它可从 `claude/lucid-einstein-58n326`（PA_DPD 的默认 HEAD）到达。**分支名会变，
+SHA 不会**，所以 CI 的 sibling checkout 钉全 sha 并 `fetch-depth: 0`（2026-10-01
 从 `44f9ee99` 推进：当时三个 `pa/*.py` 与上游主干
 差 42 / 15 / 20 行，逐字节对照钉定 blob 后确认**全是上游前进、本地零改动**，
 故整体重拷；同批新 vendor `pa/spline.py`、`pa/spline_state.py`、
