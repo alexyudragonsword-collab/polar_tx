@@ -75,16 +75,17 @@ response 模式不能背书杂散结论）。
 坑与口径见 `cairn/measured-memory.md`。
 
 **慢状态**（热 / 偏置，µs 级）的流程 2026-10-02 已走通，但只在**合成**完整源上：
-`measured.dpa_from_complete_source` 从 `step` 组离线辨识 τ（虚拟 DUT 5.13 / 29.59 µs，
+`measured.dpa_from_complete_source` 从 `step` 组离线辨识 τ（虚拟 DUT 5.14 / 29.64 µs，
 真值 5 / 30），用 `burst` 组训练残差 `StateConditionedSpline`，比无状态的 SplineGMP
-残差好 **8.6 dB**；在预热过的平稳主采集上两者差 0.12 dB（慢状态不可观，模型没有
-凭空变好）。见 `examples/ex21_slow_memory.py`、`cairn/measured-memory.md`。
+残差好 **13.3 dB**（−37.0 vs −23.7）；在预热过的平稳主采集上状态模型反而差 0.44 dB
+（慢状态不可观，模型没有凭空变好）。见 `examples/ex21_slow_memory.py`、`cairn/measured-memory.md`。
 
 缺的是**一份真的完整源采集**：OpenDPD 只有平稳采集，慢状态在其中不可观。要的是
 PA_DPD `data/complete.py` 格式的 npz，至少含 `step` 与 `burst` 两组，主采集预热后
 录、长度为最慢 τ 的数倍，`x` 在极坐标 DPA 的输入幅度域。有了它，
-`dpa_from_complete_source("file.npz")` 直接能跑。另一个已知限制：合成源的 NMSE
-被虚拟 DUT 自己的分块 FIR 重启伪影钉在约 −35 dB（PA_DPD 上游问题，见 cairn 笔记）。
+`dpa_from_complete_source("file.npz")` 直接能跑。合成源原先被虚拟 DUT 的分块 FIR
+重启伪影钉在约 −35 dB，2026-10-03 PA_DPD 已修（pin 08b9725），上面是修后的数字（修前
+8.6 dB 只是下界）。
 
 另两条留待后定：静态提取从 64 箱 LUT 换样条（纯静态器件上 64 箱的地板 −35 dB，
 来源是顶部稀疏箱丢弃后的钳位）；供电推压（`SupplyConfig`）仍是解析构造，

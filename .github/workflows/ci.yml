@@ -160,17 +160,20 @@ jobs:
           # secret the expression falls back to the default token, which is
           # enough whenever the sibling is public.
           token: ${{ secrets.SIBLING_READ_TOKEN || github.token }}
-      # The padpd pin 44cbcb3 has been on PA_DPD's main since 2026-10-03;
-      # before that it lived only on feature branches that were renamed
-      # twice.  Branch names move, SHAs do not: keep checking out the full
-      # SHA with full history -- a shallow checkout of a moving ref is how
-      # every padpd file gets skipped, which --fail-on-skip turns red.
+      # padpd pins are mixed, like pllsim's: pa/thermal.py and
+      # gain_modulation.py are at 08b9725 (the ThermalReferencePA FIR-restart
+      # fix), everything else at its ancestor 44cbcb3.  Both are on PA_DPD's
+      # main; 44cbcb3 lived only on twice-renamed feature branches before
+      # 2026-10-03.  Branch names move, SHAs do not: keep checking out the
+      # newest pin by full SHA with full history so the older one stays
+      # reachable -- a shallow checkout is how files get skipped, which
+      # --fail-on-skip turns red.
       - name: Checkout PA_DPD (pinned)
         continue-on-error: true
         uses: actions/checkout@v4
         with:
           repository: alexyudragonsword-collab/PA_DPD
-          ref: 44cbcb363211dfe35eaf76506d0de039e2c3f058
+          ref: 08b9725595748b290c76d1b70355f7e6014a709e
           fetch-depth: 0
           path: _siblings/PA_DPD
       - uses: actions/setup-python@v5

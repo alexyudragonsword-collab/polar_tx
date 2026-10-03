@@ -79,10 +79,10 @@ print(f"state model: {rep['n_coeffs']} coefficients, rank deficiency {rep['rank_
       f"({rep['dead_columns']} dead columns), condition {rep['condition_number']:.1e} on the spanned space")
 from polartx.vendor.padpd.pa.thermal import ThermalReferencePA
 _pa = ThermalReferencePA(drive0=0.13, fs=fs, heat_gain=0.0)
-_floor = nmse_db(_pa._drift.pa()(src["x"]), _pa(src["x"]))
-print(f"virtual-DUT floor: {_floor:.1f} dB -- its FIRs restart every 128-sample block, a\n"
-      f"non-physical glitch no model can fit; the stationary residual sits on it, so\n"
-      f"these NMSEs are DUT-limited and the state gain is a lower bound")
+_err = np.max(np.abs(_pa._drift.pa()(src["x"]) - _pa(src["x"])))
+print(f"virtual DUT, heat frozen, block-wise vs one continuous call: max sample error "
+      f"{_err:.1e}\n(PA_DPD 08b9725 removed the FIR restart at every 128-sample block that put "
+      f"a\n-35 dB floor under every number here; before it: burst -31.9, main -34.0, gain 8.6 dB)")
 
 # ------------------------------------------------------- Part 3: the chain
 b = src["extras"]["burst"]
@@ -115,11 +115,8 @@ a = ax[0, 0]
 xs, ys = src["extras"]["step"]["x"], src["extras"]["step"]["y"]
 t_us = np.arange(xs.size) / fs * 1e6
 gain_db = 20 * np.log10(np.abs(ys) / np.abs(xs))
-# the virtual DUT restarts its FIRs every 128-sample block (an upstream
-# artefact, see Part 2's floor): drop the first three samples of each block
-clean = (np.arange(xs.size) % 128) >= 3
-gain_db = gain_db - np.median(gain_db[clean][-1000:])
-a.plot(t_us[clean], gain_db[clean], lw=0.8)
+gain_db = gain_db - np.median(gain_db[-1000:])
+a.plot(t_us, gain_db, lw=0.8)
 a.set(xlabel="time [us]", ylabel="gain re. final cold state [dB]",
       title=f"step probe: identified tau {gm.taus_heat_s[0] * 1e6:.1f} / "
             f"{gm.taus_heat_s[1] * 1e6:.1f} us (truth 5 / 30)")

@@ -10,6 +10,30 @@ release 分组。
 
 ## 未发布 / Unreleased
 
+### 虚拟 DUT 的 −35 dB 地板被上游修掉，阶段 2 数字重测（2026-10-03）
+
+PA_DPD 修了 `ThermalReferencePA` 每 128 采样重启 FIR 的 bug（bd55928，pin 08b9725）：
+FIR 对整段连续跑，只有 Saleh 级按块换热参数。按 vendor 规矩只重拷 `pa/thermal.py` 和
+`gain_modulation.py`（后者只改了 docstring——它此前把 0.47 / 0.51 的滞回读数归为估计器
+偏差，其实是同一个 DUT bug；不拷 `--strict` 会报 stale），其余 padpd 文件两个 SHA 间逐字节
+相同、pin 留在 44cbcb3；CI 的 PA_DPD checkout 钉到 08b9725。
+
+测试 `test_the_virtual_dut_floors_every_model...` 改为
+`test_the_virtual_dut_is_one_continuous_device_when_the_heat_is_frozen`：断言地板**消失**
+（`heat_gain=0` 时分块与连续调用逐采样一致到 1e-12 满量程，实测 8.9e-16，块首三个采样
+包含在内；平稳快记忆残差 < −38 dB），不是放宽阈值。换回旧 `thermal.py` 变红（已验）。
+
+| 量 | 修前 | 修后 |
+|---|---|---|
+| 离线 τ（真值 5 / 30 µs） | 5.13 / 29.59 µs | 5.14 / 29.64 µs |
+| burst：状态残差 vs SplineGMP 残差 | −31.91 vs −23.33 dB（+8.6） | −37.00 vs −23.68 dB（+13.3） |
+| 预热平稳主采集：状态 vs 快记忆 | −33.92 vs −34.04 | −41.46 vs −41.90 |
+| 入链对实测 burst | −32.0 dB | −37.2 dB |
+| 冷启动 54 µs 主采集上的假性增益 | 5.4 dB | 7.6 dB |
+
+ex21 去掉了 panel (a) 对块首采样的掩蔽和"DUT 地板"那行，改打印冻结状态下的逐采样误差。
+README ex21 行、ROADMAP B2、`cairn/measured-memory.md` 同步；下面 10-02 条目里的数字是修前的。
+
 ### 慢状态记忆从"完整源"反演（记忆反演阶段 2）（2026-10-02）
 
 `fit_residual_memory(ch, source=...)` 接 PA_DPD"完整源"npz（`load_complete_npz`）：

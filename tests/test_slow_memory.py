@@ -42,7 +42,7 @@ def test_offline_tau_identification_recovers_the_true_constants(source):
     taus = gm.taus_heat_s
     assert len(taus) == 2
     for got, true in zip(taus, SYNTHETIC_THERMAL_TAUS_S):
-        assert abs(got - true) / true < 0.10, (got, true)   # 5.13 / 29.59 us
+        assert abs(got - true) / true < 0.10, (got, true)   # 5.14 / 29.64 us
     alphas = gm.state_alphas(source["fs"])
     assert np.allclose(alphas, np.exp(-1.0 / (np.asarray(taus) * source["fs"])))
 
@@ -56,8 +56,8 @@ def test_state_residual_beats_the_fast_only_residual_on_the_burst(fitted):
     rep = ch["memory_report"]
     assert rep["model_class"] == "StateConditionedSpline"
     assert rep["fast_only_model_class"] == "SplineGMP"
-    assert rep["state_gain_db"] >= 6.0, rep                    # measured 8.6
-    assert rep["residual_nmse_db"] < -28.0                      # measured -31.9
+    assert rep["state_gain_db"] >= 6.0, rep                    # measured 13.3
+    assert rep["residual_nmse_db"] < -28.0                      # measured -37.0
     assert rep["fast_only_nmse_db"] < rep["memoryless_nmse_db"] < rep["static_nmse_db"]
     # every stage of the ladder buys something on a slow-state device
     assert abs(rep["residual_train_nmse_db"] - rep["residual_nmse_db"]) < 3.0
@@ -76,21 +76,19 @@ def test_states_buy_nothing_on_a_stationary_capture(fitted):
                          0.6, 1e-9, ch)
     _, rf = _fit_on_pair(u, v, fast_spline_residual, 0.6, 1e-9, ch)
     assert abs(rs["residual_nmse_db"] - rf["residual_nmse_db"]) <= 1.0, (
-        rs["residual_nmse_db"], rf["residual_nmse_db"])         # -33.92 vs -34.04
+        rs["residual_nmse_db"], rf["residual_nmse_db"])         # -41.46 vs -41.90
 
 
-def test_the_virtual_dut_floors_every_model_at_its_block_restart_artefact(fitted):
-    """Why the residuals stop near -34 dB: the virtual DUT itself.
-    ThermalReferencePA runs its Wiener-Hammerstein PA block by block (128
-    samples, state frozen per block) and ReferencePA convolves each block
-    on its own, so the input/output FIRs restart every block and glitch
-    its first three samples (3-tap input FIR into a 2-tap output FIR) --
-    a non-physical error tied to the sample
-    index, which no causal model can fit.  Frozen state, same input:
-    -34.9 dB against one continuous call.  The fast-only residual on the
-    stationary capture lands on that floor, so the stage-2 NMSEs are
-    DUT-limited (upstream PA_DPD issue, recorded in cairn/measured-
-    memory.md), and the model-vs-model gains are lower bounds."""
+def test_the_virtual_dut_is_one_continuous_device_when_the_heat_is_frozen(fitted):
+    """With heat_gain=0 the thermal DUT must BE its ReferencePA: block-wise
+    processing may change only the Saleh stage's parameters, never the
+    signal path.  Until PA_DPD 08b9725 every 128-sample block went through
+    a fresh ReferencePA whose FIRs restarted from rest, so in-block samples
+    0/1/2 were wrong and every number measured on this DUT sat on a
+    -34.9 dB floor (the stationary fast-only residual landed at -34.0).
+    This pins the floor's absence, not a looser threshold on it: the two
+    calls agree sample by sample to rounding, block edges included, and
+    the residual models now go well past where the floor was."""
     from polartx.vendor.padpd.pa.thermal import ThermalReferencePA
     from polartx.vendor.padpd.waveform.ofdm import OFDMConfig, generate_ofdm
     fs = 80e6
@@ -99,21 +97,26 @@ def test_the_virtual_dut_floors_every_model_at_its_block_restart_artefact(fitted
     pa = ThermalReferencePA(drive0=0.13, fs=fs, heat_gain=0.0)
     y_blocks = pa(x)
     y_cont = pa._drift.pa()(x)
-    floor = nmse_db(y_cont, y_blocks)
-    assert -37.0 < floor < -33.0                                # measured -34.9
+    # not bit-exact: the gain normalisation now sits before FIR_out
+    # (measured max error 8.9e-16, 3e-16 of full scale)
+    tol = 1e-12 * np.max(np.abs(y_cont))
     err = np.abs(y_blocks - y_cont)
-    assert np.all(err[np.arange(x.size) % 128 >= 3] == 0.0)     # only block starts
+    assert np.all(err <= tol), err.max()
+    offset = np.arange(x.size) % pa.block
+    assert np.all(err[offset < 3] <= tol)                      # was -14/-25/-50 dB
+    # and the stationary fast-only residual is no longer held at ~-35 dB
     _, ch = fitted
     u, v = residual_training_pair(ch)
     _, rf = _fit_on_pair(u, v, fast_spline_residual, 0.6, 1e-9, ch)
-    assert abs(rf["residual_nmse_db"] - floor) < 1.5            # -34.0 vs -34.9
+    assert rf["residual_nmse_db"] < -38.0                       # measured -41.9 (was -34.0)
 
 
 def test_a_cold_short_main_capture_is_not_stationary():
     """Why the control needs a WARM capture: recorded cold, the 'main'
     capture is itself a heating transient and the state model looks
     several dB better on it -- the trap the synthetic source avoids.
-    (Measured: cold 54 us capture, state 5.4 dB better.)"""
+    (Measured: cold 54 us capture, state 7.6 dB better; 5.4 dB
+    before the PA_DPD 08b9725 DUT fix.)"""
     from polartx.vendor.padpd.pa.thermal import ThermalReferencePA
     from polartx.vendor.padpd.waveform.ofdm import OFDMConfig, generate_ofdm
     fs = 80e6
@@ -172,11 +175,11 @@ def test_chain_with_state_memory_reproduces_the_burst_and_round_trips(fitted, so
     val = slice(rep["n_train"], None)
     g = ch["chain_gain"]
     y0 = PolarTX(cfg, IdealPhaseModulator(), dpa).run(wf, noise=False).y
-    assert nmse_db(static_prediction(ch, b["x"])[val] / g, y0[val]) < -35.0   # -39.8
+    assert nmse_db(static_prediction(ch, b["x"])[val] / g, y0[val]) < -35.0   # -39.9
     tx = PolarTX(cfg, IdealPhaseModulator(), dpa, memory=ch["memory"])
     y1 = tx.run(wf, noise=False).y
     chain_nmse = nmse_db(b["y"][val] / g, y1[val])
-    assert abs(chain_nmse - rep["residual_nmse_db"]) < 1.0      # -32.0 vs -31.9
+    assert abs(chain_nmse - rep["residual_nmse_db"]) < 1.0      # -37.2 vs -37.0
     path = tmp_path / "state.npz"
     ch["memory"].save(str(path))
     back = load_model(str(path))

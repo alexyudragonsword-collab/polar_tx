@@ -8,7 +8,10 @@ d7be4712 — ROADMAP C5) and the waveform/metrics/PA infrastructure from
 on PA_DPD's ``main`` since 2026-10-03, when main was fast-forwarded from
 3aa1c24 and made the default branch.  When vendored the commit sat only on
 feature branches whose names changed twice, which is why CI fetches the
-pin by full SHA rather than by branch).
+pin by full SHA rather than by branch; ``pa/thermal.py`` and
+``gain_modulation.py`` are at 08b9725, also on ``main``, which fixed
+ThermalReferencePA restarting its FIRs every 128-sample block — the other
+files are byte-identical between the two commits and keep the older pin).
 Each file carries a header naming its origin.  Copies are verbatim except:
 
 - ``pllsim/arch/frac.py``: FracConfig/frac_spur_offsets extracted from
