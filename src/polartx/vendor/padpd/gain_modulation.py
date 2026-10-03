@@ -1,4 +1,4 @@
-# Vendored from PA_DPD@44cbcb3: src/padpd/gain_modulation.py
+# Vendored from PA_DPD@08b9725: src/padpd/gain_modulation.py
 # Adapted-copy policy: see src/polartx/vendor/__init__.py
 """Power-gain-modulation identification: measure tau, don't guess it.
 
@@ -156,17 +156,20 @@ class GainModulationResult:
         slow residue and tau trade off almost freely, and the heating
         and cooling fits land on different points of that valley — a
         spurious hysteresis ratio on a perfectly linear thermal RC (a
-        0.47 reading with truth 1.0 was measured this way). Requires at
-        least ``min_tau_spans`` time constants of both fits inside the
-        window; ``state_alphas`` (from the heating fit) stays usable
-        either way — it is this *asymmetry verdict* that needs the
-        margin.
+        linear-RC DUT read 0.92 at 2.5 tau spans, against 0.999 at 8).
+        Requires at least ``min_tau_spans`` time constants of both fits
+        inside the window; ``state_alphas`` (from the heating fit) stays
+        usable either way — it is this *asymmetry verdict* that needs
+        the margin.
 
-        Even with a long window the cooling fit is the weaker of the
-        two: the backed-off segment excites the state far less, so its
-        tau carries more uncertainty than the heating tau (a linear-RC
-        DUT read 0.51 at 8 tau spans). Treat the ratio as a coarse
-        flag — only a clearly out-of-band value is evidence.
+        The backed-off cooling segment excites the state less than the
+        heating one, so it is the weaker fit; with a long window it is
+        nevertheless accurate (8 tau spans: cooling 7.3/47.8 us against
+        a truth of 8/50, ratio 0.999). Readings of 0.47 and 0.51 that
+        earlier versions of this docstring cited as estimator bias came
+        from a bug in ThermalReferencePA, fixed 2026-10-03, which put a
+        block-periodic error into every capture; the backed-off segment
+        is where it was largest relative to the signal.
         """
         obs = self.observation_s
         if not (self.taus_heat_s and self.taus_cool_s) or not obs > 0:
