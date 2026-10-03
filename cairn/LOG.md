@@ -2,6 +2,15 @@
 
 本文件按倒序记录实质性进展——最新的一条在这行下面。每条保持简短，只写摘要和指针；结论沉淀进 `cairn/<topic>.md`。
 
+## 2026-10-03 · 更正：padpd pin 44cbcb3 现在在 PA_DPD 的 main 上
+
+- PA_DPD 的 `main` 今天从 3aa1c24 快进到 5adf557（含 44cbcb3），并改为默认分支；
+  polar_tx 文档提交以 PA_DPD PR #1 合进 main（ebe9ec4），`claude/digital-polar-tx-dev-r0c338`
+  已删。
+- 10-01 / 10-02 两条 LOG 与 `vendor/__init__.py`、architecture §5、CI 注释里"44cbcb3 不在
+  main 上"的说法当时成立、现已过时；三处文档改为现状，LOG 旧条目保留不动。
+- CI 仍按全 SHA + `fetch-depth: 0` 取 pin：分支名两天里变了两次，这条做法是对的。
+
 ## 2026-10-02 · 记忆反演阶段 2：慢状态在合成完整源上走通，三条认识被实测改掉
 
 - `fit_residual_memory(ch, source=)`：step 组离线辨识 τ，burst 组训练残差

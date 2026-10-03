@@ -160,13 +160,11 @@ jobs:
           # secret the expression falls back to the default token, which is
           # enough whenever the sibling is public.
           token: ${{ secrets.SIBLING_READ_TOKEN || github.token }}
-      # The padpd pin 44cbcb3 is NOT on PA_DPD's main (3aa1c24 is 21 commits
-      # behind it); it lives on a feature line whose branch name has already
-      # changed once (vendored from claude/digital-polar-tx-dev-r0c338, later
-      # deleted; reachable from claude/lucid-einstein-58n326 on 2026-10-02).
-      # Branch names move, SHAs do not: check out the full SHA with full
-      # history -- a shallow checkout of main would skip every padpd file,
-      # which --fail-on-skip turns red.
+      # The padpd pin 44cbcb3 has been on PA_DPD's main since 2026-10-03;
+      # before that it lived only on feature branches that were renamed
+      # twice.  Branch names move, SHAs do not: keep checking out the full
+      # SHA with full history -- a shallow checkout of a moving ref is how
+      # every padpd file gets skipped, which --fail-on-skip turns red.
       - name: Checkout PA_DPD (pinned)
         continue-on-error: true
         uses: actions/checkout@v4
