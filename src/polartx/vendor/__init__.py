@@ -4,13 +4,11 @@ polartx is self-contained: the phase-path engine comes from
 ``alexyudragonsword-collab/pll_simulator`` (package ``pllsim``, commit
 931cfaf, with ``arch/adpll.py`` and ``arch/frac.py`` deliberately held at
 d7be4712 — ROADMAP C5) and the waveform/metrics/PA infrastructure from
-``alexyudragonsword-collab/PA_DPD`` (package ``padpd``, commit 44cbcb3 —
-NOT on PA_DPD's ``main`` (3aa1c24, 21 commits behind it): when vendored it
-was the head of the ``claude/digital-polar-tx-dev-r0c338`` branch, which
-was later deleted; on 2026-10-02 it is reachable from
-``claude/lucid-einstein-58n326``, PA_DPD's default HEAD.  The spline /
-state / thermal / complete-source modules vendored here exist only on that
-line of history, which is why CI fetches the pin by full SHA).
+``alexyudragonsword-collab/PA_DPD`` (package ``padpd``, commit 44cbcb3,
+on PA_DPD's ``main`` since 2026-10-03, when main was fast-forwarded from
+3aa1c24 and made the default branch.  When vendored the commit sat only on
+feature branches whose names changed twice, which is why CI fetches the
+pin by full SHA rather than by branch).
 Each file carries a header naming its origin.  Copies are verbatim except:
 
 - ``pllsim/arch/frac.py``: FracConfig/frac_spur_offsets extracted from

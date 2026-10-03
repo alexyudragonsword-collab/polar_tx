@@ -173,11 +173,11 @@ commit 与路径，`tools/vendor_check.py` + CI 的 `vendor-drift` job 每次 pu
 `ROADMAP.md` C5：上游把逐周期循环搬进了 jit kernel，本仓的 `dp_cal` 钩子每周期
 回调 Python 对象，装不进去）——这两条在 manifest 里带 `pin_frozen` 原因，
 校验器报 *frozen* 而不是 *stale*，`--strict` 因此能过而又不丢信息。`padpd` 子树
-整体在 `44cbcb3`——注意它**不在 PA_DPD 的 `main` 上**（`main` 是 `3aa1c24`，落后
-21 个提交；样条 / 慢状态 / 热 DUT / 完整源模块只在这条历史线上）。vendor 时它是
-`claude/digital-polar-tx-dev-r0c338` 分支的头，那条分支后来被删过；2026-10-02 查证
-时它可从 `claude/lucid-einstein-58n326`（PA_DPD 的默认 HEAD）到达。**分支名会变，
-SHA 不会**，所以 CI 的 sibling checkout 钉全 sha 并 `fetch-depth: 0`（2026-10-01
+整体在 `44cbcb3`，2026-10-03 起在 PA_DPD 的 `main` 上（`main` 从 `3aa1c24` 快进过来，
+并成为默认分支）。在那之前它只在特性分支上，分支名还变过两次
+（`claude/digital-polar-tx-dev-r0c338` → `claude/lucid-einstein-58n326`），所以本文
+2026-10-01 / 10-02 两版写的"不在 main 上"在当时成立、现已过时。**分支名会变，SHA 不会**，
+所以 CI 的 sibling checkout 仍钉全 sha 并 `fetch-depth: 0`（2026-10-01
 从 `44f9ee99` 推进：当时三个 `pa/*.py` 与上游主干
 差 42 / 15 / 20 行，逐字节对照钉定 blob 后确认**全是上游前进、本地零改动**，
 故整体重拷；同批新 vendor `pa/spline.py`、`pa/spline_state.py`、
