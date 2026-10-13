@@ -2,6 +2,26 @@
 
 本文件按倒序记录实质性进展——最新的一条在这行下面。每条保持简短，只写摘要和指针；结论沉淀进 `cairn/<topic>.md`。
 
+## 2026-10-13 · test-gui 的 Bus error 是 PySide6 6.12.0，不是代码：guiqt 钉 `<6.12`
+
+- 现象：推送 008cc90 后 CI 只有 `test-gui` 红，两次（含重跑）都在 Streamlit AppTest 跑 Chain Workbench 时 Bus error（退出码 135），
+  第二次的栈停在 `import pandas` 的字节码编译 + 垃圾回收里；其余 11 个任务两次都绿。
+- 证据：10-03 成功运行（8a10480）与 10-13 失败运行的 `Successfully installed` 逐项比对，只有 PySide6 6.11.2 → 6.12.0 不同
+  （6.12 还新拉了 PySide6_WebEngine / PySide6_Pdf）；pandas 3.0.6、pyarrow 25.0.1、streamlit 1.65.0、numpy 2.4.6 完全一致。
+- 复现：本地装 CI 同版本，在未动的 main 8a10480 和 008cc90 上跑同一条命令都 SIGSEGV（退出码 139，栈在 streamlit 组件扫描线程池里）；
+  装回 PySide6 6.11.2 两边都过。
+- 修法：`pyproject.toml` 的 `guiqt` 额外依赖加上限 `<6.12`，带注释指向本条；CI 的 `test-gui` 装的就是这个 extra。未改任何测试。
+- 教训：`test-gui` 的三个前端依赖都不钉，上游一发版就能把绿变红；`test-floor` 守的是下限，上限没人守。
+
+## 2026-10-13 · array_tx 带回四处修正：NR 400 MHz、nr_dtc fs_bb、CartesianTX 可钉满刻度、抖动开关不换 LO 实例
+
+- 来源：姊妹库 array_tx 里程碑 1（4 单元 FR2 阵列）vendor 了 polar_tx@8a10480 后发现的。详见 CHANGELOG 本日条目。
+- `fs_bb` 的错值只影响把 `TxPreset.fs_bb` 当采样率的调用方（array_tx 没有，它用 `wf.fs`）；GUI 的报告层若显示 fs_bb 会从 400 变 491.52 MS/s。
+- `fs_scale_fixed` 进 `CartesianTX`：钉到突发自身峰值时与默认逐位相同（测试）；钉住后 1.3× 的驱动被截在满刻度而不是重标定。
+- 抖动"抽了再置零"：`jitter_rms_s > 0` 的所有预设逐位不变（`rng.normal(0, s, n)` 本来就是这个调用）；
+  改变的只有 `jitter_rms_s = 0` + `lo_pn` + `lo_pn_seed=None` 的组合，其 LO 样本现在与开抖动时相同（测试断言差值是白抖动而非另一个 LO 实例）。
+- 测试 307 项全绿；未碰示例。
+
 ## 2026-10-03 · 虚拟 DUT 的 −35 dB 地板被上游修掉，阶段 2 重测
 
 - PA_DPD bd55928（pin 08b9725）：`ThermalReferencePA` 的 FIR 对整段连续跑，只按块换 Saleh

@@ -206,9 +206,12 @@ def wifi_waveform(bw: float = 160e6, qam: int = 1024, *, n_symbols: int = 8,
 LTE_NUMEROLOGY = {1.4e6: (128, 6), 3e6: (256, 15), 5e6: (512, 25),
                   10e6: (1024, 50), 15e6: (1536, 75), 20e6: (2048, 100)}
 
-#: 5G NR (channel BW, SCS) -> (FFT size, resource blocks), 38.104-style
+#: 5G NR (channel BW, SCS) -> (FFT size, resource blocks), 38.104-style.
+#: The 120 kHz rows are TS 38.101-2 Table 5.3.2-1 (FR2): 50/100/200/400 MHz
+#: -> 32/66/132/264 RB; the FFT is the smallest power of two above 12*N_RB.
 NR_NUMEROLOGY = {(50e6, 30e3): (2048, 133), (100e6, 30e3): (4096, 273),
-                 (100e6, 120e3): (1024, 66), (200e6, 120e3): (2048, 132)}
+                 (50e6, 120e3): (512, 32), (100e6, 120e3): (1024, 66),
+                 (200e6, 120e3): (2048, 132), (400e6, 120e3): (4096, 264)}
 
 
 def lte_waveform(bw: float = 20e6, qam: int = 64, *, n_symbols: int = 28,
@@ -234,7 +237,8 @@ def nr_waveform(bw: float = 100e6, scs: float = 30e3, qam: int = 256, *,
                 n_symbols: int = 8, oversampling: int = 4,
                 seed: int = 0, dft_precode: bool = False) -> Waveform:
     """5G-NR-style CP-OFDM channel: 38.104 FFT/RB table (100 MHz @ 30 kHz:
-    4096-FFT / 3276 tones; 200 MHz @ 120 kHz FR2: 2048-FFT / 1584 tones).
+    4096-FFT / 3276 tones; 200 MHz @ 120 kHz FR2: 2048-FFT / 1584 tones;
+    400 MHz @ 120 kHz, the widest FR2 carrier: 4096-FFT / 3168 tones).
     Stylized: data tones only, no DMRS/SSB."""
     key = (bw, scs)
     if key not in NR_NUMEROLOGY:

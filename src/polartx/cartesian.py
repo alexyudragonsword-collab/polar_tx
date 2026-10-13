@@ -17,10 +17,12 @@ architecture-agnostic part of it:
 
 - ``cfr_papr_db`` — applied to the composite exactly as the polar chain
   applies it, so all topologies see the identical waveform.
+- ``fs_scale_fixed`` — pins the per-axis DAC full scale across runs, the
+  same role it has for the polar envelope; ``None`` = this burst's peak.
 
 Everything else in ``ChainConfig`` describes an envelope or a phase path
 this chain does not have and is IGNORED: ``env_skew_s``, ``env_floor``,
-``env_headroom``, ``fs_scale_fixed``, ``phase_slew_max_hz``,
+``env_headroom``, ``phase_slew_max_hz``,
 ``phase_interp_win``, ``phase_interp``, ``f_dpa``, ``interleave``,
 ``supply``.  Ignored is not silent: a non-default value in any of them
 raises a ``UserWarning`` naming the field when the chain is built, because
@@ -50,7 +52,7 @@ from .waveforms.base import Waveform
 #: ChainConfig fields that describe an envelope or a phase path.  A
 #: non-default value in any of these is warned about, not obeyed.
 IGNORED_CHAIN_FIELDS = ("env_skew_s", "env_floor", "env_headroom",
-                        "fs_scale_fixed", "phase_slew_max_hz",
+                        "phase_slew_max_hz",
                         "phase_interp_win", "phase_interp", "f_dpa",
                         "interleave", "supply")
 
@@ -161,7 +163,13 @@ class CartesianTX:
         if c.cfr_papr_db is not None:
             x = cfr_clip_filter(x, c.cfr_papr_db, wf.fs, wf.bw)
             info["cfr_papr_db"] = c.cfr_papr_db
-        fs_scale = float(max(np.abs(x.real).max(), np.abs(x.imag).max()))
+        # fs_scale_fixed pins the per-axis full scale across runs, as it does
+        # for PolarTX's envelope: a predistorter expands peaks, and without
+        # the pin every DPD run would re-normalise to the new peak and move
+        # the operating point (what array_tx found when it tried to run its
+        # ILA-GMP on this chain).  None keeps the per-burst peak.
+        fs_scale = (float(c.fs_scale_fixed) if c.fs_scale_fixed is not None
+                    else float(max(np.abs(x.real).max(), np.abs(x.imag).max())))
         i_code = self.rfdac.encode(x.real / fs_scale)
         q_code = self.rfdac.encode(x.imag / fs_scale)
         y = self.rfdac(i_code, q_code, noise=noise, seed=seed, fs=wf.fs) * fs_scale

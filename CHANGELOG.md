@@ -10,6 +10,23 @@ release 分组。
 
 ## 未发布 / Unreleased
 
+### array_tx 带回来的四处修正（2026-10-13）
+
+姊妹库 array_tx（多单元阵列发射机，每单元一条 vendored polar_tx 链）在里程碑 1 里踩到的问题，修在这里再换 pin：
+
+- **NR 数字表补 120 kHz 的 50 / 400 MHz 行**（TS 38.101-2 Table 5.3.2-1：32 / 264 RB）。`nr_dtc(bw=400e6)` 之前只能建链不能造波形，
+  array_tx 只好自己拼 `GenOFDMConfig`。
+- **`nr_dtc` 的 `fs_bb` 报错了**：它沿用 WiFi 计划的 `bw * oversampling`（100 MHz → 400 MS/s），而 NR 波形跑在 FFT 网格上
+  （4096 × 30 kHz × 4 = 491.52 MS/s）。现在报波形真正的速率，表里没有的 (bw, scs) 在建预设时就报错，不等到 `make_waveform`。
+- **`CartesianTX` 读 `fs_scale_fixed`**：此前 RF-DAC 每个突发按峰值重标定满刻度，DPD 把峰值扩展后会被重新归一化、工作点漂移
+  （array_tx 的 ILA-GMP 在这条链上静默失效）。现在与 `PolarTX` 同样可钉；`IGNORED_CHAIN_FIELDS` 少一项。
+- **一个开关只改它管的量**：DTC 与 RF-DAC 的抖动正态抽取在 `jitter_rms_s = 0` 时照抽（零尺度），LO 相噪样本接在同一流上时不再因为
+  关掉抖动而换实例（Halo 的教训："抽了再置零"）。抖动 > 0 的既有结果逐位不变；只影响"抖动为 0 且 LO 相噪开且 `lo_pn_seed=None`"的组合。
+- 测试 +4（307）。
+- **CI：`guiqt` 额外依赖钉 `PySide6<6.12`**。10-13 的 `test-gui` 任务两次都在 Streamlit AppTest 里 Bus error（退出码 135），
+  与 10-03 成功运行的唯一依赖差异是 PySide6 6.11.2 → 6.12.0（pandas / pyarrow / streamlit 同版本）；本地用 6.12.0 在未动的 main 上同样崩（SIGSEGV），
+  换回 6.11.2 两边都过。与本轮四处修正无关。
+
 ### 虚拟 DUT 的 −35 dB 地板被上游修掉，阶段 2 数字重测（2026-10-03）
 
 PA_DPD 修了 `ThermalReferencePA` 每 128 采样重启 FIR 的 bug（bd55928，pin 08b9725）：
