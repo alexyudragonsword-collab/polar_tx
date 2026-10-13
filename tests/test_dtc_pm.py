@@ -109,3 +109,26 @@ def test_lo_pn_seed_pins_the_lo_sample_independently_of_the_run_seed():
     d = (jit.modulate(ph, FS, noise=True, seed=0).phase_out
          - jit.modulate(ph, FS, noise=True, seed=1).phase_out)
     assert np.std(d) == pytest.approx(np.sqrt(2) * TWOPI * fout * tau, rel=0.05)
+
+
+def test_jitter_switch_does_not_change_the_lo_sample():
+    """One switch, one draw: with the LO on the run stream (lo_pn_seed None),
+    turning the edge jitter off must leave the LO phase-noise realization
+    untouched.  The jitter normals are drawn at sigma = 0 too, so the LO
+    draw keeps its stream position."""
+    import numpy as np
+    from dataclasses import replace
+    from polartx import DTCPhaseModulator, DTCPMConfig
+    from polartx.vendor.pllsim.blocks.oscillator import OscConfig
+    lo = OscConfig(f0=6e9, gain=1.0, pn_dbchz=-110.0, pn_foffset=1e6, pn_f1f3=200e3, pn_floor_dbchz=-150.0)
+    base = DTCPMConfig(n_bits=10, fout=6e9, lo_pn=lo, jitter_rms_s=0.0, dither=False)
+    fs = 640e6
+    phase = np.zeros(4096)
+    pn_only = DTCPhaseModulator(base).modulate(phase, fs, noise=True, seed=5).phase_out
+    with_jit = DTCPhaseModulator(replace(base, jitter_rms_s=50e-15)).modulate(phase, fs, noise=True, seed=5).phase_out
+    jitter = with_jit - pn_only
+    # the difference is white jitter of the configured size, not a different LO draw
+    assert abs(np.std(jitter) / (2 * np.pi * 6e9 * 50e-15) - 1.0) < 0.1
+    # the same LO sample is what a pinned LO stream gives when jitter is zero
+    pinned = DTCPhaseModulator(replace(base, lo_pn_seed=None)).modulate(phase, fs, noise=True, seed=5).phase_out
+    assert np.array_equal(pinned, pn_only)

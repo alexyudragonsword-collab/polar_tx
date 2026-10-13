@@ -2,6 +2,15 @@
 
 本文件按倒序记录实质性进展——最新的一条在这行下面。每条保持简短，只写摘要和指针；结论沉淀进 `cairn/<topic>.md`。
 
+## 2026-10-13 · array_tx 带回四处修正：NR 400 MHz、nr_dtc fs_bb、CartesianTX 可钉满刻度、抖动开关不换 LO 实例
+
+- 来源：姊妹库 array_tx 里程碑 1（4 单元 FR2 阵列）vendor 了 polar_tx@8a10480 后发现的。详见 CHANGELOG 本日条目。
+- `fs_bb` 的错值只影响把 `TxPreset.fs_bb` 当采样率的调用方（array_tx 没有，它用 `wf.fs`）；GUI 的报告层若显示 fs_bb 会从 400 变 491.52 MS/s。
+- `fs_scale_fixed` 进 `CartesianTX`：钉到突发自身峰值时与默认逐位相同（测试）；钉住后 1.3× 的驱动被截在满刻度而不是重标定。
+- 抖动"抽了再置零"：`jitter_rms_s > 0` 的所有预设逐位不变（`rng.normal(0, s, n)` 本来就是这个调用）；
+  改变的只有 `jitter_rms_s = 0` + `lo_pn` + `lo_pn_seed=None` 的组合，其 LO 样本现在与开抖动时相同（测试断言差值是白抖动而非另一个 LO 实例）。
+- 测试 307 项全绿；未碰示例。
+
 ## 2026-10-03 · 虚拟 DUT 的 −35 dB 地板被上游修掉，阶段 2 重测
 
 - PA_DPD bd55928（pin 08b9725）：`ThermalReferencePA` 的 FIR 对整段连续跑，只按块换 Saleh

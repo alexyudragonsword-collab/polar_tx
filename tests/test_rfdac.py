@@ -176,3 +176,19 @@ def test_average_efficiency_is_the_power_weighted_mean():
     assert a["p_out_norm"] == pytest.approx(p_out.mean())
     assert a["backoff_db"] == pytest.approx(-10 * np.log10(p_out.mean()))
     assert set(a) == {"eta_avg", "p_out_norm", "backoff_db"}   # DPA's keys
+
+
+def test_rfdac_jitter_switch_does_not_change_the_lo_sample():
+    """Same rule as the DTC: the jitter draw happens at sigma = 0 too, so the
+    LO phase-noise realization is the same with jitter on and off."""
+    import numpy as np
+    from dataclasses import replace
+    from polartx import RFDAC, RFDACConfig
+    from polartx.vendor.pllsim.blocks.oscillator import OscConfig
+    lo = OscConfig(f0=6e9, gain=1.0, pn_dbchz=-110.0, pn_foffset=1e6, pn_f1f3=200e3, pn_floor_dbchz=-150.0)
+    cfg = RFDACConfig(n_bits=10, n_thermo=5, sigma_cell=0.0, jitter_rms_s=0.0, fout=6e9, lo_pn=lo)
+    code = np.full(4096, 300)
+    y0 = RFDAC(cfg)(code, code, noise=True, seed=7, fs=640e6)
+    y1 = RFDAC(replace(cfg, jitter_rms_s=50e-15))(code, code, noise=True, seed=7, fs=640e6)
+    jitter = np.angle(y1 / y0)
+    assert abs(np.std(jitter) / (2 * np.pi * 6e9 * 50e-15) - 1.0) < 0.1

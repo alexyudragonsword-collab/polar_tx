@@ -157,9 +157,10 @@ class RFDAC:
             y = y + 10.0 ** (c.lo_leakage_dbc / 20.0)
         if noise:
             rng = np.random.default_rng(seed)
-            phi = np.zeros(y.shape, float)
-            if c.jitter_rms_s > 0.0:
-                phi += rng.normal(0.0, TWOPI * c.fout * c.jitter_rms_s, y.shape)
+            # drawn even at jitter_rms_s == 0 so the LO sample that follows on
+            # this stream does not depend on the jitter switch (DTCPhaseModulator
+            # does the same); a zero-scale draw is zeros, bit for bit
+            phi = rng.normal(0.0, TWOPI * c.fout * c.jitter_rms_s, y.shape)
             if c.lo_pn is not None:
                 if fs is None:
                     raise ValueError("RFDAC with lo_pn needs fs= to synthesize "
