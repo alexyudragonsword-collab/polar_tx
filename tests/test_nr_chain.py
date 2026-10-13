@@ -37,3 +37,24 @@ def test_fr2_200mhz_meets_64qam():
 def test_bad_numerology_rejected():
     with pytest.raises(ValueError):
         nr_waveform(200e6, 30e3, 64)
+
+
+def test_nr_400mhz_fr2_numerology_and_preset_rate():
+    """TS 38.101-2 Table 5.3.2-1: 400 MHz @ 120 kHz is 264 RB (3168 tones on
+    a 4096 FFT); the preset's fs_bb is the waveform's own rate, fft * scs *
+    oversampling, not bw * oversampling."""
+    import numpy as np
+    from polartx import nr_dtc
+    from polartx.waveforms.ofdm import NR_NUMEROLOGY, nr_waveform
+    assert NR_NUMEROLOGY[(400e6, 120e3)] == (4096, 264)
+    assert NR_NUMEROLOGY[(50e6, 120e3)] == (512, 32)
+    wf = nr_waveform(400e6, 120e3, 64, n_symbols=1)
+    assert wf.fs == 4096 * 120e3 * 4 and wf.ofdm_ref.config.n_active == 3168
+    assert abs(np.mean(np.abs(wf.x) ** 2) - 1.0) < 1e-9
+    p = nr_dtc(bw=400e6)
+    assert p.fs_bb == wf.fs == p.make_waveform(n_symbols=1).fs
+    p1 = nr_dtc()                                   # FR1 100 MHz @ 30 kHz
+    assert p1.fs_bb == 4096 * 30e3 * 4 == p1.make_waveform(n_symbols=1).fs   # 491.52 MS/s, not 400
+    import pytest
+    with pytest.raises(ValueError, match="nr_dtc"):
+        nr_dtc(bw=300e6)
