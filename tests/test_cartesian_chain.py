@@ -156,7 +156,8 @@ def test_every_envelope_and_phase_field_is_warned_about():
     default — a new ChainConfig field cannot be silently absorbed."""
     from dataclasses import fields
     names = {f.name for f in fields(ChainConfig)}
-    assert names == set(IGNORED_CHAIN_FIELDS) | {"cfr_papr_db"}
+    # the two fields this chain READS: the CFR target and the pinned full scale
+    assert names == set(IGNORED_CHAIN_FIELDS) | {"cfr_papr_db", "fs_scale_fixed"}
     assert ignored_chain_settings(ChainConfig()) == []
     assert ignored_chain_settings(ChainConfig(cfr_papr_db=6.0)) == []
     assert ignored_chain_settings(ChainConfig(env_floor=0.1, interleave=2)) == [
@@ -208,3 +209,25 @@ def test_preset_shares_the_frequency_plan_with_wifi_dtc():
     assert r.evm().db < -30.0                            # measured -40.6 dB
     with pytest.warns(UserWarning, match="env_skew_s"):
         wifi_rfdac(bw=160e6, qam=1024, env_skew_s=1e-9)  # forwarded, then warned
+
+
+def test_fs_scale_fixed_pins_the_dac_full_scale():
+    """A pinned full scale survives a peak-expanded drive (a predistorter's
+    output), where the per-burst default would re-normalise; and pinning
+    to the burst's own peak reproduces the default bit for bit."""
+    import numpy as np
+    from dataclasses import replace
+    from polartx import ChainConfig, CartesianTX, RFDAC, RFDACConfig, wifi_waveform
+    from polartx.cartesian import ignored_chain_settings
+    wf = wifi_waveform(80e6, 256, n_symbols=2, seed=3)
+    rf = RFDAC(RFDACConfig(n_bits=10, n_thermo=5, sigma_cell=0.0))
+    auto = CartesianTX(ChainConfig(cfr_papr_db=None), rf).run(wf, noise=False)
+    peak = auto.info["fs_scale"]
+    assert ignored_chain_settings(ChainConfig(fs_scale_fixed=peak)) == []   # read, not ignored
+    pinned = CartesianTX(ChainConfig(cfr_papr_db=None, fs_scale_fixed=peak), rf).run(wf, noise=False)
+    assert np.array_equal(pinned.y, auto.y)
+    big = replace(wf, x=wf.x * 1.3)
+    r_auto = CartesianTX(ChainConfig(cfr_papr_db=None), rf).run(big, noise=False)
+    r_pin = CartesianTX(ChainConfig(cfr_papr_db=None, fs_scale_fixed=peak), rf).run(big, noise=False)
+    assert r_auto.info["fs_scale"] > peak and r_pin.info["fs_scale"] == peak
+    assert np.abs(r_pin.y).max() <= peak * np.sqrt(2) + 1e-9      # clipped at the pinned scale
