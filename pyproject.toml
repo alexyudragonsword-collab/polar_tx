@@ -38,7 +38,12 @@ dependencies = [
 [project.optional-dependencies]
 test = ["pytest"]
 gui = ["streamlit>=1.30"]
-guiqt = ["PySide6>=6.5"]
+# PySide6 6.12.0 (released between the 2026-10-03 and 2026-10-13 CI runs)
+# crashes the process -- Bus error on the runner, SIGSEGV locally -- as soon
+# as Streamlit's AppTest runs in the same interpreter after Qt has loaded;
+# 6.11.2 with the identical pandas 3.0.6 / pyarrow 25.0.1 / streamlit 1.65.0
+# is fine, so the cap is on PySide6 alone (cairn/LOG.md 2026-10-13).
+guiqt = ["PySide6>=6.5,<6.12"]
 # The static-check tools, pinned here so the CI job and a laptop agree on the
 # version.  Install them INTO the project environment (see CONTRIBUTING.md
 # 8.1): mypy resolves numpy's and PySide6's types from the environment it
