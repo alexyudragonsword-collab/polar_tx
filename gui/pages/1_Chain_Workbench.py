@@ -48,5 +48,8 @@ if st.button("Run", type="primary"):
     # stringify: the metrics dict mixes floats with the "PASS"/"FAIL" mask
     # verdict, and Arrow rejects that mixed column (Streamlit recovers, but
     # logs a serialization traceback each run)
+    for w in rep["warnings"]:
+        st.warning(w)
     st.table({k: str(v) for k, v in rep["metrics"].items()})
+    st.caption(" · ".join(c["en"] for c in rep["conventions"]))
     st.pyplot(rep["fig"])

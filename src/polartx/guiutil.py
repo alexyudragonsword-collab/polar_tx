@@ -331,33 +331,48 @@ def _ofdm_constellation(res, wf, e, eq: str,
                           zoom_span=zoom_span), metrics
 
 
-def _chain_figure(name: str, wf, res, e, f: np.ndarray, pdb: np.ndarray,
-                  mask_db: np.ndarray, cons: _Constellation | None,
-                  f_trace: np.ndarray | None = None):
-    """Spectrum + per-kind right-hand panel.  Rendering only: every number
-    drawn here was computed by the helpers above."""
-    import matplotlib
-    matplotlib.use("Agg")
-    import matplotlib.pyplot as plt
+def _chain_plots(name: str, wf, e, f: np.ndarray, pdb: np.ndarray,
+                 mask_db: np.ndarray, cons: _Constellation | None,
+                 f_trace: np.ndarray | None, res) -> list[dict]:
+    """The report's two panels as plot data (``guispec`` format): the
+    spectrum against its mask, and the per-kind right-hand panel.
 
-    fig, ax = plt.subplots(1, 2, figsize=(11, 4.2))
-    ax[0].plot(f / 1e6, pdb, lw=0.7)
-    ax[0].plot(f / 1e6, mask_db, "r--", lw=1.0)
-    ax[0].set(xlabel="offset [MHz]", ylabel="dBr", ylim=(-90, 5),
-              title=f"{name} spectrum")
+    Every renderer draws from this — matplotlib for the PNG, the phone's
+    own charts — so no renderer can show a different picture from another,
+    and none computes anything: every array here came from the helpers
+    above.  Spectra are max-hold decimated for display only; the mask
+    verdict was computed on the full arrays."""
+    from .guispec import decimate_peak, thin_points
+    fx, px = decimate_peak(f / 1e6, pdb)
+    _, mx = decimate_peak(f / 1e6, mask_db)
+    spectrum = {"id": "spectrum", "title": f"{name} spectrum",
+                "title_zh": f"{name} 频谱", "xlabel": "offset [MHz]",
+                "ylabel": "dBr", "ylim": [-90, 5],
+                "series": [{"id": "psd", "label": "PSD", "style": "trace",
+                            "x": fx, "y": px},
+                           {"id": "mask", "label": "mask", "style": "mask",
+                            "x": fx, "y": mx}]}
+    right: dict
     if cons is not None:
-        ax[1].plot(cons.pts.real, cons.pts.imag, ".", ms=1, alpha=0.4)
+        z = thin_points(cons.pts)
+        right = {"id": "constellation",
+                 "title": f"constellation ({cons.label})",
+                 "title_zh": f"星座（{cons.label}）", "equal": True,
+                 "series": [{"id": "rx", "style": "points",
+                             "x": z.real, "y": z.imag}]}
         if cons.zoom_span is not None:
-            ax[1].set_xlim(-cons.zoom_span, cons.zoom_span)
-            ax[1].set_ylim(-cons.zoom_span, cons.zoom_span)
-        ax[1].set_title(f"constellation ({cons.label})")
+            span = float(cons.zoom_span)
+            right["xlim"] = right["ylim"] = [-span, span]
     elif wf.kind == "dpsk":
         # trim the pulse-shaping edge transient, but scale the trim to the
         # burst: a fixed [20:-20] silently produced an EMPTY plot for any
         # burst under ~41 symbols
         _t = min(20, max(0, (e["symbols_rx"].size - 8) // 2))
         z = e["symbols_rx"][_t:-_t] if _t else e["symbols_rx"]
-        ax[1].plot(z.real, z.imag, ".", ms=2, alpha=0.5)
+        right = {"id": "symbols", "equal": True,
+                 "series": [{"id": "rx", "style": "points",
+                             "mpl": {"ms": 2, "alpha": 0.5},
+                             "x": z.real, "y": z.imag}]}
         if wf.meta.get("pulse_taps") is not None:
             # EDGE 3pi/8-8PSK on the linearized-GMSK C0 pulse: C0 is
             # deliberately NOT Nyquist, so the symbol-instant samples carry
@@ -365,11 +380,15 @@ def _chain_figure(name: str, wf, res, e, f: np.ndarray, pdb: np.ndarray,
             # why the DEVM for this pulse is scored against the ideal
             # waveform, not against these samples — the spread below is
             # the pulse, not a broken link.
-            ax[1].set_title("8PSK symbols — linearized-GMSK C0\n"
-                            "(non-Nyquist: ISI by design; DEVM uses the "
-                            "ideal-waveform ref)", fontsize=8)
+            right.update(title="8PSK symbols — linearized-GMSK C0\n"
+                               "(non-Nyquist: ISI by design; DEVM uses the "
+                               "ideal-waveform ref)",
+                         title_zh="8PSK 符号——线性化 GMSK C0（非 Nyquist，"
+                                  "ISI 是设计使然；DEVM 对理想波形参考）",
+                         title_size=8)
         else:
-            ax[1].set_title(f"{wf.meta.get('mode', 'DPSK')} symbols")
+            mode = wf.meta.get("mode", "DPSK")
+            right.update(title=f"{mode} symbols", title_zh=f"{mode} 符号")
     elif f_trace is not None:
         # GFSK is constant-envelope: its IQ trajectory is the unit circle
         # and says nothing.  What carries the modulation is the frequency.
@@ -380,34 +399,94 @@ def _chain_figure(name: str, wf, res, e, f: np.ndarray, pdb: np.ndarray,
         mid = f_trace.size // 2
         n0, n1 = max(0, mid - int(20 * sps)), min(f_trace.size,
                                                    mid + int(20 * sps))
-        ax[1].plot((np.arange(n0, n1) - n0) / sps, f_trace[n0:n1] / 1e3,
-                   lw=0.8)
-        ax[1].set(xlabel="symbol", ylabel="kHz",
-                  title="frequency deviation trajectory")
-        ax[1].grid(True, alpha=0.3)
+        right = {"id": "frequency", "title": "frequency deviation trajectory",
+                 "title_zh": "频偏轨迹", "xlabel": "symbol", "ylabel": "kHz",
+                 "grid": True,
+                 "series": [{"id": "f", "style": "line",
+                             "x": (np.arange(n0, n1) - n0) / sps,
+                             "y": f_trace[n0:n1] / 1e3}]}
     else:
         y = res.y / np.abs(res.y).max()
-        ax[1].plot(y.real[2000:12000], y.imag[2000:12000], lw=0.3, alpha=0.6)
-        ax[1].set_title("IQ trajectory")
-    if f_trace is None:
-        ax[1].set_aspect("equal")
-    fig.tight_layout()
-    return fig
+        right = {"id": "iq", "title": "IQ trajectory", "title_zh": "IQ 轨迹",
+                 "equal": True,
+                 "series": [{"id": "iq", "style": "line",
+                             "mpl": {"lw": 0.3, "alpha": 0.6},
+                             "x": y.real[2000:12000], "y": y.imag[2000:12000]}]}
+    return [spectrum, right]
+
+
+def _conventions(tx, wf, eq: str) -> list[dict]:
+    """Which measurement conventions this report's numbers were computed
+    under, stated so the front ends can show them beside the numbers
+    (CONTRIBUTING.md 5 and 6) instead of in a plot title at best."""
+    from .metrics.masks import default_mask_spec
+    from .phasemod import ADPLLTwoPoint
+    out: list[dict] = []
+    if wf.kind == "ofdm":
+        out.append({"id": "evm_eq", "zh": (
+            "EVM：scalar 均衡（链路默认，记忆失真保持可见）" if eq == "scalar"
+            else "EVM：按子载波均衡"), "en": (
+            "EVM: scalar equalization (chain default; memory distortion "
+            "stays visible)" if eq == "scalar"
+            else "EVM: per-tone equalization")})
+    src = getattr(default_mask_spec(wf), "source", "stylized")
+    out.append({"id": "mask", "zh": (
+        "mask：stylized 工程模板，不是认证条款" if src == "stylized"
+        else f"mask：{src}"), "en": (
+        "mask: stylized engineering template, not a conformance clause"
+        if src == "stylized" else f"mask: {src}")})
+    if _is_bluetooth(wf):
+        out.append({"id": "bt", "zh": "带内发射：stylized 模板；频偏为本 burst "
+                                     "载荷，不是认证码型",
+                    "en": "in-band emission: stylized template; deviation is "
+                          "over this burst's payload, not the certification "
+                          "patterns"})
+    # the phase modulator, through a sibling topology's wrapped PolarTX
+    pm = getattr(tx, "phasemod", None) or getattr(
+        getattr(tx, "tx", None), "phasemod", None)
+    mode = getattr(pm, "mode", None)
+    if isinstance(pm, ADPLLTwoPoint):
+        out.append({"id": "engine", "zh": (
+            "ADPLL：response 引擎（线性化），不背书杂散结论"
+            if mode == "response" else "ADPLL：event 引擎（逐参考周期）"),
+            "en": ("ADPLL: response engine (linearized); not for spur "
+                   "conclusions" if mode == "response"
+                   else "ADPLL: event engine (per reference cycle)")})
+    return out
 
 
 def run_chain_report(name: str, *, seed: int = 1, noise: bool = True,
-                     n_units: int | None = None, **overrides) -> dict:
+                     n_units: int | None = None, figure: bool = True,
+                     **overrides) -> dict:
     """Build, run, and package metrics + figures for one chain.
 
-    The three phases are separate on purpose: build/run, then every number,
-    then the picture.  The numbers do not depend on the figure existing (the
-    Android bridge and the tests want them without matplotlib), and the
-    figure computes nothing of its own, so a panel cannot disagree with the
+    The phases are separate on purpose: build/run, then every number, then
+    the plot data, then the picture.  The numbers do not depend on the
+    figure existing (the Android bridge and the tests want them without
+    matplotlib), and the figure is drawn from the plot data, which
+    computes nothing of its own, so a panel cannot disagree with the
     metric printed beside it.
+
+    Warnings raised while building and running (an engine outside its
+    validity domain, a setting a topology ignores) are returned under
+    ``"warnings"`` so a front end can show them; the report layer is
+    where they would otherwise vanish.
+
+    ``figure=False`` skips the matplotlib rendering (``"fig"`` is None) for
+    a front end that draws ``"plots"`` itself and re-runs on every slider
+    move; the numbers and the plot data are identical either way.
     """
-    p = build_preset(name, **overrides)
-    wf = p.make_waveform(**_size_kwargs(p.make_waveform, n_units))
-    res = p.tx.run(wf, noise=noise, seed=seed)
+    import warnings
+
+    from .guispec import render_matplotlib
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        p = build_preset(name, **overrides)
+        wf = p.make_waveform(**_size_kwargs(p.make_waveform, n_units))
+        res = p.tx.run(wf, noise=noise, seed=seed)
+    msgs = list(dict.fromkeys(str(w.message) for w in caught
+                              if not issubclass(w.category,
+                                                DeprecationWarning)))
 
     # one equalization convention for BOTH the number and the picture
     eq = getattr(res, "evm_equalize_default", "scalar")
@@ -433,8 +512,12 @@ def run_chain_report(name: str, *, seed: int = 1, noise: bool = True,
             res, wf, e, eq, metrics.get("EVM [dB]", 0.0))
         metrics.update(ofdm_metrics)
 
-    fig = _chain_figure(name, wf, res, e, f, pdb, mask_db, cons, f_trace)
-    return {"metrics": metrics, "fig": fig, "result": res, "waveform": wf}
+    plots = _chain_plots(name, wf, e, f, pdb, mask_db, cons, f_trace, res)
+    conv = _conventions(p.tx, wf, eq)
+    return {"metrics": metrics, "plots": plots, "conventions": conv,
+            "warnings": msgs,
+            "fig": render_matplotlib(plots) if figure else None,
+            "result": res, "waveform": wf}
 
 
 def save_setup(path: str, preset: str, overrides: dict | None = None, *,

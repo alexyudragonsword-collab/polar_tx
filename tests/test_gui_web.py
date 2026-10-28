@@ -96,3 +96,10 @@ def test_home_names_every_page_and_topology():
     for topo in ("ADPLL", "DTC", "Outphasing", "RF-DAC"):
         assert topo in text, topo
     assert "ex01" not in text
+
+
+def test_chain_run_states_its_conventions():
+    at = _run(os.path.join(REPO, "gui", "pages", "1_Chain_Workbench.py"))
+    at.button[0].click().run()
+    assert not at.exception
+    assert any("scalar equalization" in c.value for c in at.caption)

@@ -133,3 +133,18 @@ def test_calibration_page_buttons_run_through_guiutil(app):
         app.processEvents()
         assert label.text() != "—", label.text()
     assert "error" in page.r1.text() and "→" in page.r2.text()
+
+
+def test_chain_page_shows_warnings_and_conventions(app):
+    """A run-time warning (LTE on the event engine leaves its validity
+    domain) and the conventions reach the page, not just the report."""
+    from polartx.guiqt.app import MainWindow
+    from polartx.guiutil import run_chain_report
+    win = MainWindow()
+    page = win.pages[0]
+    page._show(run_chain_report("LTE 20 MHz", seed=1, mode="event"))
+    app.processEvents()
+    text = page.notes.text()
+    assert "validity domain" in text
+    assert "ADPLL: event engine" in text
+    win.close()
