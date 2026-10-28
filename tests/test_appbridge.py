@@ -183,9 +183,40 @@ def test_chain_drops_a_knob_the_preset_does_not_honour():
     assert set(p["knobs"]) == set(PRESETS)
     assert "env_skew_s" not in p["knobs"]["WiFi 160 MHz (RF-DAC)"]
     assert "env_skew_s" in p["knobs"]["WiFi 160 MHz"]
-    import warnings
-    with warnings.catch_warnings():
-        warnings.simplefilter("error")
-        a = _ok("chain", preset="WiFi 160 MHz (RF-DAC)", env_skew_ns=0.0)
-        b = _ok("chain", preset="WiFi 160 MHz (RF-DAC)", env_skew_ns=1.0)
+    # the report now carries the run's warnings itself, so "the chain was
+    # never asked to ignore anything" is read from there
+    a = _ok("chain", preset="WiFi 160 MHz (RF-DAC)", env_skew_ns=0.0)
+    b = _ok("chain", preset="WiFi 160 MHz (RF-DAC)", env_skew_ns=1.0)
     assert a["metrics"] == b["metrics"]
+    assert a["warnings"] == b["warnings"] == []
+
+
+def test_chain_takes_knob_ids_and_returns_drawable_data():
+    """What the redesigned page needs from one call: controls by knob id
+    in display units, and back the numbers, the plot data they were drawn
+    from, the conventions, the warnings and a description of each metric.
+    png=False skips the figure; the numbers do not change."""
+    from polartx.guispec import knob_specs
+    p = _ok("list_presets")
+    assert [k["id"] for k in p["specs"]["WiFi 160 MHz"]] == \
+        [k.id for k in knob_specs("WiFi 160 MHz")]
+    assert set(p["groups"]) >= {k["group"] for k in p["specs"]["LTE 20 MHz"]}
+
+    skewed = _ok("chain", preset="WiFi 160 MHz", values={"skew_ns": 0.5},
+                 png=False)
+    legacy = _ok("chain", preset="WiFi 160 MHz", env_skew_ns=0.5)
+    assert skewed["metrics"] == legacy["metrics"]
+    assert "png" not in skewed and len(legacy["png"]) > 1000
+    spec, right = skewed["plots"]
+    assert spec["id"] == "spectrum" and len(spec["series"][0]["x"]) <= 2048
+    assert len(right["series"][0]["x"]) == len(right["series"][0]["y"]) > 100
+    assert set(skewed["metric_info"]) == set(skewed["metrics"])
+    assert any(c["id"] == "evm_eq" for c in skewed["conventions"])
+    # an id this preset does not offer is dropped, not misapplied
+    clean = _ok("chain", preset="WiFi 160 MHz (RF-DAC)",
+                values={"skew_ns": 1.0, "dtc_bits": 6}, png=False)
+    base = _ok("chain", preset="WiFi 160 MHz (RF-DAC)", png=False)
+    assert clean["metrics"] == base["metrics"]
+    # a run-time warning arrives with the result
+    ev = _ok("chain", preset="LTE 20 MHz", values={"mode": "event"}, png=False)
+    assert any("validity domain" in w for w in ev["warnings"])

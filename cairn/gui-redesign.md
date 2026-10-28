@@ -5,7 +5,7 @@ summary: "GUI 改版：三端各写一份表单 + 批处理交互换成一份界
 tags: [polartx, gui, 前端, android, streamlit, pyside6]
 contains: [decision, lesson, pitfall, experience]
 created: "2026-10-28"
-updated: "2026-10-28（P0 完成）"
+updated: "2026-10-28（P1 界面规格层）"
 related: [android-app.md]
 authoring_mode: ai_generated
 ---
@@ -36,7 +36,8 @@ authoring_mode: ai_generated
 
 ## 经验："拨得动"要按物理来测
 
-`test_every_honoured_knob_moves_the_output` 对每个声明的旋钮拨一次、比对输出样本。
+`test_every_honoured_knob_moves_the_output` 对每个声明的旋钮拨一次、比对输出样本
+（P1 起由 `test_guispec.py::test_every_knob_moves_the_output` 接替，覆盖全部旋钮规格）。
 第一次跑 BLE / EDR 的 `loop_bw` 红了：噪声关掉时 200 kHz 与 100 kHz 的输出差 6e-14。
 这不是空旋钮——两点调制理想匹配时，环路带宽只整形噪声与失配（开噪声后差 0.05，
 5 % 增益误差下 EVM 5.8 % → 3.4 %）。所以 `loop_bw` 在开噪声、同 seed 下比较；测试里
@@ -56,9 +57,35 @@ DPSK 但 270.833 ksym/s，不是 Bluetooth，保留 ACLR。频偏均值与漂移
 画频偏轨迹时注意：默认载荷是 PRBS，LFSR 刚起步的前 ~100 bit 几乎全 0，从 burst
 开头取窗只看到一个单音。窗口取在 burst 中段。
 
+## P1：界面规格层（`guispec.py`）
+
+**决策**：前端契约放在独立的 `guispec.py`（只描述：旋钮、指标含义、图数据格式、
+matplotlib 渲染），计算仍在 `guiutil`。旋钮的默认值**不手填**，从预设函数签名读出再换成
+显示单位（`nr_dtc` 的 dither 经 `**kw` 落到 `wifi_dtc`，所以查找链是有序的函数元组）。
+两条测试把规格钉在库上：表单全取默认时输出与不加覆盖的预设逐位相同；每个旋钮拨一次
+输出样本必须变。break-check：把 RF-DAC 的默认查找顺序换成先 `wifi_dtc`（读到 11）→ 红；
+把 skew 加回 outphasing → "ignored" 告警 → 红。
+
+**经验："只在开噪声时起作用"是一类，不是例外**。`loop_bw` 之后第二个是 DTC 抖动：
+它本身就是噪声源，噪声关掉就不存在。标志从 `shapes_only_noise` 改名为 `noise_only`，
+覆盖"噪声源本身"和"两点匹配时只整形噪声的环路"两种物理。
+
+**坑：报告层吞掉了引擎越界告警**。LTE-20 用 event 引擎会告警"越出适用域，结果会悲观得多
+（−15 dB vs response 的 −37 dB）"，但 `run_chain_report` 之上没有任何前端看得到告警。现在
+报告带 `"warnings"`，三端都显示；同时带 `"conventions"`（均衡口径、mask 来源、ADPLL 引擎），
+口径从此不只在星座图标题里。
+
+**图数据**：报告返回 `"plots"`，PNG 由它画出（测试逐条比对 matplotlib 线条与数据），手机
+将来自己画。频谱按 max-hold 抽到 ≤2048 点（判决在全量数据上先算好，只稀疏画法）；
+过桥时再四舍五入到 5 位有效数字：WiFi 160 一次运行不含 PNG 约 130 KB。`figure=False`
+跳过 matplotlib，给实时重算用。
+
 ## 本地环境（pitfall）
 
 容器里 `python` 是 3.11（没装包），`pip` 绑在 `/usr/bin/python3`（3.13）。numpy 2.5.3
 的类型存根用了 3.12 的 `type` 语句，而 mypy 目标是 3.10，所以本机 `mypy` 在未改动的
 main 上也报存根语法错；CI 的 3.11 装的是 numpy 2.4.x，不受影响。本地用
 `mypy --python-version 3.12` 检查自己的代码。
+
+别给 pytest 加 `-q`：pyproject 已有 `addopts = "-q"`，叠成 `-qq` 就不打印计数行了
+（P1 里跑过一次"全绿却没数字"，pllsim 的 AGENTS 早有这条）。

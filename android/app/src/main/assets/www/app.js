@@ -86,6 +86,16 @@ function pngHtml(b64) {
   return b64 ? `<img class="plot" src="data:image/png;base64,${b64}">` : "";
 }
 
+/* What the numbers were computed under, and anything the run warned
+ * about (an engine outside its validity domain) — from the report itself. */
+function notesHtml(r) {
+  const warn = (r.warnings || []).map(w =>
+    `<p class="note">⚠ ${esc(w)}</p>`).join("");
+  const conv = (r.conventions || []).map(c => esc(c[lang] || c.en))
+    .join(" · ");
+  return warn + (conv ? `<p class="muted">${conv}</p>` : "");
+}
+
 function errHtml(e) {
   return `<p class="error">${esc(e.message || e)}</p>`;
 }
@@ -129,7 +139,8 @@ $("run-chain").addEventListener("click", () => run(
     noise: $("ch-noise").checked,
     env_skew_ns: num("ch-skew"),
   },
-  "正在跑链路…", "running the chain…"));
+  "正在跑链路…", "running the chain…",
+  r => notesHtml(r) + metricsHtml(r.metrics || {}) + pngHtml(r.png)));
 
 /* -------------------------------------------------------------- fir */
 $("run-fir").addEventListener("click", () => run(

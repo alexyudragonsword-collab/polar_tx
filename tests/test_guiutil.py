@@ -289,12 +289,6 @@ def test_skew_sensitivity_follows_the_envelope_not_the_architecture():
 
 
 # ------------------------------------------------ which knobs reach which chain
-# A non-default value for every knob a preset claims to honour.
-_ALT = {"n_bits": 8, "env_skew_s": 0.5e-9, "cfr_papr_db": 6.0,
-        "dp_gain": 1.05, "loop_bw": 200e3, "dpd": False}
-_SHAPES_ONLY_NOISE = {"loop_bw"}
-
-
 def test_every_registered_preset_declares_its_knobs():
     """A preset without an entry would silently get no knobs at all; the
     benchmarks are the only ones meant to have none."""
@@ -305,33 +299,8 @@ def test_every_registered_preset_declares_its_knobs():
             assert honoured_knobs(name) == ()
         else:
             assert honoured_knobs(name), name
-            assert set(honoured_knobs(name)) <= set(_ALT), name
-
-
-@pytest.mark.parametrize("name", [n for n in PRESETS if not n.startswith("Bench:")])
-def test_every_honoured_knob_moves_the_output(name):
-    """A knob the GUI offers must do something on that chain.  Measured
-    against the output samples, not a rounded metric, with noise off so a
-    change can only come from the knob."""
-    import warnings
-
-    import numpy as np
-
-    from polartx.guiutil import honoured_knobs
-
-    def run(noise=False, **ov):
-        with warnings.catch_warnings():
-            warnings.simplefilter("error")      # an ignored knob warns
-            p = build_preset(name, **ov)
-            return p.tx.run(p.make_waveform(), noise=noise, seed=1).y
-
-    for k in honoured_knobs(name):
-        # With the two points matched, the loop bandwidth shapes only the
-        # noise (and any mismatch), so the deterministic output cannot
-        # move — measured 6e-14 on BLE.  Same seed, noise on, it must.
-        noise = k in _SHAPES_ONLY_NOISE
-        y0, y1 = run(noise), run(noise, **{k: _ALT[k]})
-        assert y1.shape != y0.shape or not np.allclose(y0, y1), (name, k)
+    # that every one of them acts on its chain is tested on the full knob
+    # specs (test_guispec.py), of which this legacy table is a subset
 
 
 def test_chain_overrides_keeps_the_dtc_knob_off_the_rf_dac():

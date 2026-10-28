@@ -71,6 +71,11 @@ class ChainPage(Page):
         top.addWidget(form_box, 1)
         top.addLayout(side)
         lay.addLayout(top)
+        # run-time warnings and the conventions the numbers were computed
+        # under, from the report itself
+        self.notes = QLabel("")
+        self.notes.setWordWrap(True)
+        lay.addWidget(self.notes)
         self.table_slot = QVBoxLayout()
         lay.addLayout(self.table_slot)
         self.figbox = FigureBox()
@@ -105,6 +110,9 @@ class ChainPage(Page):
             self._table.deleteLater()
         self._table = metrics_table(rep["metrics"])
         self.table_slot.addWidget(self._table)
+        self.notes.setText("\n".join(
+            [f"⚠ {w}" for w in rep.get("warnings", [])]
+            + [" · ".join(c["en"] for c in rep.get("conventions", []))]))
         self.figbox.set_figure(rep["fig"])
 
     # -------------------------------------------------- setup save/load
