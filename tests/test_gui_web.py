@@ -66,3 +66,33 @@ def test_chain_page_offers_every_registered_preset():
     opts = {str(o) for sb in at.selectbox for o in sb.options}
     missing = set(PRESETS) - opts
     assert not missing, f"presets unreachable from the web GUI: {missing}"
+
+
+def test_chain_page_offers_only_the_knobs_the_preset_honours():
+    """The DTC resolution slider used to be sent to the RF-DAC chain as
+    its DAC resolution, and the skew slider shown on chains it cannot
+    act on; each preset now shows exactly the knobs it honours."""
+    from polartx.guiutil import DEFAULT_PRESET
+    at = _run(os.path.join(REPO, "gui", "pages", "1_Chain_Workbench.py"))
+    assert at.selectbox[0].value == DEFAULT_PRESET
+    labels = lambda: {s.label for s in at.slider}            # noqa: E731
+    assert {"DTC bits", "AM/PM skew [ns]"} <= labels()
+    at.selectbox[0].select("WiFi 160 MHz (RF-DAC)").run()
+    assert not at.exception
+    assert "DTC bits" not in labels() and "AM/PM skew [ns]" not in labels()
+    at.selectbox[0].select("BLE LE-1M").run()
+    assert "AM/PM skew [ns]" not in labels()
+    assert "loop BW [kHz]" in labels()
+
+
+def test_home_names_every_page_and_topology():
+    """The landing page described two architectures and pointed at
+    ex01-ex07 long after there were four topologies and 21 examples.
+    It must at least name every page that exists and each topology."""
+    text = open(HOME, encoding="utf-8").read()
+    for path in PAGES:
+        title = os.path.basename(path)[2:-3].replace("_", " ")
+        assert title in text, f"Home does not mention the {title!r} page"
+    for topo in ("ADPLL", "DTC", "Outphasing", "RF-DAC"):
+        assert topo in text, topo
+    assert "ex01" not in text

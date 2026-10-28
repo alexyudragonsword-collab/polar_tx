@@ -199,6 +199,16 @@ $("run-mc").addEventListener("click", () => run(
         names.forEach(n => sel.appendChild(new Option(n, n)));
       }
     }
+    if (p.default) sel.value = p.default;
+    /* hide a knob the selected preset would not honour (guiutil decides;
+     * an older bridge without the table shows every knob) */
+    const syncKnobs = () => {
+      const keys = p.knobs && p.knobs[sel.value];
+      $("ch-skew").closest("label").hidden =
+        Array.isArray(keys) && !keys.includes("env_skew_s");
+    };
+    sel.addEventListener("change", syncKnobs);
+    syncKnobs();
     $("boot").hidden = true;
     $("app").hidden = false;
     applyLang();

@@ -23,6 +23,7 @@ Part 4  what each topology is sensitive to: polar vs AM/PM skew,
         outphasing vs branch phase mismatch, both against their budgets.
 """
 import os
+import warnings
 
 import matplotlib
 matplotlib.use("Agg")
@@ -116,8 +117,14 @@ for s in skews_ns:
 a.plot(skews_ns, e_polar, "o-", label="polar: AM/PM path skew")
 a.set(xlabel="envelope-path skew [ns]", ylabel="EVM [dB]",
       title="polar's sharpest knob does nothing to outphasing (asserted in tests)")
-e_o = wifi_outphasing(bw=BW, qam=QAM, env_skew_s=1e-9).tx.run(
-    wf, noise=True, seed=SEED).evm().db
+# the chain says so itself: it warns that the skew is ignored, and the
+# warning is part of the result here, so it is caught and printed
+with warnings.catch_warnings(record=True) as caught:
+    warnings.simplefilter("always")
+    p_o = wifi_outphasing(bw=BW, qam=QAM, env_skew_s=1e-9)
+print(f"outphasing with 1 ns skew -> {caught[0].message}" if caught
+      else "outphasing with 1 ns skew -> (no warning)")
+e_o = p_o.tx.run(wf, noise=True, seed=SEED).evm().db
 a.axhline(e_o, color="C1", ls="--", label=f"outphasing with 1 ns 'skew' = {e_o:.1f} dB (unchanged)")
 a.legend(fontsize=8)
 

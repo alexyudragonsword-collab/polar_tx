@@ -10,6 +10,28 @@ release 分组。
 
 ## 未发布 / Unreleased
 
+### GUI 改版 P0：六处不依赖改版的修正（2026-10-28）
+
+审视三个前端时实测到的问题，先在现有三端修掉；改版本身（界面规格层、一套界面三个宿主、
+实时工作台）按 `cairn/gui-redesign.md` 分阶段做。
+
+- **旋钮去哪个预设由 `guiutil` 一处决定**（`_HONOURS` / `honoured_knobs` /
+  `chain_overrides`）。此前三端各按预设名子串猜，两处已经算错：DTC 位数旋钮（11）
+  被当作 RF-DAC 的 DAC 位数发过去（它自己的默认是 12）；AM/PM skew 出现在 outphasing、
+  RF-DAC 和 BLE 上——前两者没有包络通路，BLE 上 0→10 ns 输出逐位相同。现在三端只显示
+  该预设接受的旋钮（Qt 置灰、网页不显示、手机隐藏），手机桥也按同一张表丢弃。
+- **outphasing 中和 skew 时告警**，与 `CartesianTX` 一致（architecture §6 的规矩）；
+  标准预设的结构性差异（打孔、headroom）不告警。
+- **Bluetooth 报带内发射而不是通用 ACLR**：通用 ACLR 在一个波形带宽处取邻道，GFSK
+  自身频谱还在那里（BLE LE-1M 读 −22.2 dBc，同一次运行在 ±2 / ±3 MHz 是 −56.0 / −60.5 dBc）。
+  LE 2M 用 ±4 / ±6 MHz（与 `ble_mask` 同一缩放）；GFSK 另报频偏均值与漂移（本 burst
+  自身载荷，不是认证码型）；右图从单位圆换成频偏轨迹。EDGE 不是 Bluetooth，保留 ACLR。
+- **校准计算移进 `guiutil`**（`run_skew_cal` / `run_twopoint_cal` / `run_dtc_cal`），
+  两个页面不再各写一份物理；有测试挡页面重新 import `cal`。
+- 默认预设按名字（`DEFAULT_PRESET`），不再 `index=6`；网页首页与选型页文案更新到
+  四种拓扑，并有测试要求首页提到每一页。
+- 测试 307 → 319 个函数。
+
 ### array_tx 带回来的四处修正（2026-10-13）
 
 姊妹库 array_tx（多单元阵列发射机，每单元一条 vendored polar_tx 链）在里程碑 1 里踩到的问题，修在这里再换 pin：

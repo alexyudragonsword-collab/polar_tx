@@ -127,10 +127,14 @@ def _list_presets() -> dict:
     ``bench_*`` factory therefore reaches the phone automatically, and
     ``tests/test_benchmarks.py`` fails if one never reaches the registry.
     """
-    from .guiutil import PRESETS
+    from .guiutil import DEFAULT_PRESET, PRESETS, honoured_knobs
     names = list(PRESETS)
     return {"presets": [n for n in names if not n.startswith("Bench:")],
-            "benchmarks": [n for n in names if n.startswith("Bench:")]}
+            "benchmarks": [n for n in names if n.startswith("Bench:")],
+            # the page opens on the same preset as the desktop GUIs and
+            # hides a knob the selected preset would not honour
+            "default": DEFAULT_PRESET,
+            "knobs": {n: list(honoured_knobs(n)) for n in names}}
 
 
 def _chain(preset: str = "BLE LE-1M", seed: int = 1, noise: bool = True,
@@ -147,12 +151,12 @@ def _chain(preset: str = "BLE LE-1M", seed: int = 1, noise: bool = True,
     Measured on an x86 runner, every preset at its default burst length
     completes in 0.15-0.55 s; expect single-digit seconds on a phone.
     """
-    from .guiutil import run_chain_report
-    overrides: dict[str, Any] = {}
-    if env_skew_ns:
-        overrides["env_skew_s"] = float(env_skew_ns) * 1e-9
-    if cfr_papr_db is not None:
-        overrides["cfr_papr_db"] = float(cfr_papr_db)
+    from .guiutil import chain_overrides, run_chain_report
+    # guiutil decides which knobs reach which chain: a skew sent with an
+    # RF-DAC or outphasing preset is dropped here, not misapplied there
+    overrides = chain_overrides(
+        preset, env_skew_s=float(env_skew_ns) * 1e-9 if env_skew_ns else None,
+        cfr_papr_db=None if cfr_papr_db is None else float(cfr_papr_db))
     r = run_chain_report(preset, seed=int(seed), noise=bool(noise),
                          n_units=n_units, **overrides)
     return _report(r)

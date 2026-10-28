@@ -31,8 +31,9 @@ What the wrapped chain's ``ChainConfig`` means here:
 - ``env_skew_s``, ``env_floor``, ``env_headroom``, ``fs_scale_fixed`` and
   the polar DPD are envelope-path knobs; a constant-envelope branch has no
   envelope path, so they are neutralized for the branch runs (``env_skew_s``
-  is asserted to have no effect in the tests).  ``fs_scale_fixed`` still
-  pins A_max when set, so a Monte-Carlo run stays a static system.
+  is asserted to have no effect in the tests, and a non-zero value warns).
+  ``fs_scale_fixed`` still pins A_max when set, so a Monte-Carlo run stays
+  a static system.
 - ``phase_slew_max_hz``, ``supply``, ``f_dpa`` / ``interleave`` and the
   post-DPA memory model pass through unchanged: those are phase-path or
   per-PA properties the branches genuinely have.
@@ -40,6 +41,7 @@ What the wrapped chain's ``ChainConfig`` means here:
 from __future__ import annotations
 
 import copy
+import warnings
 from dataclasses import dataclass, field, replace
 from typing import Any
 
@@ -49,6 +51,10 @@ from .chain import PolarResult, PolarTX
 from .dpa.combiner import OutphasingCombiner
 from .vendor.padpd.cfr import cfr_clip_filter
 from .waveforms.base import Waveform
+
+#: ChainConfig fields that are a caller's impairment request the branches
+#: cannot honour; set away from 0 they draw a warning (see OutphasingTX).
+OUTPHASING_IGNORED_FIELDS = ("env_skew_s",)
 
 
 def outphasing_decompose(x: np.ndarray, a_max: float
@@ -216,6 +222,19 @@ class OutphasingTX:
             replace(tx.cfg, cfr_papr_db=None, env_floor=0.0, env_skew_s=0.0,
                     env_headroom=1.0, fs_scale_fixed=None),
             tx.phasemod, tx.dpa, dpd=None, memory=tx.memory)
+        # Of those, only the skew is an impairment someone asks for: the
+        # rest describe the polar chain's structure (the preset's hole
+        # punch, its headroom), which the decomposition replaces by design.
+        # A non-zero skew is a request this topology cannot honour, so say
+        # so, as CartesianTX does for its ignored fields — a knob that
+        # silently does nothing is how a GUI ends up offering one.
+        self.ignored = [n for n in OUTPHASING_IGNORED_FIELDS
+                        if getattr(tx.cfg, n) != 0.0]
+        if self.ignored:
+            warnings.warn(
+                "OutphasingTX has no envelope path; these ChainConfig "
+                f"settings are ignored: {', '.join(self.ignored)}",
+                UserWarning, stacklevel=2)
         pm_cfg = getattr(tx.phasemod, "cfg", None)
         self.shared_lo = (getattr(pm_cfg, "lo_pn", None) is not None
                           and hasattr(pm_cfg, "lo_pn_seed"))

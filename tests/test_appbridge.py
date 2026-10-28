@@ -170,3 +170,22 @@ def test_a_representative_preset_from_each_family_runs_on_the_bridge(preset):
     that dispatch is exactly what breaks when a preset family is added."""
     r = _ok("chain", preset=preset)
     assert r["metrics"] and r["png"]
+
+
+def test_chain_drops_a_knob_the_preset_does_not_honour():
+    """The phone shows the skew field only where it applies, and the
+    bridge enforces the same table: a skew sent with the RF-DAC preset is
+    dropped (the chain would warn and ignore it), and the page learns the
+    default preset and the knob table from list_presets."""
+    from polartx.guiutil import DEFAULT_PRESET, PRESETS
+    p = _ok("list_presets")
+    assert p["default"] == DEFAULT_PRESET
+    assert set(p["knobs"]) == set(PRESETS)
+    assert "env_skew_s" not in p["knobs"]["WiFi 160 MHz (RF-DAC)"]
+    assert "env_skew_s" in p["knobs"]["WiFi 160 MHz"]
+    import warnings
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        a = _ok("chain", preset="WiFi 160 MHz (RF-DAC)", env_skew_ns=0.0)
+        b = _ok("chain", preset="WiFi 160 MHz (RF-DAC)", env_skew_ns=1.0)
+    assert a["metrics"] == b["metrics"]

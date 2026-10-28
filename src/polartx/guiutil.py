@@ -55,6 +55,59 @@ def _registry():
 #: chain presets selectable in the GUIs and the headless report layer
 PRESETS = list(_registry())
 
+#: the preset every front end opens on — by name, so reordering the
+#: registry cannot silently move it (it was ``index=6`` in two places)
+DEFAULT_PRESET = "WiFi 160 MHz"
+
+# Which of the workbench's shared knobs each preset honours, keyed by the
+# override keyword it is forwarded as.  One table instead of three front
+# ends each guessing from the preset's name: that guessing sent the DTC
+# resolution knob to the RF-DAC chain as its DAC resolution (11 instead of
+# its own 12 bits) and offered an AM/PM skew on chains with no envelope
+# path (outphasing, RF-DAC) or no envelope variation (BLE GFSK, measured
+# bit-identical at 10 ns).
+_DTC_POLAR = ("n_bits", "env_skew_s", "cfr_papr_db")
+_HONOURS: dict[str, tuple[str, ...]] = {
+    "BLE LE-1M": ("dp_gain", "loop_bw"),
+    "BLE LE-2M": ("dp_gain", "loop_bw"),
+    "BT EDR2 pi/4-DQPSK": ("dp_gain", "loop_bw", "env_skew_s"),
+    "BT EDR3 8DPSK": ("dp_gain", "loop_bw", "env_skew_s"),
+    "LTE 20 MHz": ("dpd", "dp_gain", "env_skew_s"),
+    "WiFi 80 MHz": _DTC_POLAR,
+    "WiFi 160 MHz": _DTC_POLAR,
+    "WiFi 320 MHz": _DTC_POLAR,
+    "NR FR1 100 MHz": _DTC_POLAR,
+    "NR FR2 200 MHz": _DTC_POLAR,
+    "WiFi 160 MHz (outphasing)": ("n_bits", "cfr_papr_db"),
+    # its own n_bits means DAC bits (12 by default); the shared DTC knob
+    # must not reach it
+    "WiFi 160 MHz (RF-DAC)": ("cfr_papr_db",),
+}
+
+
+def honoured_knobs(name: str) -> tuple[str, ...]:
+    """The shared workbench knobs this preset honours (override keywords).
+    Benchmarks honour none: they fix their published-class parameters."""
+    if name not in PRESETS:
+        raise ValueError(f"unknown preset {name!r}")
+    return _HONOURS.get(name, ())
+
+
+def chain_overrides(name: str, *, cfr_off: bool = False, **values) -> dict:
+    """Reduce the workbench's knob values to the ones this preset honours.
+
+    Every front end passes everything it shows and gets back exactly what
+    the preset should receive, so a knob that does not apply cannot reach
+    a chain that would misread or ignore it.  A value of ``None`` means
+    "leave the preset's default".  ``cfr_off`` switches CFR off where the
+    preset has it (``cfr_papr_db=None`` is a real setting, so it cannot
+    double as "not set")."""
+    keep = honoured_knobs(name)
+    out = {k: v for k, v in values.items() if k in keep and v is not None}
+    if cfr_off and "cfr_papr_db" in keep:
+        out["cfr_papr_db"] = None
+    return out
+
 
 def build_preset(name: str, **overrides):
     """Preset registry -> TxPreset; overrides forwarded to the factory
@@ -98,6 +151,49 @@ def _evm_metrics(e) -> dict:
     if "devm_pct" in e:
         return {"DEVM [%]": round(e["devm_pct"], 2)}
     return {"phase EVM [%]": round(e["evm_pct"], 2)}
+
+
+def _is_bluetooth(wf) -> bool:
+    """BLE GFSK, or BR/EDR DPSK at 1 Msym/s (EDGE is DPSK too, at
+    270.833 ksym/s, and is not Bluetooth)."""
+    return wf.kind == "gfsk" or (wf.kind == "dpsk"
+                                 and wf.meta.get("rate_sym") == 1e6)
+
+
+def _bluetooth_metrics(res, wf) -> tuple[dict, np.ndarray | None]:
+    """In-band emission (and, for GFSK, frequency deviation) in place of
+    the generic ACLR.
+
+    The generic ACLR takes the adjacent channel one waveform bandwidth
+    away, where GFSK's own spectrum still is (-22 dBc on BLE LE-1M against
+    -56 dBc at the in-band emission offset of the same run).  Offsets are
+    the BR/EDR / LE-1M ±2 and ±3 MHz, on the 2 MHz raster for LE 2M —
+    the scaling ``metrics.masks.ble_mask`` uses; like that mask and
+    ``bt_acp`` itself this is a stylized template, not a conformance
+    measurement.  The deviation figures are over this burst's own payload,
+    not the certification patterns (11110000 / 10101010) that define
+    delta-f1-avg and delta-f2-max.
+
+    Returns the metrics and, for GFSK, the instantaneous-frequency trace
+    the figure draws, so the panel shows the samples the numbers came
+    from.
+    """
+    from .metrics.ble_metrics import TWOPI, bt_acp, freq_deviation
+    s = wf.meta.get("rate", 1e6) / 1e6 if wf.kind == "gfsk" else 1.0
+    offs = (2e6 * s, 3e6 * s)
+    acp = bt_acp(res.y, res.fs, offsets_hz=offs, ch_bw=1e6 * s)
+    metrics: dict = {}
+    for off in offs:
+        tag = f"{off / 1e6:g}MHz_dbc"
+        worst = max(acp["acp+" + tag], acp["acp-" + tag])
+        metrics[f"in-band +-{off / 1e6:g} MHz [dBc]"] = round(worst, 1)
+    trace = None
+    if wf.kind == "gfsk":
+        d = freq_deviation(res.y, wf)
+        metrics["freq deviation avg [kHz]"] = round(d["dev_avg_hz"] / 1e3, 1)
+        metrics["drift [Hz/us]"] = round(d["drift_hz_per_us"], 1)
+        trace = np.gradient(np.unwrap(np.angle(res.y))) * res.fs / TWOPI
+    return metrics, trace
 
 
 def _spectrum_metrics(res, wf) -> tuple[np.ndarray, np.ndarray, np.ndarray, dict]:
@@ -236,7 +332,8 @@ def _ofdm_constellation(res, wf, e, eq: str,
 
 
 def _chain_figure(name: str, wf, res, e, f: np.ndarray, pdb: np.ndarray,
-                  mask_db: np.ndarray, cons: _Constellation | None):
+                  mask_db: np.ndarray, cons: _Constellation | None,
+                  f_trace: np.ndarray | None = None):
     """Spectrum + per-kind right-hand panel.  Rendering only: every number
     drawn here was computed by the helpers above."""
     import matplotlib
@@ -273,11 +370,27 @@ def _chain_figure(name: str, wf, res, e, f: np.ndarray, pdb: np.ndarray,
                             "ideal-waveform ref)", fontsize=8)
         else:
             ax[1].set_title(f"{wf.meta.get('mode', 'DPSK')} symbols")
+    elif f_trace is not None:
+        # GFSK is constant-envelope: its IQ trajectory is the unit circle
+        # and says nothing.  What carries the modulation is the frequency.
+        # 40 symbols from mid-burst: a PRBS starts from a sparse LFSR
+        # state (the first ~100 bits of the default payload are nearly
+        # all zeros), which would show one tone and no modulation
+        sps = wf.fs / wf.meta["rate"]
+        mid = f_trace.size // 2
+        n0, n1 = max(0, mid - int(20 * sps)), min(f_trace.size,
+                                                   mid + int(20 * sps))
+        ax[1].plot((np.arange(n0, n1) - n0) / sps, f_trace[n0:n1] / 1e3,
+                   lw=0.8)
+        ax[1].set(xlabel="symbol", ylabel="kHz",
+                  title="frequency deviation trajectory")
+        ax[1].grid(True, alpha=0.3)
     else:
         y = res.y / np.abs(res.y).max()
         ax[1].plot(y.real[2000:12000], y.imag[2000:12000], lw=0.3, alpha=0.6)
         ax[1].set_title("IQ trajectory")
-    ax[1].set_aspect("equal")
+    if f_trace is None:
+        ax[1].set_aspect("equal")
     fig.tight_layout()
     return fig
 
@@ -301,11 +414,16 @@ def run_chain_report(name: str, *, seed: int = 1, noise: bool = True,
     e = res.evm()
 
     metrics = _evm_metrics(e)
-    try:
-        a = res.aclr()
-        metrics["ACLR upper [dBc]"] = round(float(a["upper_dbc"]), 1)
-    except ValueError:
-        pass
+    f_trace = None
+    if _is_bluetooth(wf):
+        bt, f_trace = _bluetooth_metrics(res, wf)
+        metrics.update(bt)
+    else:
+        try:
+            a = res.aclr()
+            metrics["ACLR upper [dBc]"] = round(float(a["upper_dbc"]), 1)
+        except ValueError:
+            pass
     f, pdb, mask_db, mask_metrics = _spectrum_metrics(res, wf)
     metrics.update(mask_metrics)
 
@@ -315,7 +433,7 @@ def run_chain_report(name: str, *, seed: int = 1, noise: bool = True,
             res, wf, e, eq, metrics.get("EVM [dB]", 0.0))
         metrics.update(ofdm_metrics)
 
-    fig = _chain_figure(name, wf, res, e, f, pdb, mask_db, cons)
+    fig = _chain_figure(name, wf, res, e, f, pdb, mask_db, cons, f_trace)
     return {"metrics": metrics, "fig": fig, "result": res, "waveform": wf}
 
 
@@ -354,6 +472,73 @@ def run_setup(doc: dict) -> dict:
     """Execute a loaded setup through run_chain_report."""
     return run_chain_report(doc["preset"], seed=int(doc["seed"]),
                             noise=bool(doc["noise"]), **doc["overrides"])
+
+
+# ------------------------------------------------------------ calibration
+# The three calibration demos used to live inside the page code, written
+# twice (Qt and Streamlit) and therefore untestable without a GUI; the
+# pages now only lay these out.
+
+
+def run_skew_cal(skew_ns: float = 2.0, *, method: str = "waveform align"
+                 ) -> dict:
+    """Inject an AM/PM skew on WiFi 160 MHz and estimate it back.
+
+    ``method`` is ``"waveform align"`` (cross-correlate the delivered
+    envelope against the commanded one) or ``"ACP power search"`` (the
+    blind estimator that only needs the output spectrum)."""
+    from .cal.skew import estimate_env_skew, estimate_skew_by_acp
+    from .presets import wifi_dtc
+    if method not in ("waveform align", "ACP power search"):
+        raise ValueError(f"unknown skew estimator {method!r}")
+    inj = float(skew_ns) * 1e-9
+    p = wifi_dtc(bw=160e6, env_skew_s=inj)
+    wf = p.make_waveform(n_symbols=4, seed=2)
+    if method == "waveform align":
+        est = estimate_env_skew(p.tx.run(wf, noise=False))
+    else:
+        est = estimate_skew_by_acp(p.tx, wf)
+    return {"injected_ns": float(skew_ns),
+            "estimated_ns": est["skew_s"] * 1e9,
+            "error_ps": abs(est["skew_s"] - inj) * 1e12, "method": method}
+
+
+def run_twopoint_cal(gain_err_pct: float = 3.0) -> dict:
+    """Inject a direct-path gain error on LTE 20 MHz, estimate it offline
+    (least squares on commanded vs delivered phase), correct, re-run."""
+    from .cal.twopoint import estimate_dp_gain_error
+    from .phasemod import ADPLLTwoPoint
+    from .presets import lte20_adpll
+    eps = float(gain_err_pct) / 100.0
+    p = lte20_adpll(qam=64, dp_gain=1.0 + eps)
+    pm = p.tx.phasemod
+    assert isinstance(pm, ADPLLTwoPoint)
+    wf = p.make_waveform(n_symbols=10, seed=0)
+    r0 = p.tx.run(wf, noise=True, seed=2)
+    est = estimate_dp_gain_error(pm, r0.phase_cmd, r0.phase_out, r0.fs)
+    pm.dp_gain *= est["dp_gain_corr"]
+    r1 = p.tx.run(wf, noise=True, seed=2)
+    return {"injected_pct": float(gain_err_pct),
+            "estimated_pct": 100.0 * est["eps_hat"],
+            "evm_before_db": r0.evm().db, "evm_after_db": r1.evm().db}
+
+
+def run_dtc_cal(iterations: int = 2) -> dict:
+    """DTC gain/INL LUT calibration from a CW training tone: a 12-bit DTC
+    with 1 % gain error and a 3rd-order sinusoidal INL, fitted and
+    corrected ``iterations`` times."""
+    from .cal.dtc_cal import apply_dtc_correction, fit_dtc_correction
+    from .phasemod import DTCPhaseModulator, DTCPMConfig
+    fs, n = 640e6, 1 << 16
+    cw = 2 * np.pi * 5e6 * np.arange(n) / fs
+    pm = DTCPhaseModulator(DTCPMConfig(
+        n_bits=12, gain_error=0.01, inl_sin=(2e-3, 3, 0.0)))
+    before = fit_dtc_correction(pm, cw, fs)["err_rms_before"]
+    for _ in range(int(iterations)):
+        apply_dtc_correction(pm, fit_dtc_correction(pm, cw, fs))
+    after = fit_dtc_correction(pm, cw, fs)["err_rms_before"]
+    return {"err_rms_before_mrad": before * 1e3,
+            "err_rms_after_mrad": after * 1e3, "iterations": int(iterations)}
 
 
 def run_fir_report(bw: float = 40e6, *, notch_offset_hz: float = 500e6,

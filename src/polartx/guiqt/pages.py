@@ -3,14 +3,15 @@ from __future__ import annotations
 
 from typing import Any
 
-import numpy as np
 from PySide6.QtWidgets import (QCheckBox, QComboBox, QDoubleSpinBox,
                                QFormLayout, QGroupBox, QHBoxLayout, QLabel,
                                QPushButton, QSpinBox, QVBoxLayout)
 
-from ..guiutil import (PRESETS, run_chain_report, run_combiner_report,
-                       run_fir_report, run_mc_report, run_rtl_export,
-                       run_selector_report)
+from ..guiutil import (DEFAULT_PRESET, PRESETS, chain_overrides,
+                       honoured_knobs, run_chain_report, run_combiner_report,
+                       run_dtc_cal, run_fir_report, run_mc_report,
+                       run_rtl_export, run_selector_report, run_skew_cal,
+                       run_twopoint_cal)
 from .widgets import FigureBox, Page, metrics_table
 
 
@@ -24,7 +25,6 @@ class ChainPage(Page):
         form = QFormLayout(form_box)
         self.preset = QComboBox()
         self.preset.addItems(PRESETS)
-        self.preset.setCurrentIndex(6)
         self.seed = QSpinBox()
         self.seed.setRange(0, 9999)
         self.seed.setValue(1)
@@ -39,15 +39,23 @@ class ChainPage(Page):
         self.dp_err_pct = QDoubleSpinBox()
         self.dp_err_pct.setRange(-10.0, 10.0)
         self.dp_err_pct.setSingleStep(0.5)
-        self.dpd = QCheckBox("polar DPD (LTE)")
+        self.dpd = QCheckBox("polar DPD")
         self.dpd.setChecked(True)
         form.addRow("preset", self.preset)
         form.addRow("seed", self.seed)
         form.addRow("", self.noise)
-        form.addRow("DTC bits (WiFi/NR)", self.dtc_bits)
-        form.addRow("AM/PM skew [ns] (all but BLE)", self.skew_ns)
-        form.addRow("two-point gain err [%] (BLE/EDR/LTE)", self.dp_err_pct)
+        form.addRow("DTC bits", self.dtc_bits)
+        form.addRow("AM/PM skew [ns]", self.skew_ns)
+        form.addRow("two-point gain err [%]", self.dp_err_pct)
         form.addRow("", self.dpd)
+        # override keyword each widget feeds; a widget the selected preset
+        # does not honour is disabled rather than silently ignored
+        self._knob_widgets = {"n_bits": self.dtc_bits,
+                              "env_skew_s": self.skew_ns,
+                              "dp_gain": self.dp_err_pct, "dpd": self.dpd}
+        self.preset.currentTextChanged.connect(self._sync_knobs)
+        self.preset.setCurrentText(DEFAULT_PRESET)
+        self._sync_knobs(self.preset.currentText())
         self.btn = QPushButton("Run")
         self.btn.clicked.connect(self._go)
         self.btn_save = QPushButton("Save setup…")
@@ -69,27 +77,19 @@ class ChainPage(Page):
         lay.addWidget(self.figbox, 1)
         self._table = None
 
+    def _sync_knobs(self, name: str) -> None:
+        keys = honoured_knobs(name)
+        for key, w in self._knob_widgets.items():
+            w.setEnabled(key in keys)
+
     def _overrides(self, name: str) -> dict[str, Any]:
-        ov: dict[str, Any] = {}
-        if name.startswith("Bench:"):
-            return ov            # benchmarks fix their published-class params
-        if "WiFi" in name or "NR" in name:
-            ov["n_bits"] = self.dtc_bits.value()
-            ov["env_skew_s"] = self.skew_ns.value() * 1e-9
-        elif "LTE" in name:
-            ov["dpd"] = self.dpd.isChecked()
-            ov["dp_gain"] = 1.0 + self.dp_err_pct.value() / 100.0
-            # AM/PM skew is an ENVELOPE-path impairment, so it applies to
-            # every chain whose payload has envelope variation — the
-            # narrowband OFDM chain very much included (1 ns fails the
-            # mask).  It is not a wideband-only knob.
-            ov["env_skew_s"] = self.skew_ns.value() * 1e-9
-        else:                       # BLE / EDR
-            ov["dp_gain"] = 1.0 + self.dp_err_pct.value() / 100.0
-            # BLE GFSK is constant-envelope and provably unaffected; EDR
-            # DPSK is quasi-constant (10 ns ~ 0.13% DEVM) but non-zero.
-            ov["env_skew_s"] = self.skew_ns.value() * 1e-9
-        return ov
+        # guiutil decides which knobs reach which chain (benchmarks get
+        # none); this page only reports what its widgets show
+        return chain_overrides(
+            name, n_bits=self.dtc_bits.value(),
+            env_skew_s=self.skew_ns.value() * 1e-9,
+            dp_gain=1.0 + self.dp_err_pct.value() / 100.0,
+            dpd=self.dpd.isChecked())
 
     def _go(self):
         name = self.preset.currentText()
@@ -190,59 +190,24 @@ class CalibrationPage(Page):
         lay.addStretch(1)
 
     def _skew(self):
-        inj = self.skew_in.value() * 1e-9
-        method = self.skew_method.currentText()
-
-        def job():
-            from ..cal.skew import estimate_env_skew, estimate_skew_by_acp
-            from ..presets import wifi_dtc
-            p = wifi_dtc(bw=160e6, env_skew_s=inj)
-            wf = p.make_waveform(n_symbols=4, seed=2)
-            if method == "waveform align":
-                return estimate_env_skew(p.tx.run(wf, noise=False))
-            return estimate_skew_by_acp(p.tx, wf)
-
-        self.run_async(job, lambda est: self.r1.setText(
-            f"estimated {est['skew_s'] * 1e9:.2f} ns "
-            f"(error {abs(est['skew_s'] - inj) * 1e12:.0f} ps)"), self.b1)
+        inj, method = self.skew_in.value(), self.skew_method.currentText()
+        self.run_async(lambda: run_skew_cal(inj, method=method),
+                       lambda r: self.r1.setText(
+                           f"estimated {r['estimated_ns']:.2f} ns "
+                           f"(error {r['error_ps']:.0f} ps)"), self.b1)
 
     def _twopoint(self):
-        eps = self.eps_in.value() / 100.0
-
-        def job():
-            from ..cal.twopoint import estimate_dp_gain_error
-            from ..presets import lte20_adpll
-            p = lte20_adpll(qam=64, dp_gain=1.0 + eps)
-            wf = p.make_waveform(n_symbols=10, seed=0)
-            r0 = p.tx.run(wf, noise=True, seed=2)
-            est = estimate_dp_gain_error(p.tx.phasemod, r0.phase_cmd,
-                                         r0.phase_out, r0.fs)
-            p.tx.phasemod.dp_gain *= est["dp_gain_corr"]
-            r1 = p.tx.run(wf, noise=True, seed=2)
-            return est, r0.evm().db, r1.evm().db
-
-        self.run_async(job, lambda t: self.r2.setText(
-            f"eps_hat {100 * t[0]['eps_hat']:.2f} %, "
-            f"EVM {t[1]:.1f} → {t[2]:.1f} dB"), self.b2)
+        eps = self.eps_in.value()
+        self.run_async(lambda: run_twopoint_cal(eps),
+                       lambda r: self.r2.setText(
+                           f"eps_hat {r['estimated_pct']:.2f} %, "
+                           f"EVM {r['evm_before_db']:.1f} → "
+                           f"{r['evm_after_db']:.1f} dB"), self.b2)
 
     def _dtc(self):
-        def job():
-            from ..cal.dtc_cal import (apply_dtc_correction,
-                                       fit_dtc_correction)
-            from ..phasemod import DTCPhaseModulator, DTCPMConfig
-            fs, n = 640e6, 1 << 16
-            cw = 2 * np.pi * 5e6 * np.arange(n) / fs
-            pm = DTCPhaseModulator(DTCPMConfig(
-                n_bits=12, gain_error=0.01, inl_sin=(2e-3, 3, 0.0)))
-            before = fit_dtc_correction(pm, cw, fs)["err_rms_before"]
-            for _ in range(2):
-                apply_dtc_correction(pm, fit_dtc_correction(pm, cw, fs))
-            after = fit_dtc_correction(pm, cw, fs)["err_rms_before"]
-            return before, after
-
-        self.run_async(job, lambda t: self.r3.setText(
-            f"phase-error rms {t[0] * 1e3:.1f} → {t[1] * 1e3:.2f} mrad"),
-            self.b3)
+        self.run_async(run_dtc_cal, lambda r: self.r3.setText(
+            f"phase-error rms {r['err_rms_before_mrad']:.1f} → "
+            f"{r['err_rms_after_mrad']:.2f} mrad"), self.b3)
 
 
 class MonteCarloPage(Page):
@@ -388,7 +353,8 @@ class FIRDohertyPage(Page):
 
 
 class SelectorPage(Page):
-    """Rank narrowband ADPLL two-point vs wideband open-loop DTC."""
+    """Rank the four topologies (ADPLL two-point, open-loop DTC,
+    outphasing, Cartesian RF-DAC) against a requirement."""
 
     title = "Architecture Selector"
 
