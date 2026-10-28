@@ -2,6 +2,17 @@
 
 本文件按倒序记录实质性进展——最新的一条在这行下面。每条保持简短，只写摘要和指针；结论沉淀进 `cairn/<topic>.md`。
 
+## 2026-10-28 · GUI 改版启动：路线已定，P0 六处修正
+
+- 审视三个前端（实际运行 + 截图），提案与原型见 `cairn/gui-redesign.md` 顶部链接。用户拍板：一套
+  HTML/JS 界面三个宿主、桌面先用浏览器应用窗口、分 P0–P4 五个 PR。
+- P0：旋钮→预设适用表收进 `guiutil._HONOURS`（RF-DAC 不再被 DTC 位数改成 11 bit；skew 不再出现在
+  outphasing / RF-DAC / BLE）；outphasing 中和 skew 时告警；Bluetooth 报带内发射（BLE LE-1M
+  −22.2 dBc 通用 ACLR → ±2 MHz −56.0 dBc）与频偏；校准计算移进 `guiutil`；默认预设按名字；首页文案。
+- 新测试"每个声明的旋钮都拨得动"：`loop_bw` 在噪声关时差 6e-14——两点匹配下它只整形噪声，按物理改为
+  开噪声比较，不放宽容差。
+- 测试 307 → 319。本机 mypy 在 main 上也报 numpy 2.5 存根错（环境，CI 不受影响），用 `--python-version 3.12` 查。
+
 ## 2026-10-13 · test-gui 的 Bus error 是 PySide6 6.12.0，不是代码：guiqt 钉 `<6.12`
 
 - 现象：推送 008cc90 后 CI 只有 `test-gui` 红，两次（含重跑）都在 Streamlit AppTest 跑 Chain Workbench 时 Bus error（退出码 135），

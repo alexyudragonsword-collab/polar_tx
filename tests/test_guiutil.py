@@ -286,3 +286,129 @@ def test_skew_sensitivity_follows_the_envelope_not_the_architecture():
     assert skewed["metrics"]["mask"] == "FAIL"
     assert skewed["metrics"]["EVM [dB]"] > clean["metrics"]["EVM [dB]"] + 10
     plt.close("all")
+
+
+# ------------------------------------------------ which knobs reach which chain
+# A non-default value for every knob a preset claims to honour.
+_ALT = {"n_bits": 8, "env_skew_s": 0.5e-9, "cfr_papr_db": 6.0,
+        "dp_gain": 1.05, "loop_bw": 200e3, "dpd": False}
+_SHAPES_ONLY_NOISE = {"loop_bw"}
+
+
+def test_every_registered_preset_declares_its_knobs():
+    """A preset without an entry would silently get no knobs at all; the
+    benchmarks are the only ones meant to have none."""
+    from polartx.guiutil import DEFAULT_PRESET, honoured_knobs
+    assert DEFAULT_PRESET in PRESETS
+    for name in PRESETS:
+        if name.startswith("Bench:"):
+            assert honoured_knobs(name) == ()
+        else:
+            assert honoured_knobs(name), name
+            assert set(honoured_knobs(name)) <= set(_ALT), name
+
+
+@pytest.mark.parametrize("name", [n for n in PRESETS if not n.startswith("Bench:")])
+def test_every_honoured_knob_moves_the_output(name):
+    """A knob the GUI offers must do something on that chain.  Measured
+    against the output samples, not a rounded metric, with noise off so a
+    change can only come from the knob."""
+    import warnings
+
+    import numpy as np
+
+    from polartx.guiutil import honoured_knobs
+
+    def run(noise=False, **ov):
+        with warnings.catch_warnings():
+            warnings.simplefilter("error")      # an ignored knob warns
+            p = build_preset(name, **ov)
+            return p.tx.run(p.make_waveform(), noise=noise, seed=1).y
+
+    for k in honoured_knobs(name):
+        # With the two points matched, the loop bandwidth shapes only the
+        # noise (and any mismatch), so the deterministic output cannot
+        # move — measured 6e-14 on BLE.  Same seed, noise on, it must.
+        noise = k in _SHAPES_ONLY_NOISE
+        y0, y1 = run(noise), run(noise, **{k: _ALT[k]})
+        assert y1.shape != y0.shape or not np.allclose(y0, y1), (name, k)
+
+
+def test_chain_overrides_keeps_the_dtc_knob_off_the_rf_dac():
+    """The RF-DAC preset's n_bits is its DAC resolution (12); the
+    workbench's DTC resolution knob (11) used to land there."""
+    from polartx.guiutil import chain_overrides
+    ov = chain_overrides("WiFi 160 MHz (RF-DAC)", n_bits=11, env_skew_s=1e-9,
+                         cfr_papr_db=None)
+    assert ov == {}
+    assert build_preset("WiFi 160 MHz (RF-DAC)", **ov).tx.rfdac.cfg.n_bits == 12
+    assert chain_overrides("WiFi 160 MHz", n_bits=11)["n_bits"] == 11
+    assert "env_skew_s" not in chain_overrides("WiFi 160 MHz (outphasing)",
+                                               env_skew_s=1e-9)
+    assert "env_skew_s" not in chain_overrides("BLE LE-1M", env_skew_s=1e-9)
+    assert chain_overrides("WiFi 160 MHz", cfr_off=True) == {"cfr_papr_db": None}
+    assert chain_overrides("BLE LE-1M", cfr_off=True) == {}
+
+
+# ------------------------------------------------- Bluetooth metric set
+def test_bluetooth_reports_in_band_emission_not_a_generic_aclr():
+    """The generic ACLR takes the adjacent channel at one waveform
+    bandwidth, where GFSK's own spectrum still is: it read -22.2 dBc on
+    BLE LE-1M while the same run, measured at the in-band emission
+    offsets, is -56 / -61 dBc.  Bluetooth chains report the latter (and
+    GFSK its frequency deviation); EDGE is not Bluetooth and keeps ACLR."""
+    import matplotlib.pyplot as plt
+
+    from polartx.metrics.ble_metrics import bt_acp, freq_deviation
+    rep = run_chain_report("BLE LE-1M", seed=1)
+    m = rep["metrics"]
+    assert "ACLR upper [dBc]" not in m
+    acp = bt_acp(rep["result"].y, rep["result"].fs)
+    assert m["in-band +-2 MHz [dBc]"] == round(max(acp["acp+2MHz_dbc"],
+                                                   acp["acp-2MHz_dbc"]), 1)
+    assert m["in-band +-2 MHz [dBc]"] < -40.0                 # measured -56.0
+    assert m["in-band +-3 MHz [dBc]"] < m["in-band +-2 MHz [dBc]"]
+    d = freq_deviation(rep["result"].y, rep["waveform"])
+    assert m["freq deviation avg [kHz]"] == round(d["dev_avg_hz"] / 1e3, 1)
+    assert "drift [Hz/us]" in m
+    # the right-hand panel is the frequency trajectory, not the unit circle
+    assert "frequency" in rep["fig"].axes[1].get_title()
+    plt.close(rep["fig"])
+
+    # LE 2M: offsets on its 2 MHz raster, the convention ble_mask uses
+    m2 = run_chain_report("BLE LE-2M", seed=1)["metrics"]
+    assert "in-band +-4 MHz [dBc]" in m2 and "in-band +-6 MHz [dBc]" in m2
+
+    edr = run_chain_report("BT EDR3 8DPSK", seed=1)["metrics"]
+    assert "in-band +-2 MHz [dBc]" in edr and "ACLR upper [dBc]" not in edr
+    edge = run_chain_report("Bench: Staszewski'05 EDGE", seed=1)["metrics"]
+    assert "ACLR upper [dBc]" in edge and "in-band +-2 MHz [dBc]" not in edge
+    plt.close("all")
+
+
+# ------------------------------------------------------ calibration demos
+def test_calibration_demos_recover_what_was_injected():
+    """The three calibration demos moved out of the two GUIs' page code
+    (written twice, testable only through a GUI) into guiutil."""
+    from polartx.guiutil import run_dtc_cal, run_skew_cal, run_twopoint_cal
+    for method in ("waveform align", "ACP power search"):
+        r = run_skew_cal(2.0, method=method)
+        assert r["error_ps"] < 10.0, r                          # measured 0.1 / 0.1 ps
+    with pytest.raises(ValueError, match="estimator"):
+        run_skew_cal(2.0, method="guess")
+    t = run_twopoint_cal(3.0)
+    assert abs(t["estimated_pct"] - 3.0) < 0.1                  # measured 3.00
+    assert t["evm_after_db"] < t["evm_before_db"] - 20.0        # -21.6 -> -53.4
+    d = run_dtc_cal(2)
+    assert d["err_rms_after_mrad"] < 0.1 * d["err_rms_before_mrad"]   # 18.0 -> 0.57
+
+
+def test_no_page_does_its_own_calibration_physics():
+    """The pages lay out guiutil results; they must not import the cal
+    modules themselves again."""
+    import pathlib
+    root = pathlib.Path(__file__).resolve().parents[1]
+    for page in [root / "gui" / "pages" / "2_Calibration.py",
+                 root / "src" / "polartx" / "guiqt" / "pages.py"]:
+        text = page.read_text(encoding="utf-8")
+        assert "polartx.cal" not in text and "from ..cal" not in text, page

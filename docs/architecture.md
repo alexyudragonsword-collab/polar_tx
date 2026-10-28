@@ -201,8 +201,9 @@ sibling checkout 因此钉 `08b9725`，`44cbcb3` 是它的祖先，靠 `fetch-de
 | 新损伤 | `impairments.py` 或 `ChainConfig` 加字段 | 单调性/标度律测试，字段注释写单位 |
 | 新指标 | `metrics/` | 声明测量口径；输入不足要抛异常，不返回 NaN |
 | 新对标预设 | `presets.py` 的 `bench_*` + `polartx.__all__` | 必须进 `guiutil.PRESETS`（有测试挡） |
+| 新标准预设 | `presets.py` + `guiutil._registry` | 在 `guiutil._HONOURS` 声明它接受的工作台旋钮；每个都要拨得动（有测试挡） |
 | 新 GUI 页面 | `guiutil.py` 放计算 | **两个桌面/网页前端都要接**，两边都要有测试 |
-| 新发射机拓扑 | 兄弟类包住 `PolarTX`（照 `fir.py` / `outphasing.py`），自带结果类并提供同名指标方法 `evm/aclr/psd/check_mask/avg_efficiency` + `evm_equalize_default`，预设带 `.tx` 别名进 `guiutil.PRESETS` | **不在 `ChainConfig` 加开关、不改 `chain.py`**；理想链下 EVM 必须与极坐标理想链一致（有测试挡），不适用的 `ChainConfig` 字段在 docstring 里列明，且被设成非默认值时要**告警**而不是静默忽略（照 `cartesian.py` 的 `ignored_chain_settings`，有测试挡） |
+| 新发射机拓扑 | 兄弟类包住 `PolarTX`（照 `fir.py` / `outphasing.py`），自带结果类并提供同名指标方法 `evm/aclr/psd/check_mask/avg_efficiency` + `evm_equalize_default`，预设带 `.tx` 别名进 `guiutil.PRESETS` | **不在 `ChainConfig` 加开关、不改 `chain.py`**；理想链下 EVM 必须与极坐标理想链一致（有测试挡），不适用的 `ChainConfig` 字段在 docstring 里列明，且被设成非默认值时要**告警**而不是静默忽略（照 `cartesian.py` 的 `ignored_chain_settings` 与 `outphasing.py` 的 `OUTPHASING_IGNORED_FIELDS`，有测试挡） |
 | Android 能力 | `appbridge.py` 加方法 + `app.js` 加 render | 必须**同一次改动**里配对，`test_android_parity.py` 双向卡死 |
 
 ## 7. 已知边界

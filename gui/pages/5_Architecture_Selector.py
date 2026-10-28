@@ -1,4 +1,4 @@
-"""Architecture selector: narrowband ADPLL two-point vs wideband DTC."""
+"""Architecture selector: rank the four topologies against a requirement."""
 import streamlit as st
 
 from polartx.guiutil import run_selector_report
@@ -6,11 +6,13 @@ from polartx.guiutil import run_selector_report
 st.title("Architecture selector")
 
 st.caption(
-    "Both architectures share the same synthesizer, so in-band phase noise "
-    "is a common term. What separates them: the open-loop DTC pays extra "
-    "quantization / jitter / INL floors but works at any bandwidth, while "
-    "the ADPLL imprints modulation **inside** the loop (no DTC floors) yet "
-    "its direct FM DAC cannot stay gain-matched past ~50 MHz. Scores are "
+    "Four topologies, one shared synthesizer, so in-band phase noise is a "
+    "common term. The ADPLL imprints modulation inside the loop (no DTC "
+    "floors) but its direct FM DAC cannot stay gain-matched past ~50 MHz; "
+    "the open-loop DTC works at any bandwidth and pays quantization / "
+    "jitter / INL floors; outphasing inherits the DTC floors on two "
+    "full-scale branches plus branch phase mismatch; the Cartesian RF-DAC "
+    "pays I/Q quantization, LO jitter and image rejection. Scores are "
     "analytic — confirm the winner on the real chain.")
 
 c1, c2, c3 = st.columns(3)

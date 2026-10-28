@@ -95,3 +95,41 @@ def test_new_pages_construct_and_render(app, cls_name, tmp_path):
     page._show(rep)
     app.processEvents()
     assert page._table is not None and page.figbox._canvas is not None
+
+
+def test_chain_page_sends_only_the_knobs_the_preset_honours(app):
+    """The DTC resolution spinner used to reach the RF-DAC chain as its
+    DAC resolution, and the skew spinner reached chains with no envelope
+    path; now each widget is disabled where it does not apply and its
+    value never leaves the page."""
+    from polartx.guiqt.app import MainWindow
+    from polartx.guiutil import DEFAULT_PRESET
+    win = MainWindow()
+    page = win.pages[0]
+    assert page.preset.currentText() == DEFAULT_PRESET
+    page.preset.setCurrentText("WiFi 160 MHz (RF-DAC)")
+    app.processEvents()
+    assert not page.dtc_bits.isEnabled() and not page.skew_ns.isEnabled()
+    assert page._overrides("WiFi 160 MHz (RF-DAC)") == {}
+    page.preset.setCurrentText("WiFi 160 MHz (outphasing)")
+    app.processEvents()
+    assert page.dtc_bits.isEnabled() and not page.skew_ns.isEnabled()
+    assert "env_skew_s" not in page._overrides("WiFi 160 MHz (outphasing)")
+    page.preset.setCurrentText("Bench: Degani'24 WiFi7")
+    app.processEvents()
+    assert page._overrides("Bench: Degani'24 WiFi7") == {}
+    win.close()
+
+
+def test_calibration_page_buttons_run_through_guiutil(app):
+    """Each calibration button runs its guiutil demo on the worker and
+    writes the result back (the physics moved out of this page)."""
+    from polartx.guiqt.pages import CalibrationPage
+    page = CalibrationPage()
+    for go, label in ((page._skew, page.r1), (page._twopoint, page.r2),
+                      (page._dtc, page.r3)):
+        go()
+        assert page._worker.wait(120_000)
+        app.processEvents()
+        assert label.text() != "—", label.text()
+    assert "error" in page.r1.text() and "→" in page.r2.text()

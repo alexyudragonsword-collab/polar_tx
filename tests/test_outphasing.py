@@ -163,12 +163,37 @@ def test_env_skew_has_no_effect_on_outphasing_but_wrecks_polar(ideal, wf):
     skewed = PolarTX(ChainConfig(cfr_papr_db=CFR_DB, env_floor=0.0,
                                  env_skew_s=0.5e-9), IdealPhaseModulator(), dpa)
     y0 = OutphasingTX(polar, _lossless()).run(wf, noise=False, seed=1).y
-    y1 = OutphasingTX(skewed, _lossless()).run(wf, noise=False, seed=1).y
+    with pytest.warns(UserWarning, match="env_skew_s"):
+        y1 = OutphasingTX(skewed, _lossless()).run(wf, noise=False, seed=1).y
     assert np.array_equal(y0, y1)
-    assert OutphasingTX(skewed).branch_tx.cfg.env_skew_s == 0.0
+    with pytest.warns(UserWarning):
+        assert OutphasingTX(skewed).branch_tx.cfg.env_skew_s == 0.0
     e_polar_skewed = skewed.run(wf, noise=False, seed=1).evm().db
     e_polar = polar.run(wf, noise=False, seed=1).evm().db
     assert e_polar_skewed > e_polar + 10.0           # measured -21.9 vs -41.6
+
+
+def test_a_neutralized_skew_is_warned_about_not_dropped_silently(ideal):
+    """The skew knob reaches an outphasing chain through the shared preset
+    description (the GUIs offer it on every WiFi chain) and does nothing
+    there; CartesianTX warns in that situation and so must this.  The
+    structural differences (hole punching, headroom, the pinned full
+    scale, CFR moved to the composite) are the topology, not a request
+    the caller made, so the standard preset builds without a warning."""
+    import warnings
+
+    from polartx.presets import wifi_outphasing
+    polar, dpa = ideal
+    skewed = PolarTX(ChainConfig(cfr_papr_db=CFR_DB, env_skew_s=0.5e-9),
+                     IdealPhaseModulator(), dpa)
+    with pytest.warns(UserWarning, match="env_skew_s") as rec:
+        tx = OutphasingTX(skewed)
+    assert tx.ignored == ["env_skew_s"]
+    assert len(rec) == 1
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        assert OutphasingTX(polar).ignored == []
+        assert wifi_outphasing().outphasing_tx.ignored == []   # env_floor 0.02, CFR 8.5
 
 
 # ------------------------------------------------- combiner contract

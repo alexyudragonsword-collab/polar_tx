@@ -112,9 +112,14 @@ push 都跑：
    没人调的方法，或 `app.js` 调一个不存在的方法，`tests/test_android_parity.py`
    都会红（纯文本比对，不需要浏览器或模拟器）。**一个没有调用者的 bridge 方法
    只是半个功能**——它有 bridge 测试，看起来被覆盖了，对用户什么也不做。
-4. Android 上刻意缺的功能（RTL 导出、并行蒙卡）记在 `docs/android.md` 与
+4. **旋钮去哪个预设由 `guiutil` 一处决定**：非对标预设要在 `guiutil._HONOURS`
+   里声明它接受哪些工作台旋钮，前端只调 `chain_overrides` / `honoured_knobs`，
+   不再按预设名子串猜。`test_every_honoured_knob_moves_the_output` 对每个声明的
+   旋钮拨一次、比对输出样本（`loop_bw` 在开噪声下比，因为两点匹配时它只整形
+   噪声）；一个拨了没反应、或让链告警的旋钮会变红。
+5. Android 上刻意缺的功能（RTL 导出、并行蒙卡）记在 `docs/android.md` 与
    `cairn/android-app.md`，**口径差异是要记录的决定，不是留给下一个人发现的缺口**。
-5. 报告层画的星座图必须和它打印的 EVM 用**同一个均衡口径**——
+6. 报告层画的星座图必须和它打印的 EVM 用**同一个均衡口径**——
    `PolarResult.evm_equalize_default` 就是为此存在的。用不同口径画的图
    会无声地和数字矛盾。
 
