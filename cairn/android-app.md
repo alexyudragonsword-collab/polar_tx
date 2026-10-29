@@ -5,7 +5,7 @@ summary: "polartx 的 Android 面（Chaquopy + WebView）：可行性闸门为�
 tags: [polartx, android, chaquopy, cython, 前端]
 contains: [decision, experience, lesson, open_question]
 created: "2026-08-25"
-updated: "2026-08-25"
+updated: "2026-10-29（旧前端退役：手机与桌面只剩一份页面）"
 related: []
 authoring_mode: ai_generated
 ---
@@ -44,7 +44,7 @@ Chaquopy 的 Python 版本由最重的二进制依赖决定。本仓的出口代
 
 - `vendor/` —— 它的价值就是**可审计的改编副本**（出处头 + 漂移检查）；
   而且那不是 polartx 自己的 IP。
-- `guiqt/` —— 桌面专用，手机上不导入。
+- `guiqt/` —— 桌面专用，手机上不导入。（2026-10-29 随 Qt 前端删除，这条理由不再有对象。）
 - `appbridge.py` —— 它的**整个方法表在 `app.js` 里是明文**，编译它保护不了
   任何尚未公开的东西。这里用的是技能文档那条判据：不要为**保护的表象**付出
   构建面积。
@@ -203,6 +203,10 @@ APK 都必须含这四个页面文件的检查；`test_android_parity.py` 卡住
 
 校准与实测数据（2026-10-29 前只在两个桌面 GUI 里）现在手机上也有。页面与 bridge
 （含桌面专属方法）的双向对齐由 `tests/test_android_parity.py` 卡死。
+
+GUI 改版 P4b（2026-10-29）删除了 Streamlit 与 Qt 前端：桌面现在显示的就是手机这份页面
+（`polartx-gui`，浏览器应用窗口），所以"手机比桌面少什么"只剩上表三条，而且都在同一个
+`app.js` 里按宿主（有无注入的 `window.host`）分支，不再是两份代码各自缺什么。
 
 ## 开放问题
 

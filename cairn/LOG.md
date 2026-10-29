@@ -2,6 +2,14 @@
 
 本文件按倒序记录实质性进展——最新的一条在这行下面。每条保持简短，只写摘要和指针；结论沉淀进 `cairn/<topic>.md`。
 
+## 2026-10-29 · GUI 改版 P4b：旧前端退役，桌面应用窗口
+
+- 删 Streamlit / Qt 前端、其测试、打包入口与 extra，以及 P0 为旧前端立的 `_HONOURS` 表；`polartx-gui` 改指 `webhost`。
+- 桌面开 Edge/Chrome `--app` 窗口（独立持久 profile → 关窗即停服务）；二次启动复用已运行宿主。
+- 坑：Windows 上 `SO_REUSEADDR` 允许两个实例绑同一端口 → `_Server` 在 Windows 关掉，测试在 windows-latest 上卡。
+- Windows exe 两条 workflow 各一个 job，冒烟改为 `packaging/smoke_webhost.py`（页面、bridge、工作台、RTL），CI 也跑它。
+- 真 Chromium（Xvfb）验证关窗后宿主 <0.5 s 退出。测试 353 → 342。见 `cairn/gui-redesign.md` P4b 节。
+
 ## 2026-10-29 · GUI 改版 P4a：其余页面迁入
 
 - 九页分三组；校准、实测数据上手机；效率与回退成为工作台指标；选型一键开到工作台；FIR / 选型 /

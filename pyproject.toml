@@ -37,22 +37,17 @@ dependencies = [
 
 [project.optional-dependencies]
 test = ["pytest"]
-gui = ["streamlit>=1.30"]
-# PySide6 6.12.0 (released between the 2026-10-03 and 2026-10-13 CI runs)
-# crashes the process -- Bus error on the runner, SIGSEGV locally -- as soon
-# as Streamlit's AppTest runs in the same interpreter after Qt has loaded;
-# 6.11.2 with the identical pandas 3.0.6 / pyarrow 25.0.1 / streamlit 1.65.0
-# is fine, so the cap is on PySide6 alone (cairn/LOG.md 2026-10-13).
-guiqt = ["PySide6>=6.5,<6.12"]
 # The static-check tools, pinned here so the CI job and a laptop agree on the
 # version.  Install them INTO the project environment (see CONTRIBUTING.md
-# 8.1): mypy resolves numpy's and PySide6's types from the environment it
+# 8.1): mypy resolves numpy's and matplotlib's types from the environment it
 # runs in, so an isolated tool install checks almost nothing.
 dev = ["ruff==0.15.8", "mypy==1.19.1"]
 
 [project.scripts]
-polartx-gui = "polartx.guiqt.app:main"
-# the one page (webui/www) on a local server, opened in the browser
+# the one page (webui/www) on a local server, opened in a browser app window
+# (polartx-gui) or a normal tab (polartx-web --tab); both names are the same
+# entry point so the old command keeps working after the Qt GUI retired
+polartx-gui = "polartx.webhost:main"
 polartx-web = "polartx.webhost:main"
 
 [project.urls]
@@ -97,7 +92,7 @@ ignore = [
 [tool.mypy]
 python_version = "3.10"          # the floor requires-python declares
 files = ["src/polartx"]
-ignore_missing_imports = true    # streamlit / PySide6 ship no stubs here
+ignore_missing_imports = true    # scipy ships no stubs (the only one, now)
 warn_unused_configs = true
 # The vendor tree is checked for TYPES but not for ERRORS: annotations there
 # are what makes ofdm_ref and fir_tx checkable on this side, while a warning

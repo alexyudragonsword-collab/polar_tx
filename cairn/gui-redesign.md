@@ -5,7 +5,7 @@ summary: "GUI 改版：三端各写一份表单 + 批处理交互换成一份界
 tags: [polartx, gui, 前端, android, streamlit, pyside6]
 contains: [decision, lesson, pitfall, experience]
 created: "2026-10-28"
-updated: "2026-10-29（P4a 其余页面迁入）"
+updated: "2026-10-29（P4b 旧前端退役、桌面应用窗口）"
 related: [android-app.md]
 authoring_mode: ai_generated
 ---
@@ -146,6 +146,42 @@ WiFi 160 约 43 %、回退 8.9 dB；RF-DAC 约 28 %。
 合路结果的输出容器里——第一次跑合路就把 FIR 控件冲掉。静态检查全过（id 都在），是 jsdom harness
 的"跑完后控件还在吗"那一条抓到的；修完后加了一次全页标签平衡检查。
 
+## P4b：旧前端退役，桌面改用应用窗口
+
+**删了什么**：`gui/`（Streamlit）、`src/polartx/guiqt/`、它们的两份测试与两个打包入口、`gui` /
+`guiqt` extra（连同 PySide6 <6.12 的上限说明）、P0 为旧前端立的 `guiutil._HONOURS` /
+`honoured_knobs` / `chain_overrides`（页面一直走 `guispec`，桥的 `chain` 只收 `values`）。
+`polartx-gui` 改指 `polartx.webhost:main`，`polartx-web` 是同一入口。测试 353 → 342 个函数
+（删 19，新增 `test_webhost.py` 8 个）。
+
+**决策：应用窗口，独立 profile**。`webhost` 找 Chromium 系浏览器（Windows 必带 Edge；查 PATH
+与常见安装位置；`POLARTX_BROWSER` 可覆盖）开 `--app` 窗口：
+- **独立 profile 是关窗即停的前提**：它让窗口自成一个进程，进程退出就是窗口关了。用用户自己的
+  profile 时，若浏览器已在运行，新进程把 URL 交给它就立即退出，服务永远不知道窗口何时关。
+- profile **持久**（`LOCALAPPDATA` / `XDG_CACHE_HOME` / `~/.cache` 下的 `polartx/app-window`），
+  默认端口固定 8765：页面历史在 localStorage，而 localStorage 按 origin（含端口）分。
+- 窗口进程 3 s 内退出视为交接给同 profile 的已运行实例，服务改为 Ctrl+C 停。
+- 二次启动端口被占：先问那个端口是不是 polartx（`version`），是就只开窗口指过去；不是就报错并
+  建议 `--port 0`。找不到浏览器或 `--tab`：默认浏览器标签页，Ctrl+C 停。
+
+**坑：Windows 上的 SO_REUSEADDR**。`HTTPServer.allow_reuse_address = 1`，而 Windows 上这个选项
+允许第二个 socket 绑到**正在监听**的端口——两次启动会悄悄共用 8765，谁应答不确定。`_Server` 在
+Windows 上关掉它；`test_webhost.py` 断言第二次绑定失败。Linux/macOS 本来就拒绝，所以真正在测
+这件事的是 CI 矩阵里的 windows-latest。
+
+**验证**：
+- `tests/test_webhost.py` 用一个 Python 脚本冒充浏览器（取页面、调 bridge、退出）：关窗后
+  `main()` 返回；交接分支不停服务；二次启动只开窗口；外来进程占端口即报错。break-check：去掉
+  停服务线程 → "关窗即停"那条红。
+- 真 Chromium（Xvfb，`POLARTX_BROWSER` 指向加了 `--no-sandbox` 的包装）：应用窗口加载页面、
+  工作台算出 EVM 并画出 2 个 canvas；关掉窗口后宿主 0.2–0.5 s 内退出，返回码 0。
+- **冒烟不再只查 HTTP 200**。旧 web exe 的冒烟只要求首页 200——冻结时丢了数据文件、懒导入的
+  模块或 matplotlib 数据的 exe 照样过。`packaging/smoke_webhost.py` 查页面及其引用的每个资源、
+  `version`、一次默认预设的工作台运行（有限 EVM + 图数据）、桌面专属的 RTL 导出。两条 Windows
+  workflow 用它测冻结后的 exe；CI test-gui 用它测 `python -m polartx.webhost`，脚本本身坏了每次
+  推送就知道。本机对包实测：WiFi 160 默认 EVM −40.0 dB、2 个图面板、RTL 18 个文件。
+- exe 保留控制台：它是服务日志，也是落到标签页时唯一看得见的进程把手；关应用窗口时随进程消失。
+
 ## 本地环境（pitfall）
 
 容器里 `python` 是 3.11（没装包），`pip` 绑在 `/usr/bin/python3`（3.13）。numpy 2.5.3
@@ -158,3 +194,6 @@ main 上也报存根语法错；CI 的 3.11 装的是 numpy 2.4.x，不受影响
 
 仓库根有个被 `.gitignore` 忽略的 `build/` 目录：在仓库根跑 `python -m build` 会把它当成
 同名包导入而失败（"No module named build.__main__"）。从别的目录跑并把仓库路径作参数。
+同一个 `build/` 还有第二个坑（P4b）：setuptools 复用 `build/lib`，于是本地建的 wheel 里**仍有已删除的
+`polartx/guiqt/`**。挪走 `build/` 后重建，wheel 里就只剩新页面。CI 每次是干净检出，不受影响；本地要
+检查 wheel 内容时先清掉它。

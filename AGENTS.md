@@ -53,7 +53,7 @@
 
 - **断言物理量，不断言快照**。不要把当前输出硬编码成期望值，也不要硬编码计数。
 - **`src/polartx/vendor/` 是可校验的改编副本，不是 fork**。改它之前先想能不能在 `polartx` 侧包一层；真要改就更新 `tools/vendor_manifest.json`。
-- **前端同步，或者都别动**。计算住在 `guiutil.py`；Streamlit、PySide6、Android（经 `appbridge.py`）三个前端都要接、都要测。Android 侧 bridge 方法与 `app.js` 双向对齐由 `tests/test_android_parity.py` 卡死。
+- **一份界面，三个宿主都要验**。计算住在 `guiutil.py`，前端契约在 `guispec.py`，界面只在 `webui/www/`；手机（经 `appbridge.py`）、桌面应用窗口与浏览器（经 `webhost.py`）显示同一份。bridge 方法与 `app.js` 双向对齐由 `tests/test_android_parity.py` 卡死；页面在 jsdom harness 与真 Chromium（`test_webui.py`）里都要跑。
 - **测量口径要显式声明**。EVM 均衡（`scalar` vs `per_tone`）由 `PolarResult.evm_equalize_default` 承载，保证画的星座图和打印的数字同口径；mask 的出处由 `MaskSpec.source` 承载。
 - **绝不臆造规范限值**。内置 mask 全是 `source="stylized"` 的工程模板；需要真表格就开口要，不要编看起来合理的数字。
 - **引擎有适用域**（`ADPLLTwoPoint` 的 `mode="event"` 只在每参考周期相位推进 ≪1 UI 时有效，越界告警并暴露 `ui_per_ref_cycle_p99`）；`response` 模式已线性化，**不能背书杂散结论**。指标输入不够时**抛异常**，不返回 NaN。

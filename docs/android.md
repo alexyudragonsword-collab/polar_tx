@@ -1,8 +1,10 @@
 # polartx 上手机：Chaquopy + WebView
 
-第四个前端。Streamlit（网页）、PySide6（桌面）、Windows exe 之外，`android/`
-把**真的 CPython** 连同 numpy/scipy/matplotlib 一起塞进 APK，UI 是 WebView，
-计算全在本地，**零权限**。
+唯一界面（`src/polartx/webui/www/`）的三个宿主之一：桌面应用窗口、浏览器
+（都经 `polartx.webhost`）之外，`android/` 把**真的 CPython** 连同
+numpy/scipy/matplotlib 一起塞进 APK，UI 是 WebView 里的同一个页面，计算全在本地，
+**零权限**。（Streamlit 与 PySide6 前端已在 GUI 改版 P4b 退役，见
+`cairn/gui-redesign.md`。）
 
 一句话架构：所有逻辑在 Python，藏在**一个函数**后面。
 
@@ -100,8 +102,8 @@ gradle -p android :app:assembleDebug
 它不是许可证校验，不是数据保护，也不掩盖 UI 显示的任何东西。具体地说：
 
 - **WebView 资源仍是明文**：`app.js` 把每个 bridge 方法、参数和整个 UI 流程都写着。
-- **未编译模块仍是字节码**：`vendor/`（52 个）、`guiqt/`（5 个）、
-  `__init__.py`、`appbridge.py`。
+- **未编译模块仍是字节码**：`vendor/`（52 个）、`__init__.py`、`appbridge.py`
+  等（上次实测时还有桌面专用的 `guiqt/` 5 个，它已随 Qt 前端删除）。
 - **字面常量随编译存活**，见上表。
 - **运行时能取到的，任何能跑这个 app 的人都能取到。**
 
@@ -125,7 +127,7 @@ gradle -p android :app:assembleDebug
 
 - `vendor/` —— 它是带出处头的**可校验改编副本**，可审计正是它的价值；
   而且那不是 polartx 自己的 IP。
-- `guiqt/` —— 桌面专用，手机上根本不导入。
+- `guiqt/` —— 桌面专用，手机上根本不导入。（已随 Qt 前端删除，2026-10-29。）
 - `appbridge.py` —— 它的**整个方法表在 `app.js` 里就是明文**，编译它保护不了
   任何尚未公开的东西（就是技能文档说的"为保护的表象付出构建面积"）。
 

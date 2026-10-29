@@ -80,16 +80,13 @@ src/polartx/
 ├── selector.py       架构选择器：给定需求，ADPLL / DTC / outphasing / RF-DAC 四候选解析打分
 │                     （EVM 预算 + 各自效率律在截断瑞利分布上的平均；先达标再比效率）
 ├── presets.py        ★ 端到端预设（标准链路 + 文献对标）
-├── guiutil.py        ★ 三个前端共用的全部计算（可脱离前端测试）
+├── guiutil.py        ★ GUI 背后的全部计算（可脱离界面测试）
 ├── guispec.py        前端契约：每个预设的旋钮（默认值读自预设函数签名）、指标含义、
 │                     图数据格式与 matplotlib 渲染；只描述，不算物理
 ├── appbridge.py      页面的单函数 JSON 桥（薄封装；手机经 JavascriptInterface，桌面经 webhost）
-├── webhost.py        桌面/浏览器宿主：标准库本地服务，GET 页面、POST /call 转 appbridge（`polartx-web`）
-├── webui/www/        **唯一的页面**：index.html · app.js · charts.js · style.css；APK 把它当 assets
-├── guiqt/            PySide6 桌面 GUI
-│   ├── app.py        主窗口与入口（`polartx-gui`）
-│   ├── pages.py      各功能页；计算一律经 guiutil，页面里不放物理
-│   └── widgets.py    共用控件：worker 线程、图框、指标表
+├── webhost.py        桌面/浏览器宿主（`polartx-gui`）：标准库本地服务，GET 页面、POST /call 转
+│                     appbridge；开 Edge/Chrome 的 --app 窗口（独立 profile），关窗即停服务
+├── webui/www/        **唯一的界面**：index.html · app.js · charts.js · style.css；APK 把它当 assets
 └── vendor/           改编移植区（见 §5）；下面只列 polartx 代码直接调用的 padpd 模块
     └── padpd/
         ├── pa/base.py · gmp.py · memory_polynomial.py   PAModel 接口、lstsq_fit、GMP / MP
@@ -205,9 +202,9 @@ sibling checkout 因此钉 `08b9725`，`44cbcb3` 是它的祖先，靠 `fetch-de
 | 新损伤 | `impairments.py` 或 `ChainConfig` 加字段 | 单调性/标度律测试，字段注释写单位 |
 | 新指标 | `metrics/` | 声明测量口径；输入不足要抛异常，不返回 NaN |
 | 新对标预设 | `presets.py` 的 `bench_*` + `polartx.__all__` | 必须进 `guiutil.PRESETS`（有测试挡） |
-| 新标准预设 | `presets.py` + `guiutil._registry` | 在 `guispec._presets_table` 声明它的旋钮（默认值不手填，读签名）：表单默认必须逐位重现预设、每个旋钮都要拨得动（`test_guispec.py`）；旧前端用的 `guiutil._HONOURS` 必须是其子集 |
+| 新标准预设 | `presets.py` + `guiutil._registry` | 在 `guispec._presets_table` 声明它的旋钮（默认值不手填，读签名）：表单默认必须逐位重现预设、每个旋钮都要拨得动（`test_guispec.py`） |
 | 新指标键 | `guiutil.run_chain_report` | 在 `guispec._METRICS` 写标签、单位与好坏方向，否则 `test_every_reported_metric_is_described` 红 |
-| 新 GUI 页面 | `guiutil.py` 放计算 | **两个桌面/网页前端都要接**，两边都要有测试 |
+| 新 GUI 页面 | `guiutil.py` 放计算，`webui/www/` 放界面（只此一份） | jsdom harness、`test_webui.py`（真 Chromium）都要覆盖；只在电脑上有意义的方法放 `webhost.DESKTOP_METHODS`，页面在手机宿主下隐藏它 |
 | 新发射机拓扑 | 兄弟类包住 `PolarTX`（照 `fir.py` / `outphasing.py`），自带结果类并提供同名指标方法 `evm/aclr/psd/check_mask/avg_efficiency` + `evm_equalize_default`，预设带 `.tx` 别名进 `guiutil.PRESETS` | **不在 `ChainConfig` 加开关、不改 `chain.py`**；理想链下 EVM 必须与极坐标理想链一致（有测试挡），不适用的 `ChainConfig` 字段在 docstring 里列明，且被设成非默认值时要**告警**而不是静默忽略（照 `cartesian.py` 的 `ignored_chain_settings` 与 `outphasing.py` 的 `OUTPHASING_IGNORED_FIELDS`，有测试挡） |
 | 页面能力（手机/桌面/浏览器同一页） | `appbridge.py` 加方法 + `webui/www/app.js` 加 render | 必须**同一次改动**里配对，`test_android_parity.py` 双向卡死；`test_webui.py` 在真 Chromium 里对真 bridge 驱动 |
 
