@@ -31,12 +31,17 @@
 
 <div id="app" hidden>
 <nav id="nav" aria-label="pages">
+  <div class="navgroup" data-zh="设计" data-en="Design">设计</div>
   <button data-tab="bench" class="active" data-zh="工作台" data-en="Workbench">工作台</button>
   <button data-tab="compare" data-zh="拓扑对比" data-en="Topologies">拓扑对比</button>
-  <button data-tab="fir" data-zh="FIR 陷波" data-en="FIR notch">FIR 陷波</button>
-  <button data-tab="combiner" data-zh="合路" data-en="Doherty">合路</button>
   <button data-tab="selector" data-zh="选型" data-en="Selector">选型</button>
+  <div class="navgroup" data-zh="验证" data-en="Validate">验证</div>
+  <button data-tab="cal" data-zh="校准" data-en="Calibration">校准</button>
+  <button data-tab="measured" data-zh="实测数据" data-en="Measured data">实测数据</button>
+  <button data-tab="combiner" data-zh="合路与陷波" data-en="Doherty &amp; notch">合路与陷波</button>
+  <div class="navgroup" data-zh="量产与交付" data-en="Produce &amp; deliver">量产与交付</div>
   <button data-tab="mc" data-zh="良率" data-en="Yield">良率</button>
+  <button data-tab="export" class="desktop-only" data-zh="RTL 导出" data-en="RTL export">RTL 导出</button>
 </nav>
 <main>
 
@@ -110,34 +115,6 @@
   <div class="chart" id="cmp-chart" hidden><canvas id="cmp-canvas"></canvas></div>
 </section>
 
-<!-- -------------------------------------------------------------- fir -->
-<section id="tab-fir" class="tab form-tab" hidden>
-  <section class="card">
-    <h2 data-zh="双抽头 FIR 陷波（RFIC'26 MLO）"
-        data-en="Dual-tap FIR notch (RFIC'26 MLO)">双抽头 FIR 陷波（RFIC'26 MLO）</h2>
-    <div class="grid2">
-      <label><span data-zh="信道带宽 [MHz]" data-en="Channel BW [MHz]">信道带宽 [MHz]</span>
-        <input id="fir-bw" type="number" value="40" step="10">
-      </label>
-      <label><span data-zh="陷波偏移 [MHz]" data-en="Notch offset [MHz]">陷波偏移 [MHz]</span>
-        <input id="fir-notch" type="number" value="500" step="50">
-      </label>
-      <label><span data-zh="OFDM 符号数" data-en="OFDM symbols">OFDM 符号数</span>
-        <input id="fir-syms" type="number" value="8" step="1">
-      </label>
-      <label><span data-zh="过采样率" data-en="Oversampling">过采样率</span>
-        <input id="fir-osr" type="number" value="50" step="10">
-      </label>
-    </div>
-    <p class="muted"
-       data-zh="本页最慢：过采样 50 是把几百 MHz 外的陷波放进网格所必需的。FIR 只陷相关内容，随机噪底不被陷波——这正是抑制机理。"
-       data-en="The slowest page here: osr=50 is what puts a several-hundred-MHz notch inside the grid at all. The FIR only notches correlated content; independent noise power-sums — which is the suppression mechanism.">
-       本页最慢：过采样 50 是把几百 MHz 外的陷波放进网格所必需的。FIR 只陷相关内容，随机噪底不被陷波——这正是抑制机理。</p>
-    <button id="run-fir" class="primary" data-zh="运行" data-en="Run">运行</button>
-  </section>
-  <section class="card" id="fir-out"></section>
-</section>
-
 <!-- --------------------------------------------------------- combiner -->
 <section id="tab-combiner" class="tab form-tab" hidden>
   <section class="card">
@@ -175,6 +152,83 @@
     <button id="run-combiner" class="primary" data-zh="运行" data-en="Run">运行</button>
   </section>
   <section class="card" id="cb-out"></section>
+  <section class="card">
+    <h2 data-zh="双抽头 FIR 陷波（RFIC'26 MLO）"
+        data-en="Dual-tap FIR notch (RFIC'26 MLO)">双抽头 FIR 陷波（RFIC'26 MLO）</h2>
+    <div class="grid2">
+      <label><span data-zh="信道带宽 [MHz]" data-en="Channel BW [MHz]">信道带宽 [MHz]</span>
+        <input id="fir-bw" type="number" value="40" step="10">
+      </label>
+      <label><span data-zh="陷波偏移 [MHz]" data-en="Notch offset [MHz]">陷波偏移 [MHz]</span>
+        <input id="fir-notch" type="number" value="500" step="50">
+      </label>
+      <label><span data-zh="OFDM 符号数" data-en="OFDM symbols">OFDM 符号数</span>
+        <input id="fir-syms" type="number" value="8" step="1">
+      </label>
+      <label><span data-zh="过采样率" data-en="Oversampling">过采样率</span>
+        <input id="fir-osr" type="number" value="50" step="10">
+      </label>
+    </div>
+    <p class="muted"
+       data-zh="本页最慢：过采样 50 是把几百 MHz 外的陷波放进网格所必需的。FIR 只陷相关内容，随机噪底不被陷波——这正是抑制机理。"
+       data-en="The slowest page here: osr=50 is what puts a several-hundred-MHz notch inside the grid at all. The FIR only notches correlated content; independent noise power-sums — which is the suppression mechanism.">
+       本页最慢：过采样 50 是把几百 MHz 外的陷波放进网格所必需的。FIR 只陷相关内容，随机噪底不被陷波——这正是抑制机理。</p>
+    <button id="run-fir" class="primary" data-zh="运行" data-en="Run">运行</button>
+  </section>
+  <section class="card" id="fir-out"></section>
+</section>
+
+<!-- -------------------------------------------------------- calibration -->
+<section id="tab-cal" class="tab form-tab" hidden>
+  <section class="card">
+    <h2 data-zh="AM/PM skew 估计（WiFi 160 MHz）" data-en="AM/PM skew estimate (WiFi 160 MHz)">AM/PM skew 估计（WiFi 160 MHz）</h2>
+    <div class="grid2">
+      <label><span data-zh="注入 skew [ns]" data-en="Injected skew [ns]">注入 skew [ns]</span>
+        <input id="cal-skew" type="number" value="2" step="0.1">
+      </label>
+      <label><span data-zh="估计器" data-en="Estimator">估计器</span>
+        <select id="cal-method">
+          <option value="waveform align" data-zh="波形对齐" data-en="waveform align">波形对齐</option>
+          <option value="ACP power search" data-zh="ACP 功率搜索（盲估计）" data-en="ACP power search (blind)">ACP 功率搜索（盲估计）</option>
+        </select>
+      </label>
+    </div>
+    <button id="run-skewcal" class="primary" data-zh="估计" data-en="Estimate">估计</button>
+    <div id="cal-skew-out"></div>
+  </section>
+  <section class="card">
+    <h2 data-zh="两点增益（LTE 20 MHz，离线 LS）" data-en="Two-point gain (LTE 20 MHz, offline LS)">两点增益（LTE 20 MHz，离线 LS）</h2>
+    <label><span data-zh="注入直通增益误差 [%]" data-en="Injected direct-path gain error [%]">注入直通增益误差 [%]</span>
+      <input id="cal-eps" type="number" value="3" step="0.5">
+    </label>
+    <button id="run-twopoint" class="primary" data-zh="估计并校正" data-en="Estimate and correct">估计并校正</button>
+    <div id="cal-tp-out"></div>
+  </section>
+  <section class="card">
+    <h2 data-zh="DTC 增益 / INL 查表校准（CW 训练）" data-en="DTC gain / INL LUT calibration (CW training)">DTC 增益 / INL 查表校准（CW 训练）</h2>
+    <label><span data-zh="迭代次数" data-en="Iterations">迭代次数</span>
+      <input id="cal-iter" type="number" value="2" step="1" min="1" max="5">
+    </label>
+    <button id="run-dtccal" class="primary" data-zh="运行" data-en="Run">运行</button>
+    <div id="cal-dtc-out"></div>
+  </section>
+</section>
+
+<!-- ------------------------------------------------------- measured data -->
+<section id="tab-measured" class="tab form-tab" hidden>
+  <section class="card">
+    <h2 data-zh="慢状态（热）记忆：从完整源反演" data-en="Slow-state (thermal) memory from a complete source">慢状态（热）记忆：从完整源反演</h2>
+    <p class="muted"
+       data-zh="step 组离线辨识 τ，burst 组训练状态残差。不给文件时先用合成的自加热虚拟 DUT（真值 τ 5 / 30 µs）按同样格式录一份再读回。"
+       data-en="The step group identifies the time constants offline, the burst group trains the state residual. Without a file, a synthetic self-heating virtual DUT (true taus 5 / 30 us) is recorded to the same format and read back.">
+       step 组离线辨识 τ，burst 组训练状态残差。不给文件时先用合成的自加热虚拟 DUT（真值 τ 5 / 30 µs）按同样格式录一份再读回。</p>
+    <label class="desktop-only"><span data-zh="完整源 npz 路径（留空 = 合成虚拟 DUT）"
+           data-en="Complete-source npz path (empty = synthetic virtual DUT)">完整源 npz 路径（留空 = 合成虚拟 DUT）</span>
+      <input id="meas-path" type="text" placeholder="/path/to/capture.npz">
+    </label>
+    <button id="run-measured" class="primary" data-zh="运行" data-en="Run">运行</button>
+  </section>
+  <section class="card" id="meas-out"></section>
 </section>
 
 <!-- --------------------------------------------------------- selector -->
@@ -200,9 +254,9 @@
       <span data-zh="恒包络（GFSK/GMSK）" data-en="constant envelope (GFSK/GMSK)">恒包络（GFSK/GMSK）</span>
     </label>
     <p class="muted"
-       data-zh="这是解析筛选，不是仿真：它说先该抓哪个架构，再用「链路」页确认。"
-       data-en="An analytic screen, not a simulation: it says which architecture to reach for first — confirm it on the Chain tab.">
-       这是解析筛选，不是仿真：它说先该抓哪个架构，再用「链路」页确认。</p>
+       data-zh="这是解析筛选，不是仿真：它说先该抓哪个架构，再在工作台上确认（结果里有直达按钮）。"
+       data-en="An analytic screen, not a simulation: it says which architecture to reach for first — confirm it on the workbench (the result has a button for that).">
+       这是解析筛选，不是仿真：它说先该抓哪个架构，再在工作台上确认（结果里有直达按钮）。</p>
     <button id="run-selector" class="primary" data-zh="运行" data-en="Run">运行</button>
   </section>
   <section class="card" id="sel-out"></section>
@@ -237,6 +291,34 @@
     <button id="run-mc" class="primary" data-zh="运行" data-en="Run">运行</button>
   </section>
   <section class="card" id="mc-out"></section>
+</section>
+
+<!-- ----------------------------------------------------------- export -->
+<section id="tab-export" class="tab form-tab" hidden>
+  <section class="card">
+    <h2 data-zh="RTL / AMS 导出" data-en="RTL / AMS export">RTL / AMS 导出</h2>
+    <p class="muted"
+       data-zh="可综合数据通路（CFR 削波、DTC 相位累加器、DPA 分段温度计译码器、极坐标 DPD 双 LUT）加 DPA 的 Verilog-AMS wreal 模型；装了 iverilog 就逐位对照 Python 金向量。只在电脑上：输出是一个 Verilog 目录。"
+       data-en="The synthesizable datapath (CFR clip, DTC phase accumulator, DPA segmented thermometer decoder, polar-DPD dual LUT) plus a Verilog-AMS wreal model of the DPA; with iverilog installed every block is checked bit-true against its Python golden. Computer only: the output is a directory of Verilog.">
+       可综合数据通路（CFR 削波、DTC 相位累加器、DPA 分段温度计译码器、极坐标 DPD 双 LUT）加 DPA 的 Verilog-AMS wreal 模型；装了 iverilog 就逐位对照 Python 金向量。只在电脑上：输出是一个 Verilog 目录。</p>
+    <div class="grid2">
+      <label><span data-zh="DPA 位数" data-en="DPA bits">DPA 位数</span>
+        <input id="exp-bits" type="number" value="10" step="1" min="6" max="12">
+      </label>
+      <label><span data-zh="温度计 MSB 数" data-en="Thermometer MSBs">温度计 MSB 数</span>
+        <input id="exp-thermo" type="number" value="7" step="1" min="0" max="12">
+      </label>
+    </div>
+    <label><input id="exp-dpd" type="checkbox" checked>
+      <span data-zh="含极坐标 DPD 双 LUT" data-en="include the polar-DPD dual LUT">含极坐标 DPD 双 LUT</span></label>
+    <label><input id="exp-verify" type="checkbox" checked>
+      <span data-zh="跑 iverilog 逐位校验" data-en="run the iverilog bit-true checks">跑 iverilog 逐位校验</span></label>
+    <label><span data-zh="输出目录（留空 = 系统临时目录）" data-en="Output directory (empty = system temp)">输出目录（留空 = 系统临时目录）</span>
+      <input id="exp-dir" type="text" placeholder="/tmp/polartx_rtl">
+    </label>
+    <button id="run-export" class="primary" data-zh="导出" data-en="Export">导出</button>
+  </section>
+  <section class="card" id="exp-out"></section>
 </section>
 </main>
 </div>

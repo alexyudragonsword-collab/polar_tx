@@ -15,7 +15,10 @@
 "use strict";
 
 /* ---------------------------------------------------------- host RPC */
-/* Desktop / browser: no injected interface, so reach the local server. */
+/* Desktop / browser: no injected interface, so reach the local server.
+ * The local server also answers a few desktop-only methods (the RTL
+ * export), whose tabs show only here. */
+const DESKTOP = !window.host;
 if (!window.host) {
   window.host = {
     call(id, method, argsJson) {
@@ -95,7 +98,7 @@ function busy(on, textZh, textEn) {
  * number the reader interprets. */
 function metricsHtml(metrics) {
   return '<div class="metrics">' + Object.entries(metrics).map(([k, v]) => {
-    const s = v === null ? "n/a" : String(v);
+    const s = v === null ? "n/a" : typeof v === "number" ? Charts.fmt(v) : String(v);
     const cls = s === "PASS" ? " pass" : s === "FAIL" ? " fail" : "";
     return `<div class="metric${cls}"><b>${esc(s)}</b><span>${esc(k)}</span></div>`;
   }).join("") + "</div>";
@@ -113,17 +116,47 @@ function errHtml(e) {
  * branch.  The overlay is released in `finally` — an early return that
  * skips it leaves the app permanently unresponsive with nothing on screen
  * to say so. */
-async function run(outId, method, args, textZh, textEn, render) {
+async function run(outId, method, args, textZh, textEn, render, after) {
   busy(true, textZh, textEn);
   try {
     const r = await call(method, args);
-    $(outId).innerHTML = render ? render(r)
-      : metricsHtml(r.metrics || r.summary || {}) + pngHtml(r.png);
+    $(outId).innerHTML = render ? render(r) : reportHtml(r, outId);
+    if (after) after(r);
+    else if (r.plots) drawPlots(outId, r.plots);
   } catch (e) {
     $(outId).innerHTML = errHtml(e);
   } finally {
     busy(false);
   }
+}
+
+/* A report's panels as canvases under its card, drawn by charts.js from
+ * the report's own plot data (the PNG is drawn from the same data). */
+const DRAWN = {};                      // out id -> plots, redrawn on resize
+function plotsHtml(outId, plots) {
+  return (plots || []).map((p, i) =>
+    `<div class="chart"><canvas id="${outId}-plot${i}"></canvas></div>`).join("");
+}
+function drawPlots(outId, plots) {
+  DRAWN[outId] = plots;
+  (plots || []).forEach((p, i) => {
+    const c = document.getElementById(`${outId}-plot${i}`);
+    if (c) Charts.draw(c, { ...p, title: tr(p.title_zh || p.title, p.title) });
+  });
+}
+function noteHtml(r) {
+  const warn = (r.warnings || []).map(w => `<p class="note">⚠ ${esc(w)}</p>`).join("");
+  const conv = (r.conventions || []).map(c => esc(c[lang] || c.en)).join(" · ");
+  return warn + (conv ? `<p class="muted">${conv}</p>` : "");
+}
+function reportHtml(r, outId) {
+  return noteHtml(r) + metricsHtml(r.metrics || r.summary || {})
+    + (r.table ? `<pre class="table">${esc(r.table)}</pre>` : "")
+    + (r.plots ? plotsHtml(outId, r.plots) : pngHtml(r.png));
+}
+function resultHtml(rows) {
+  return '<div class="metrics">' + rows.map(([label, v]) =>
+    `<div class="metric"><b>${esc(v)}</b><span>${esc(label)}</span></div>`).join("") + "</div>";
 }
 
 /* -------------------------------------------------------- workbench */
@@ -511,6 +544,9 @@ function showTab(name) {
   $("nav").classList.remove("open");
   $("nav-toggle").setAttribute("aria-expanded", "false");
   if (name === "bench") drawBench();      // its width was 0 while hidden
+  for (const [outId, plots] of Object.entries(DRAWN)) {
+    if ($("tab-" + name).contains($(outId))) drawPlots(outId, plots);
+  }
   if (C.result && !$("tab-compare").hidden) Charts.draw($("cmp-canvas"), C.result.plots[0]);
 }
 document.querySelectorAll("#nav button").forEach(btn =>
@@ -572,7 +608,10 @@ $("bench-canvas").addEventListener("pointerleave", () => {
 let resizeFrame = 0;
 window.addEventListener("resize", () => {
   cancelAnimationFrame(resizeFrame);
-  resizeFrame = requestAnimationFrame(() => drawBench());
+  resizeFrame = requestAnimationFrame(() => {
+    drawBench();
+    for (const [outId, plots] of Object.entries(DRAWN)) drawPlots(outId, plots);
+  });
 });
 if (window.matchMedia) {
   const mq = window.matchMedia("(prefers-color-scheme: dark)");
@@ -636,6 +675,51 @@ function cmpTable(r) {
     + `<tbody>${rows}</tbody></table></div>`;
 }
 
+/* ------------------------------------------------------ calibration */
+$("run-skewcal").addEventListener("click", () => run(
+  "cal-skew-out", "calibrate", {
+    kind: "skew", skew_ns: num("cal-skew"), method: $("cal-method").value,
+  },
+  "正在估计 skew…", "estimating the skew…",
+  r => resultHtml([
+    [tr("估计值 [ns]", "estimate [ns]"), Charts.fmt(+r.estimated_ns.toFixed(3))],
+    [tr("误差 [ps]", "error [ps]"), Charts.fmt(+r.error_ps.toFixed(1))]])));
+
+$("run-twopoint").addEventListener("click", () => run(
+  "cal-tp-out", "calibrate", { kind: "twopoint", gain_err_pct: num("cal-eps") },
+  "正在估计两点增益…", "estimating the two-point gain…",
+  r => resultHtml([
+    [tr("估计误差 [%]", "estimated error [%]"), Charts.fmt(+r.estimated_pct.toFixed(3))],
+    [tr("校正前 EVM [dB]", "EVM before [dB]"), Charts.fmt(+r.evm_before_db.toFixed(1))],
+    [tr("校正后 EVM [dB]", "EVM after [dB]"), Charts.fmt(+r.evm_after_db.toFixed(1))]])));
+
+$("run-dtccal").addEventListener("click", () => run(
+  "cal-dtc-out", "calibrate", { kind: "dtc", iterations: parseInt($("cal-iter").value, 10) },
+  "正在训练 DTC 查表…", "training the DTC LUT…",
+  r => resultHtml([
+    [tr("校准前相位误差 [mrad rms]", "phase error before [mrad rms]"),
+     Charts.fmt(+r.err_rms_before_mrad.toFixed(2))],
+    [tr("校准后 [mrad rms]", "after [mrad rms]"),
+     Charts.fmt(+r.err_rms_after_mrad.toFixed(3))]])));
+
+/* ---------------------------------------------------- measured data */
+$("run-measured").addEventListener("click", () => run(
+  "meas-out", "measured", { path: DESKTOP ? $("meas-path").value.trim() : "" },
+  "正在辨识 τ 并拟合状态残差…", "identifying taus and fitting the state residual…"));
+
+/* ------------------------------------------------------- RTL export */
+$("run-export").addEventListener("click", () => run(
+  "exp-out", "rtl_export", {
+    n_bits: parseInt($("exp-bits").value, 10),
+    n_thermo: parseInt($("exp-thermo").value, 10),
+    with_dpd: $("exp-dpd").checked, verify: $("exp-verify").checked,
+    outdir: $("exp-dir").value.trim() || null,
+  },
+  "正在导出并校验…", "emitting and verifying…",
+  r => metricsHtml(r.checks || {})
+     + `<p class="muted">${esc(tr(`${r.files.length} 个文件写入 `, `${r.files.length} files in `))}${esc(r.outdir)}</p>`
+     + `<pre class="table">${esc(r.files.join("\n"))}</pre>`));
+
 /* -------------------------------------------------------------- fir */
 $("run-fir").addEventListener("click", () => run(
   "fir-out", "fir", {
@@ -668,9 +752,29 @@ $("run-selector").addEventListener("click", () => run(
     constant_envelope: $("sel-ce").checked,
   },
   "正在打分…", "scoring…",
-  r => metricsHtml(r.metrics || {})
-     + (r.table ? `<pre class="table">${esc(r.table)}</pre>` : "")
-     + pngHtml(r.png)));
+  r => (r.workbench_preset && B.specs[r.workbench_preset]
+        ? `<p><button class="primary open-bench" data-preset="${esc(r.workbench_preset)}">`
+          + `${esc(tr("在工作台打开：", "Open on the workbench: "))}${esc(r.workbench_preset)}</button></p>`
+        : "") + reportHtml(r, "sel-out"),
+  r => {
+    drawPlots("sel-out", r.plots);
+    // rendered just now, inside the card: not a static id of the page
+    const b = $("sel-out").querySelector("button.open-bench");
+    if (b) b.addEventListener("click", () => openOnBench(b.dataset.preset));
+  }));
+
+/* The selector is an analytic screen; the chain is where its answer is
+ * confirmed — so its recommendation opens there, at the preset's defaults. */
+function openOnBench(name) {
+  $("bench-preset").value = name;
+  B.preset = name;
+  B.values = {};
+  B.panel = 0;
+  B.swept = null;
+  buildForm();
+  showTab("bench");
+  schedule();
+}
 
 /* --------------------------------------------------------------- mc */
 $("run-mc").addEventListener("click", () => run(
@@ -712,6 +816,8 @@ $("run-mc").addEventListener("click", () => run(
       const h = JSON.parse(localStorage.getItem("polartx.history") || "[]");
       if (Array.isArray(h)) B.history = h.filter(e => e && B.specs[e.preset]);
     } catch (e) { /* no storage here: start with an empty history */ }
+    if (!DESKTOP) document.querySelectorAll(".desktop-only")
+      .forEach(el => { el.hidden = true; });
     $("boot").hidden = true;
     $("app").hidden = false;
     applyLang();

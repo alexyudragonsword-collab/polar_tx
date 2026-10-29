@@ -25,6 +25,11 @@ const WWW = path.resolve(__dirname, "../src/polartx/webui/www");
  * form was actually read rather than defaulted away. */
 const BUTTONS = [
   { id: "run-compare", method: "compare", key: "seed" },
+  { id: "run-skewcal", method: "calibrate", key: "kind" },
+  { id: "run-twopoint", method: "calibrate", key: "kind" },
+  { id: "run-dtccal", method: "calibrate", key: "kind" },
+  { id: "run-measured", method: "measured", key: "path" },
+  { id: "run-export", method: "rtl_export", key: "n_bits" },
   { id: "run-fir", method: "fir", key: "bw" },
   { id: "run-combiner", method: "combiner", key: "n_way" },
   { id: "run-selector", method: "selector", key: "bw_hz" },
@@ -164,6 +169,13 @@ async function main() {
     }
     const out = doc.getElementById(b.id.replace("run-", "") + "-out");
     void out;   // the render target is asserted statically in the parity test
+  }
+
+  /* Under an injected host (the phone) the desktop-only export is hidden:
+   * its output is a Verilog directory and its checker shells out. */
+  const exportTab = doc.querySelector('#nav button[data-tab="export"]');
+  if (!exportTab || !exportTab.hidden) {
+    failures.push("the RTL export tab is visible under the phone host");
   }
 
   /* The busy overlay must be released, or the app is dead after one run. */

@@ -237,6 +237,10 @@ _METRICS: dict[str, tuple[str, str, str, str | None, str]] = {
     "EVM per-tone eq [dB]": ("按子载波均衡后的 EVM", "EVM, per-tone equalized",
                              "dB", "lower", "number"),
     "constellation": ("星座判读", "constellation", "", None, "text"),
+    "avg efficiency [%]": ("调制平均效率", "modulated average efficiency", "%",
+                           "higher", "number"),
+    "backoff [dB]": ("平均功率回退", "average power backoff", "dB", None,
+                     "number"),
 }
 _INBAND = re.compile(r"^in-band \+-([0-9.]+) MHz \[dBc\]$")
 
@@ -313,35 +317,56 @@ def compact_plots(plots: list[dict]) -> list[dict]:
 _STYLE: dict[str, dict[str, Any]] = {"trace": dict(lw=0.7), "mask": dict(color="r", ls="--", lw=1.0),
           "points": dict(ls="none", marker=".", ms=1, alpha=0.4),
           "ref": dict(color="k", ls=":", lw=1.0),
-          "line": dict(lw=0.8)}
+          "line": dict(lw=0.8),
+          "bars": dict(alpha=0.75)}
 
 
-def render_matplotlib(plots: list[dict], figsize=(11, 4.2)):
+def render_matplotlib(plots: list[dict], figsize=None):
     """Draw report plot data as one matplotlib figure, side by side —
-    the PNG for the desktop GUIs, the examples and the phone fallback.
-    Draws only what it is given."""
+    the PNG for examples, reports and any host that wants a picture.
+    Draws only what it is given.
+
+    Panel keys beyond the basics: ``xlog`` (log frequency axis),
+    ``xinvert`` (backoff axes read right to left), ``xticks`` (``[[pos,
+    label], ...]`` for categorical bars), ``legend``.  Series style
+    ``bars`` is a histogram / bar chart (``width`` optional)."""
     import matplotlib
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
+    if figsize is None:
+        figsize = (11, 4.2) if len(plots) > 1 else (8, 4.6)
     fig, axs = plt.subplots(1, len(plots), figsize=figsize, squeeze=False)
     for ax, pl in zip(axs[0], plots):
         for s in pl["series"]:
-            st: dict[str, Any] = dict(_STYLE[s.get("style", "line")])
+            style = s.get("style", "line")
+            st: dict[str, Any] = dict(_STYLE[style])
             if "color" in s:                   # several traces on one panel
                 st["color"] = f"C{int(s['color'])}"
             st.update(s.get("mpl", {}))
-            ax.plot(s["x"], s["y"], label=s.get("label"), **st)
-        if pl.get("legend"):
-            ax.legend(fontsize=8)
+            if style == "bars":
+                x = list(s["x"])
+                w = s.get("width") or (0.8 * (x[1] - x[0]) if len(x) > 1 else 0.8)
+                ax.bar(x, s["y"], width=w, label=s.get("label"), **st)
+            else:
+                ax.plot(s["x"], s["y"], label=s.get("label"), **st)
         ax.set(xlabel=pl.get("xlabel", ""), ylabel=pl.get("ylabel", ""))
         ax.set_title(pl["title"], fontsize=pl.get("title_size", None))
+        if pl.get("xlog"):
+            ax.set_xscale("log")
         if pl.get("xlim"):
             ax.set_xlim(*pl["xlim"])
         if pl.get("ylim"):
             ax.set_ylim(*pl["ylim"])
+        if pl.get("xinvert"):
+            ax.invert_xaxis()
+        if pl.get("xticks"):
+            ax.set_xticks([t[0] for t in pl["xticks"]])
+            ax.set_xticklabels([t[1] for t in pl["xticks"]], fontsize=8)
         if pl.get("grid"):
-            ax.grid(True, alpha=0.3)
+            ax.grid(True, which="both", alpha=0.3)
         if pl.get("equal"):
             ax.set_aspect("equal")
+        if pl.get("legend"):
+            ax.legend(fontsize=8)
     fig.tight_layout()
     return fig

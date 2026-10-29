@@ -195,12 +195,13 @@ API 级别不存在，`-shared` 链接会**默默放过**，然后在手机上 `
 
 | 缺的 | 为什么 |
 |---|---|
-| RTL / AMS 导出 | 输出是一个 Verilog 目录，验证要 shell 调 `iverilog`。两样在手机上都没有意义 |
+| RTL / AMS 导出 | 输出是一个 Verilog 目录，验证要 shell 调 `iverilog`。两样在手机上都没有意义。它由桌面宿主 `polartx.webhost` 单独提供（`DESKTOP_METHODS`），页面只在没有注入 `window.host` 时显示这个标签 |
+| 实测数据的文件路径 | 手机上没有可指的采集文件；实测页在手机上只跑合成的自加热虚拟 DUT |
 | `run_mc_parallel` | 报告层走串行 `run_mc`；`ProcessPoolExecutor` 不该在 Android 下 fork |
 
-页面有五个标签：链路 / FIR 陷波 / 合路 / 选型 / 良率，覆盖 bridge 的全部
-7 个方法。`tests/test_android_parity.py` 双向卡死这件事——多一个没人调的方法
-或少一个页面调用的方法，都会红。
+页面分三组九页：设计（工作台、拓扑对比、选型）、验证（校准、实测数据、合路与陷波）、
+量产与交付（良率、RTL 导出——仅桌面）。`tests/test_android_parity.py` 双向卡死页面与
+bridge（含桌面专属方法）——多一个没人调的方法或少一个页面调用的方法，都会红。
 
 ---
 

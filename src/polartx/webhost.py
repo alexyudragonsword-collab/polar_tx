@@ -8,7 +8,8 @@ bridge over a local HTTP server, so all three hosts run one front end:
   bundles as its assets);
 * ``POST /call`` with ``{"method": ..., "args": {...}}`` answers with
   exactly what :func:`polartx.appbridge.call` returns — the same envelope
-  the phone receives.
+  the phone receives — plus the few :data:`DESKTOP_METHODS` that only make
+  sense on a computer (the RTL export).
 
 Standard library only, bound to 127.0.0.1, and calls are serialized: the
 page already coalesces its own requests, and matplotlib's pyplot (which a
@@ -29,6 +30,42 @@ from pathlib import Path
 WWW = Path(__file__).resolve().parent / "webui" / "www"
 
 _CALL_LOCK = threading.Lock()
+
+
+def _rtl_export(outdir: str | None = None, n_bits: int = 10, n_thermo: int = 7,
+                with_dpd: bool = True, verify: bool = True) -> dict:
+    """Emit the digital datapath + Verilog-AMS PA model and, with iverilog
+    installed, check every block bit-true.  Desktop only: the output is a
+    directory of Verilog and the checker shells out to iverilog, neither of
+    which means anything on a phone (appbridge's docstring records that)."""
+    import tempfile
+
+    from .guiutil import run_rtl_export
+    out = outdir or str(Path(tempfile.gettempdir()) / "polartx_rtl")
+    return run_rtl_export(out, n_bits=int(n_bits),
+                          n_thermo=min(int(n_thermo), int(n_bits)),
+                          with_dpd=bool(with_dpd), verify=bool(verify))
+
+
+#: methods only this host answers; the page shows their tabs only when it
+#: runs here (no injected window.host), and the parity test checks both
+#: directions for these as it does for appbridge's
+DESKTOP_METHODS = {"rtl_export": _rtl_export}
+
+
+def _desktop_call(method: str, args_json: str) -> str:
+    """Same envelope as appbridge.call: never raises, errors come back
+    in-band."""
+    import traceback
+
+    from .appbridge import _clean
+    try:
+        args = json.loads(args_json or "{}")
+        result = DESKTOP_METHODS[method](**args)
+        return json.dumps({"ok": True, "result": _clean(result)})
+    except Exception as exc:                     # noqa: BLE001 (in-band error)
+        return json.dumps({"ok": False, "error": f"{type(exc).__name__}: {exc}",
+                           "traceback": traceback.format_exc()})
 
 
 class _Handler(BaseHTTPRequestHandler):
@@ -71,7 +108,8 @@ class _Handler(BaseHTTPRequestHandler):
             body = json.dumps({"ok": False, "error": f"bad request: {exc}"})
         else:
             with _CALL_LOCK:
-                body = appbridge.call(method, args)
+                body = (_desktop_call(method, args) if method in DESKTOP_METHODS
+                        else appbridge.call(method, args))
         self._send(200, body.encode("utf-8"), "application/json")
 
 

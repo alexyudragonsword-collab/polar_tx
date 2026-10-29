@@ -42,8 +42,10 @@ def test_every_bridge_method_is_called_by_the_page():
     Mutation check: add an entry to appbridge._METHODS and this goes red
     until app.js calls it; delete a call() from app.js and it goes red too.
     """
+    from polartx.webhost import DESKTOP_METHODS
     js = read(APP_JS)
-    unused = [m for m in appbridge._METHODS if f'"{m}"' not in js]
+    unused = [m for m in [*appbridge._METHODS, *DESKTOP_METHODS]
+              if f'"{m}"' not in js]
     assert not unused, (
         f"appbridge exposes {unused} that app.js never calls — wire the "
         "render in the same change, or drop the method")
@@ -52,9 +54,10 @@ def test_every_bridge_method_is_called_by_the_page():
 def test_the_page_calls_nothing_the_bridge_does_not_expose():
     """The other direction: a typo'd method name fails only at runtime, in
     a WebView, where the user sees an error card and nobody sees a log."""
+    from polartx.webhost import DESKTOP_METHODS
     js = read(APP_JS)
     called = set(re.findall(r'\bcall\(\s*"([a-z_]+)"', js))
-    missing = sorted(called - set(appbridge._METHODS))
+    missing = sorted(called - set(appbridge._METHODS) - set(DESKTOP_METHODS))
     assert not missing, f"app.js calls {missing}, which appbridge has no entry for"
 
 
@@ -129,7 +132,12 @@ def test_the_app_declares_no_permissions():
     assert not declared, f"the app declares {declared}"
 
 
-@pytest.mark.parametrize("method", sorted(appbridge._METHODS))
+def _all_methods():
+    from polartx.webhost import DESKTOP_METHODS
+    return sorted([*appbridge._METHODS, *DESKTOP_METHODS])
+
+
+@pytest.mark.parametrize("method", _all_methods())
 def test_each_method_has_a_visible_output_target(method):
     """Beyond being called: the result has to land somewhere on screen.
     `version` and `list_presets` render into the header and the preset

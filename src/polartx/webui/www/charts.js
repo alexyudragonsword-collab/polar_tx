@@ -35,16 +35,22 @@
     return String(+v.toPrecision(4));
   }
 
-  function extent(panel, axis) {
+  /* Data range on one axis, in plotting coordinates (log10 for an xlog
+   * panel).  Bars start at zero and occupy half a bar either side. */
+  function extent(panel, axis, f) {
     const lim = panel[axis + "lim"];
-    if (lim) return [lim[0], lim[1]];
+    if (lim) return [f(Math.min(lim[0], lim[1])), f(Math.max(lim[0], lim[1]))];
     let lo = Infinity, hi = -Infinity;
     for (const s of panel.series) {
-      for (const v of s[axis]) {
-        if (v === null || !isFinite(v)) continue;
-        if (v < lo) lo = v;
-        if (v > hi) hi = v;
+      const half = s.style === "bars" && axis === "x"
+        ? (s.width || (s.x.length > 1 ? s.x[1] - s.x[0] : 1)) / 2 : 0;
+      for (const v0 of s[axis]) {
+        if (v0 === null || !isFinite(v0)) continue;
+        const a = f(v0 - half), b = f(v0 + half);
+        if (Math.min(a, b) < lo) lo = Math.min(a, b);
+        if (Math.max(a, b) > hi) hi = Math.max(a, b);
       }
+      if (s.style === "bars" && axis === "y") { lo = Math.min(lo, 0); hi = Math.max(hi, 0); }
     }
     if (!isFinite(lo)) return [0, 1];
     if (lo === hi) { lo -= 1; hi += 1; }
@@ -69,8 +75,10 @@
     const small = w < 420;
     const font = (small ? 10 : 11) + "px " + css("--mono");
     const m = { l: small ? 38 : 46, r: 10, t: 10, b: small ? 30 : 34 };
-    let [x0, x1] = extent(panel, "x");
-    let [y0, y1] = extent(panel, "y");
+    // x on a log axis is plotted as log10(x); every x below goes through fx
+    const fx = panel.xlog ? (v => Math.log10(v)) : (v => v);
+    let [x0, x1] = extent(panel, "x", fx);
+    let [y0, y1] = extent(panel, "y", v => v);
     const pw = w - m.l - m.r, ph = h - m.t - m.b;
     if (panel.equal) {                      // same scale on both axes
       const sx = (x1 - x0) / pw, sy = (y1 - y0) / ph, s = Math.max(sx, sy);
@@ -78,7 +86,9 @@
       x0 = cx - s * pw / 2; x1 = cx + s * pw / 2;
       y0 = cy - s * ph / 2; y1 = cy + s * ph / 2;
     }
-    const X = v => m.l + (v - x0) / (x1 - x0) * pw;
+    // xinvert: a backoff axis reads right to left
+    const Xp = u => m.l + (panel.xinvert ? (x1 - u) : (u - x0)) / (x1 - x0) * pw;
+    const X = v => Xp(fx(v));
     const Y = v => m.t + (y1 - v) / (y1 - y0) * ph;
 
     // grid and ticks
@@ -87,9 +97,16 @@
     const xs = niceStep(x1 - x0, small ? 4 : 7), ys = niceStep(y1 - y0, small ? 4 : 6);
     g.setLineDash([2, 3]);
     g.textAlign = "center"; g.textBaseline = "top";
-    for (let v = Math.ceil(x0 / xs) * xs; v <= x1 + 1e-9 * xs; v += xs) {
-      g.beginPath(); g.moveTo(X(v), m.t); g.lineTo(X(v), m.t + ph); g.stroke();
-      g.fillText(fmt(v), X(v), m.t + ph + 4);
+    const xtick = (u, label) => {
+      g.beginPath(); g.moveTo(Xp(u), m.t); g.lineTo(Xp(u), m.t + ph); g.stroke();
+      g.fillText(label, Xp(u), m.t + ph + 4);
+    };
+    if (panel.xticks) {                     // categorical: the report's labels
+      for (const [pos, label] of panel.xticks) xtick(fx(pos), label);
+    } else if (panel.xlog) {                // decades, labelled as values
+      for (let e = Math.ceil(x0); e <= Math.floor(x1); e++) xtick(e, fmt(Math.pow(10, e)));
+    } else {
+      for (let v = Math.ceil(x0 / xs) * xs; v <= x1 + 1e-9 * xs; v += xs) xtick(v, fmt(v));
     }
     g.textAlign = "right"; g.textBaseline = "middle";
     for (let v = Math.ceil(y0 / ys) * ys; v <= y1 + 1e-9 * ys; v += ys) {
@@ -120,6 +137,18 @@
         : s.color !== undefined ? PALETTE[s.color % PALETTE.length]
         : (COLOUR[style] || "--accent");
       g.strokeStyle = g.fillStyle = css(tok);
+      if (style === "bars") {
+        const wd = s.width || (s.x.length > 1 ? s.x[1] - s.x[0] : 1) * 0.8;
+        g.globalAlpha = base ? 0.35 : 0.75;
+        for (let i = 0; i < s.x.length; i++) {
+          if (s.x[i] === null || s.y[i] === null) continue;
+          const a = X(s.x[i] - wd / 2), b = X(s.x[i] + wd / 2);
+          const top = Y(Math.max(s.y[i], 0)), bot = Y(Math.min(s.y[i], 0));
+          g.fillRect(Math.min(a, b), top, Math.abs(b - a), bot - top);
+        }
+        g.globalAlpha = 1;
+        continue;
+      }
       if (style === "points" || style === "pass" || style === "fail") {
         const big = style !== "points";
         g.globalAlpha = big ? 1 : base ? 0.3 : 0.55;
@@ -158,7 +187,8 @@
     }
     g.restore();
     if (panel.legend) {                     // labelled traces, top right
-      const named = panel.series.filter(s => s.label && s.style !== "mask");
+      // the measurement curves; limits and markers are explained by the axes
+      const named = panel.series.filter(s => s.label && !["mask", "ref"].includes(s.style));
       g.font = font; g.textAlign = "right"; g.textBaseline = "middle";
       named.forEach((s, i) => {
         const y = m.t + 12 + i * 15, x = m.l + pw - 8;
@@ -171,7 +201,8 @@
       });
     }
     // what the readout needs to map a pointer back to data
-    canvas._map = { m, pw, ph, x0, x1, y0, y1 };
+    canvas._map = { m, pw, ph, x0, x1, y0, y1, log: !!panel.xlog,
+                    invert: !!panel.xinvert };
   }
 
   /* Data under the pointer: on a curve, the nearest sample of the first
@@ -182,16 +213,21 @@
     if (!map || !panel) return null;
     const r = canvas.getBoundingClientRect();
     const px = clientX - r.left, py = clientY - r.top;
-    const x = map.x0 + (px - map.m.l) / map.pw * (map.x1 - map.x0);
+    let u = (px - map.m.l) / map.pw;
+    if (map.invert) u = 1 - u;
+    let x = map.x0 + u * (map.x1 - map.x0);
+    if (map.log) x = Math.pow(10, x);
     const y = map.y1 - (py - map.m.t) / map.ph * (map.y1 - map.y0);
-    if (x < map.x0 || x > map.x1 || y < map.y0 || y > map.y1) return null;
+    if (u < 0 || u > 1 || y < map.y0 || y > map.y1) return null;
     const curve = panel.series.find(s => ["trace", "line"].includes(s.style || "line"));
     // a trajectory is not a function of x: read the pointer there
     if (!curve || panel.id === "iq") return { x, y };
-    let lo = 0, hi = curve.x.length - 1;     // x is monotonic on these
+    // x is monotonic on these curves, rising or (a backoff axis) falling
+    let lo = 0, hi = curve.x.length - 1;
+    const rising = curve.x[hi] >= curve.x[0];
     while (hi - lo > 1) {
       const mid = (lo + hi) >> 1;
-      if (curve.x[mid] < x) lo = mid; else hi = mid;
+      if ((curve.x[mid] < x) === rising) lo = mid; else hi = mid;
     }
     const i = Math.abs(curve.x[hi] - x) < Math.abs(curve.x[lo] - x) ? hi : lo;
     return { x: curve.x[i], y: curve.y[i] };

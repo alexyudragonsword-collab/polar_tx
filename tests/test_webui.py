@@ -184,7 +184,7 @@ def test_language_toggle_keeps_every_control(browser, server):
     page = _open(browser, server, viewport={"width": 1366, "height": 860})
     n = page.locator("#bench-form input, #bench-form select").count()
     page.click("#lang")
-    assert page.inner_text("#nav").split()[0] == "Workbench"
+    assert page.inner_text("#nav button[data-tab=bench]") == "Workbench"
     assert page.locator("#bench-form input, #bench-form select").count() == n
     assert "EVM" in page.inner_text("#bench-cards")
     page.close()
@@ -199,7 +199,7 @@ def test_phone_layout_has_no_sideways_scroll_and_the_old_tabs_run(browser, serve
     page.click("#nav button[data-tab=combiner]")
     assert page.is_visible("#run-combiner")
     page.click("#run-combiner")
-    page.wait_for_selector("#cb-out img", timeout=60_000)
+    page.wait_for_selector("#cb-out canvas", timeout=60_000)
     assert page.is_hidden("#busy")
     assert not page._errors                      # noqa: SLF001
     page.close()
@@ -263,5 +263,84 @@ def test_topologies_side_by_side(browser, server):
     polar, outph, rfdac = (float(v) for v in evm)
     assert polar > rfdac + 10.0 and polar > outph + 10.0
     assert page.is_visible("#cmp-canvas")
+    assert not page._errors                      # noqa: SLF001
+    page.close()
+
+
+def _tab(page, name):
+    page.click(f"#nav button[data-tab={name}]")
+    page.wait_for_selector(f"#tab-{name}:not([hidden])")
+
+
+def _run_button(page, button_id, out_selector):
+    page.click(f"#{button_id}")
+    page.wait_for_function("document.getElementById('busy').hidden",
+                           timeout=120_000)
+    page.wait_for_selector(out_selector, timeout=10_000)
+
+
+def test_validation_tabs_run_on_the_real_bridge(browser, server):
+    """Calibration and measured data, moved off the old pages onto this
+    one: the skew estimator recovers the injected skew, and the slow-state
+    path recovers the virtual DUT's memory."""
+    page = _open(browser, server, viewport={"width": 1366, "height": 860})
+    _tab(page, "cal")
+    page.fill("#cal-skew", "1.5")
+    _run_button(page, "run-skewcal", "#cal-skew-out .metric")
+    est, err = (float(v) for v in
+                page.locator("#cal-skew-out .metric b").all_inner_texts())
+    assert abs(est - 1.5) < 0.01 and err < 10.0
+    _run_button(page, "run-dtccal", "#cal-dtc-out .metric")
+    before, after = (float(v) for v in
+                     page.locator("#cal-dtc-out .metric b").all_inner_texts())
+    assert after < 0.1 * before
+    _tab(page, "measured")
+    _run_button(page, "run-measured", "#meas-out canvas")
+    gain = page.locator("#meas-out .metric", has_text="slow-state gain") \
+        .locator("b").inner_text()
+    assert float(gain) >= 6.0
+    assert "synthetic" in page.inner_text("#meas-out") or "合成" in page.inner_text("#meas-out")
+    assert page.locator("#meas-out canvas").count() == 2
+    assert not page._errors                      # noqa: SLF001
+    page.close()
+
+
+def test_report_tabs_draw_their_own_charts_and_hand_off(browser, server):
+    """The older tabs draw plot data on canvases (no PNG); the selector's
+    recommendation opens on the workbench."""
+    page = _open(browser, server, viewport={"width": 1366, "height": 860})
+    _tab(page, "combiner")
+    _run_button(page, "run-combiner", "#cb-out canvas")
+    assert page.locator("#cb-out img").count() == 0
+    assert page.locator("#cb-out canvas").count() == 2
+    _tab(page, "mc")
+    page.fill("#mc-n", "6")
+    _run_button(page, "run-mc", "#mc-out canvas")
+    _tab(page, "selector")
+    page.fill("#sel-bw", "160")
+    _run_button(page, "run-selector", "#sel-out button.open-bench")
+    preset = page.get_attribute("#sel-out button.open-bench", "data-preset")
+    assert preset == "WiFi 160 MHz"
+    page.click("#sel-out button.open-bench")
+    page.wait_for_selector("#tab-bench:not([hidden])")
+    _settle(page)
+    assert page.input_value("#bench-preset") == preset
+    assert not page._errors                      # noqa: SLF001
+    page.close()
+
+
+def test_the_desktop_host_offers_the_rtl_export(browser, server, tmp_path):
+    """Served by the desktop host, the export tab is there and writes the
+    datapath to the directory asked for (without iverilog the checks say
+    so rather than pretend)."""
+    page = _open(browser, server, viewport={"width": 1366, "height": 860})
+    assert page.is_visible("#nav button[data-tab=export]")
+    _tab(page, "export")
+    page.fill("#exp-dir", str(tmp_path))
+    page.fill("#exp-bits", "8")
+    page.fill("#exp-thermo", "5")
+    _run_button(page, "run-export", "#exp-out pre")
+    assert str(tmp_path) in page.inner_text("#exp-out")
+    assert any(p.suffix in (".v", ".vams") for p in tmp_path.iterdir())
     assert not page._errors                      # noqa: SLF001
     page.close()

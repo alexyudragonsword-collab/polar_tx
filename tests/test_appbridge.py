@@ -36,6 +36,8 @@ def test_every_method_round_trips_as_json():
              "sweep": {"preset": "BLE LE-1M", "knob": "dp_err_pct",
                        "points": [0.0, 2.0]},
              "compare": {},
+             "calibrate": {"kind": "dtc", "iterations": 1},
+             "measured": {},
              "fir": {"n_symbols": 2},
              "selector": {}, "combiner": {},
              "montecarlo": {"n_chips": 3}}
@@ -238,3 +240,19 @@ def test_sweep_and_compare_cross_the_bridge():
     assert len(cmp["names"]) == 3 and set(cmp["metrics"]) == set(cmp["names"])
     assert set(cmp["keys"]) == set(cmp["metric_info"])
     assert len(cmp["plots"][0]["series"]) == 4                 # 3 spectra + mask
+
+
+def test_calibration_measured_and_selector_handoff_cross_the_bridge():
+    sk = _ok("calibrate", kind="skew", skew_ns=1.5)
+    assert sk["error_ps"] < 10.0 and abs(sk["estimated_ns"] - 1.5) < 0.01
+    tp = _ok("calibrate", kind="twopoint", gain_err_pct=4.0)
+    assert tp["evm_after_db"] < tp["evm_before_db"] - 20.0
+    assert "unknown calibration" in _err("calibrate", kind="guess")["error"]
+    m = _ok("measured")
+    assert m["metrics"]["slow-state gain [dB]"] >= 6.0          # measured 13.3
+    assert any("synthetic" in c["en"] for c in m["conventions"])
+    assert [p["id"] for p in m["plots"]] == ["step", "ladder"]
+    sel = _ok("selector", bw_hz=160e6)
+    from polartx.guiutil import PRESETS
+    assert sel["workbench_preset"] in PRESETS
+    assert sel["plots"][0]["xlog"] is True
