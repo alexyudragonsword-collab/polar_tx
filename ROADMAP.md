@@ -114,6 +114,7 @@ PA_DPD `data/complete.py` 格式的 npz，至少含 `step` 与 `burst` 两组，
 ### B6. 剩 24 处 docstring
 
 都是 GUI 内部件和父函数已解释的嵌套闭包。低价值，列出来只是为了闭环。
+（2026-10-29：Qt 前端已删除，其中属于 `guiqt/` 的那部分随之消失；剩余个数待重测。）
 
 ---
 
@@ -135,7 +136,9 @@ auto-release"，可以照搬，但要先决定这个库要不要给外部用。
 ### C2. Windows exe 与 Android APK 未接入发布流程
 
 两条 workflow 都在真 CI 上成功跑过（`windows-exe` ×2、`windows-exe-nuitka` ×3，
-均为手动 `workflow_dispatch`），产物正常。但它们和 release 没有联动——
+均为手动 `workflow_dispatch`），产物正常。（2026-10-29 GUI 改版 P4b 把两条都改成只打
+一个 exe——`polartx-gui`，本地宿主 + Edge 应用窗口——冒烟改为 `packaging/smoke_webhost.py`。）
+但它们和 release 没有联动——
 打 tag 不会自动出 exe，也不会出 APK（`android.yml` 同样是手动触发）。
 
 ### C3. ~~`np.trapezoid` 的修法属于上游~~ → 已了结（2026-09-13）

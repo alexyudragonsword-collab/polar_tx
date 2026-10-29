@@ -1,7 +1,9 @@
-"""Pure-computation layer behind the Streamlit GUI (testable headless).
+"""Pure-computation layer behind the GUI (testable headless).
 
-Every function returns plain data + matplotlib figures; the GUI pages
-only lay them out.  Mirrors the sibling repos' gui_core/services split.
+Every function returns plain data -- metrics, and plot data the page draws
+itself (``guispec`` describes the format) -- plus a matplotlib figure where
+a PNG is still wanted; the page, served by every host through ``appbridge``,
+only lays them out.  Mirrors the sibling repos' gui_core/services split.
 """
 from __future__ import annotations
 
@@ -58,56 +60,6 @@ PRESETS = list(_registry())
 #: the preset every front end opens on — by name, so reordering the
 #: registry cannot silently move it (it was ``index=6`` in two places)
 DEFAULT_PRESET = "WiFi 160 MHz"
-
-# Which of the workbench's shared knobs each preset honours, keyed by the
-# override keyword it is forwarded as.  One table instead of three front
-# ends each guessing from the preset's name: that guessing sent the DTC
-# resolution knob to the RF-DAC chain as its DAC resolution (11 instead of
-# its own 12 bits) and offered an AM/PM skew on chains with no envelope
-# path (outphasing, RF-DAC) or no envelope variation (BLE GFSK, measured
-# bit-identical at 10 ns).
-_DTC_POLAR = ("n_bits", "env_skew_s", "cfr_papr_db")
-_HONOURS: dict[str, tuple[str, ...]] = {
-    "BLE LE-1M": ("dp_gain", "loop_bw"),
-    "BLE LE-2M": ("dp_gain", "loop_bw"),
-    "BT EDR2 pi/4-DQPSK": ("dp_gain", "loop_bw", "env_skew_s"),
-    "BT EDR3 8DPSK": ("dp_gain", "loop_bw", "env_skew_s"),
-    "LTE 20 MHz": ("dpd", "dp_gain", "env_skew_s"),
-    "WiFi 80 MHz": _DTC_POLAR,
-    "WiFi 160 MHz": _DTC_POLAR,
-    "WiFi 320 MHz": _DTC_POLAR,
-    "NR FR1 100 MHz": _DTC_POLAR,
-    "NR FR2 200 MHz": _DTC_POLAR,
-    "WiFi 160 MHz (outphasing)": ("n_bits", "cfr_papr_db"),
-    # its own n_bits means DAC bits (12 by default); the shared DTC knob
-    # must not reach it
-    "WiFi 160 MHz (RF-DAC)": ("cfr_papr_db",),
-}
-
-
-def honoured_knobs(name: str) -> tuple[str, ...]:
-    """The shared workbench knobs this preset honours (override keywords).
-    Benchmarks honour none: they fix their published-class parameters."""
-    if name not in PRESETS:
-        raise ValueError(f"unknown preset {name!r}")
-    return _HONOURS.get(name, ())
-
-
-def chain_overrides(name: str, *, cfr_off: bool = False, **values) -> dict:
-    """Reduce the workbench's knob values to the ones this preset honours.
-
-    Every front end passes everything it shows and gets back exactly what
-    the preset should receive, so a knob that does not apply cannot reach
-    a chain that would misread or ignore it.  A value of ``None`` means
-    "leave the preset's default".  ``cfr_off`` switches CFR off where the
-    preset has it (``cfr_papr_db=None`` is a real setting, so it cannot
-    double as "not set")."""
-    keep = honoured_knobs(name)
-    out = {k: v for k, v in values.items() if k in keep and v is not None}
-    if cfr_off and "cfr_papr_db" in keep:
-        out["cfr_papr_db"] = None
-    return out
-
 
 def build_preset(name: str, **overrides):
     """Preset registry -> TxPreset; overrides forwarded to the factory
@@ -753,8 +705,8 @@ def run_measured_report(path: str | None = None) -> dict:
 
 # ------------------------------------------------------------ calibration
 # The three calibration demos used to live inside the page code, written
-# twice (Qt and Streamlit) and therefore untestable without a GUI; the
-# pages now only lay these out.
+# twice (in the retired Qt and Streamlit front ends) and therefore untestable
+# without a GUI; the page now only lays these out.
 
 
 def run_skew_cal(skew_ns: float = 2.0, *, method: str = "waveform align"

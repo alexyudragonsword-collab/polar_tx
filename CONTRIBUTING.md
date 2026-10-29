@@ -13,15 +13,15 @@ reviewer goodwill.
 ## 0. 环境 / Setup
 
 ```bash
-pip install -e ".[test,gui,guiqt]"
-pytest tests/ -q                    # ~240 项，~2 min；全绿是提交的前置条件
+pip install -e ".[test]"
+pytest tests/                       # 全绿是提交的前置条件（addopts 已有 -q，别再加）
 python examples/exNN_*.py           # 图写到 examples/out/
-streamlit run gui/Home.py           # 网页 GUI
-polartx-gui                         # 桌面 GUI（或 python -m polartx.guiqt）
+polartx-gui                         # GUI：本地服务 + 浏览器应用窗口（--tab 用普通标签页）
 python tools/vendor_check.py        # vendor 漂移检查（CI 也跑这个）
 ```
 
-可选依赖：`iverilog`（RTL 金向量验证）、`streamlit` / `PySide6`（两个 GUI）。
+可选依赖：`iverilog`（RTL 金向量验证）、`playwright` + Chromium（页面在真浏览器里的
+测试，`tests/test_webui.py`）、Node 的 `jsdom`（页面脚本 harness）。
 缺失时相关测试**干净地 skip**——所以**本地带 skip 的全绿是正常的，CI 上带
 skip 就不正常**：那说明某个 job 的依赖没装上，等于那部分没被验证。
 
@@ -94,23 +94,26 @@ push 都跑：
 
 ## 4. 前端不能落后于库 / All surfaces, or none
 
-这个工程现在有**三个**前端：Streamlit 网页版（`gui/`）、PySide6 桌面版
-（`src/polartx/guiqt/`），以及**一个页面三个宿主**的新工作台——页面在
-`src/polartx/webui/www/`，手机（`android/`，Chaquopy + WebView）把它当 assets，
-桌面与浏览器由 `polartx-web`（`polartx.webhost`）提供，两者都经
-`src/polartx/appbridge.py`。改版完成后前两个退役（`cairn/gui-redesign.md`）；迁移期间新交互（基线、扫描、
-历史、拓扑对比）只做在新页面里，不再给前两个补。计算全部住在 `src/polartx/guiutil.py`，可以脱离
-三个前端单独测试——**新功能先落在 `guiutil`，再由各前端接线**。
+界面**只有一份**：`src/polartx/webui/www/`（HTML/JS），由三个宿主显示——手机
+（`android/`，Chaquopy + WebView，Gradle 把这个目录当 assets）、桌面（`polartx-gui`：
+`polartx.webhost` 起标准库本地服务，开 Edge/Chrome 应用窗口，关窗即退出）、浏览器
+（`polartx-gui --tab`）。三者都经 `src/polartx/appbridge.py` 进库；桌面专属的方法
+（RTL 导出）在 `webhost.DESKTOP_METHODS`。计算全部住在 `src/polartx/guiutil.py`，
+前端契约（旋钮、指标含义、图数据格式）在 `src/polartx/guispec.py`，都可以脱离界面
+单独测试——**新功能先落在 `guiutil`，再接到页面**。Streamlit 与 PySide6 前端已在
+GUI 改版 P4b 退役（`cairn/gui-redesign.md`）：原先"每个前端都要接、都要测"的规矩，
+现在由"只有一份界面"在结构上保证，剩下要验的是**同一个页面在各宿主上**都跑得通。
 
 规矩：
 
 1. 新增 `bench_*` 预设必须进 `guiutil.PRESETS`，
    `test_benchmarks.py::test_every_benchmark_is_reachable_from_the_gui`
    会挡住漏接的情况。
-2. 新增 GUI 页面要**两个桌面/网页前端都加**，并且两边都有测试
-   （`tests/test_gui_web.py` 用 streamlit `AppTest`，
-   `tests/test_gui_qt.py` 用 offscreen Qt）。页数不要 hardcode，从
-   `PAGES` 推。
+2. 新增页面或标签只改 `webui/www/` 一处，并且三层都有测试：jsdom harness
+   （`tests/android_page_harness.js`，手机宿主下跑页面脚本）、真浏览器
+   （`tests/test_webui.py`，经桌面宿主驱动真 bridge；CI 设
+   `POLARTX_REQUIRE_BROWSER=1`，跳过即失败）、桌面宿主进程本身
+   （`tests/test_webhost.py`：开窗、关窗即停、二次启动）。
 3. **Android 的 bridge 方法与页面必须双向对齐**：`appbridge._METHODS` 里多一个
    没人调的方法，或 `app.js` 调一个不存在的方法，`tests/test_android_parity.py`
    都会红（纯文本比对，不需要浏览器或模拟器）。**一个没有调用者的 bridge 方法
@@ -120,7 +123,7 @@ push 都跑：
    `tests/test_guispec.py` 把它钉在库上：表单全取默认时输出必须与不加覆盖的预设
    **逐位相同**；每个旋钮拨一次输出样本必须变（`noise_only` 的旋钮——抖动、两点
    匹配时的环路带宽——在开噪声、同 seed 下比）；出现"设置被忽略"告警即红。
-   前端不再按预设名子串猜（旧前端暂用的 `guiutil._HONOURS` 必须是其子集）。
+   前端不再按预设名子串猜（P0 的 `guiutil._HONOURS` 随旧前端在 P4b 删除）。
 5. Android 上刻意缺的功能（RTL 导出、并行蒙卡）记在 `docs/android.md` 与
    `cairn/android-app.md`，**口径差异是要记录的决定，不是留给下一个人发现的缺口**。
 6. 报告层画的星座图必须和它打印的 EVM 用**同一个均衡口径**——
@@ -216,10 +219,10 @@ push 都跑：
 
 > **工具必须装进项目环境，并且用 `python -m mypy` 跑。**
 > ```bash
-> pip install -e ".[gui,guiqt,dev]"   # dev extra 里是钉死的 ruff + mypy
+> pip install -e ".[dev]"   # dev extra 里是钉死的 ruff + mypy
 > python -m mypy && ruff check .
 > ```
-> mypy 是**从它自己所在的环境**解析 numpy / PySide6 / scipy 的类型的。用
+> mypy 是**从它自己所在的环境**解析 numpy / matplotlib / scipy 的类型的。用
 > `uv tool install` 或 pipx 装的独立 mypy 看不见这些包，配合
 > `ignore_missing_imports = true` 就把所有涉及它们的东西退化成 `Any`——然后
 > 报告 "Success"。接入这条闸门时就踩了：本地 0 错，CI 9 错，**CI 是对的那一边**，
@@ -227,7 +230,7 @@ push 都跑：
 
 第一步只上默认严格度，**没有** `disallow_untyped_defs`：这个库有大量无注解的
 函数，一次性要求注解会淹掉真正的信号。想加严的话，加的是
-`--check-untyped-defs`（现在 `guiqt/widgets.py:40` 会提醒你它被跳过了）。
+`--check-untyped-defs`。
 
 写类型的两条本仓库经验：
 

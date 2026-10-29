@@ -115,15 +115,6 @@ def test_unit_conversion_round_trips_and_off_means_none():
         overrides_from_ui("LTE 20 MHz", {"mode": "fast"})
 
 
-def test_the_legacy_knob_table_is_a_subset_of_the_specs():
-    """Qt and Streamlit still send keyword-keyed values through
-    guiutil.chain_overrides until they are retired; whatever that table
-    lets through must be something the spec offers."""
-    from polartx.guiutil import honoured_knobs
-    for name in PRESETS:
-        assert set(honoured_knobs(name)) <= {k.kw for k in knob_specs(name)}
-
-
 # --------------------------------------------------------- the metrics
 def test_every_reported_metric_is_described():
     """A metric that reaches the cards must have a label, a unit and a

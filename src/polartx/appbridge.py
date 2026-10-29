@@ -14,9 +14,9 @@ strings and returns a string.  That narrowness is deliberate:
   in ``app.js`` — never a change to Java, Gradle or the emulator.
 
 The methods below are deliberately thin.  All the computation already lives
-in :mod:`polartx.guiutil`, which the Streamlit and PySide6 front ends also
-call, so the phone is a third renderer of the same numbers rather than a
-fourth implementation of them.  Logic that creeps in here is logic the
+in :mod:`polartx.guiutil`; the page that calls this is the same page the
+desktop and the browser show (through :mod:`polartx.webhost`), so there is
+one renderer of the numbers, not one per host.  Logic that creeps in here is logic the
 238-test suite does not cover.
 
 **A method with no caller is half a feature.**  An entry in ``_METHODS``
@@ -142,14 +142,11 @@ def _list_presets() -> dict:
     ``tests/test_benchmarks.py`` fails if one never reaches the registry.
     """
     from .guispec import GROUPS, knob_specs
-    from .guiutil import DEFAULT_PRESET, PRESETS, honoured_knobs
+    from .guiutil import DEFAULT_PRESET, PRESETS
     names = list(PRESETS)
     return {"presets": [n for n in names if not n.startswith("Bench:")],
             "benchmarks": [n for n in names if n.startswith("Bench:")],
-            # the page opens on the same preset as the desktop GUIs and
-            # hides a knob the selected preset would not honour
             "default": DEFAULT_PRESET,
-            "knobs": {n: list(honoured_knobs(n)) for n in names},
             # the full control description per preset (guispec): ids,
             # labels, units, ranges and the preset's own defaults
             "specs": {n: [k.as_dict() for k in knob_specs(n)] for n in names},
@@ -157,38 +154,25 @@ def _list_presets() -> dict:
 
 
 def _chain(preset: str = "BLE LE-1M", seed: int = 1, noise: bool = True,
-           n_units: int | None = None, env_skew_ns: float = 0.0,
-           cfr_papr_db: float | None = None,
-           values: dict | None = None, png: bool = True) -> dict:
-    """Run one preset end to end: metrics table plus the report figure.
-
-    ``env_skew_ns`` is exposed because AM/PM path skew is this
-    architecture's sharpest impairment and the most instructive thing to
-    drag a slider over — WiFi 160 MHz fails its mask at 0.2 ns, LTE-20 at
-    1 ns, and constant-envelope BLE is immune.  It is given in ns rather
-    than seconds so a phone slider has usable resolution.
+           n_units: int | None = None, values: dict | None = None,
+           png: bool = True) -> dict:
+    """Run one preset end to end: the workbench's call.
 
     ``values`` carries the controls the way ``list_presets()["specs"]``
     describes them: knob id -> display-unit value (``"off"`` for a knob
-    that allows it).  ``png=False`` skips the rendered figure for a page
-    that draws ``plots`` itself; the numbers are the same either way.
+    that allows it); ids the preset does not offer are dropped, so a skew
+    sent with an RF-DAC preset is never misapplied.  ``png=False`` skips
+    the rendered figure for a page that draws ``plots`` itself; the
+    numbers are the same either way.
 
     Measured on an x86 runner, every preset at its default burst length
-    completes in 0.15-0.55 s; expect single-digit seconds on a phone.
+    completes in 0.07-0.7 s; expect single-digit seconds on a phone.
     """
-    from .guiutil import chain_overrides, run_chain_report
-    # guiutil decides which knobs reach which chain: a skew sent with an
-    # RF-DAC or outphasing preset is dropped here, not misapplied there
-    overrides = chain_overrides(
-        preset, env_skew_s=float(env_skew_ns) * 1e-9 if env_skew_ns else None,
-        cfr_papr_db=None if cfr_papr_db is None else float(cfr_papr_db))
-    if values:
-        # controls by knob id in display units (guispec); ids this preset
-        # does not offer are dropped there
-        from .guispec import overrides_from_ui
-        overrides.update(overrides_from_ui(preset, values))
+    from .guispec import overrides_from_ui
+    from .guiutil import run_chain_report
     r = run_chain_report(preset, seed=int(seed), noise=bool(noise),
-                         n_units=n_units, figure=bool(png), **overrides)
+                         n_units=n_units, figure=bool(png),
+                         **overrides_from_ui(preset, values or {}))
     return _report(r, describe=True)
 
 

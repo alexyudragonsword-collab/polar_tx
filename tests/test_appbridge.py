@@ -113,13 +113,14 @@ def test_chain_skew_is_in_nanoseconds_and_actually_bites():
     lands where the physics says, on the OFDM chain and not on BLE.
     """
     key = "mask OOB margin [dB]"
-    clean = _ok("chain", preset="WiFi 160 MHz", env_skew_ns=0.0)
-    skewed = _ok("chain", preset="WiFi 160 MHz", env_skew_ns=0.5)
+    clean = _ok("chain", preset="WiFi 160 MHz", values={"skew_ns": 0.0})
+    skewed = _ok("chain", preset="WiFi 160 MHz", values={"skew_ns": 0.5})
     assert float(clean["metrics"][key]) > float(skewed["metrics"][key]) + 10.0
 
-    # constant-envelope BLE has no envelope to skew: bit-identical
-    a = _ok("chain", preset="BLE LE-1M", env_skew_ns=0.0)
-    b = _ok("chain", preset="BLE LE-1M", env_skew_ns=5.0)
+    # constant-envelope BLE has no envelope to skew, so it does not offer
+    # the control at all, and a skew sent anyway is dropped
+    a = _ok("chain", preset="BLE LE-1M")
+    b = _ok("chain", preset="BLE LE-1M", values={"skew_ns": 5.0})
     assert a["metrics"] == b["metrics"]
 
 
@@ -178,20 +179,21 @@ def test_a_representative_preset_from_each_family_runs_on_the_bridge(preset):
 
 
 def test_chain_drops_a_knob_the_preset_does_not_honour():
-    """The phone shows the skew field only where it applies, and the
-    bridge enforces the same table: a skew sent with the RF-DAC preset is
-    dropped (the chain would warn and ignore it), and the page learns the
-    default preset and the knob table from list_presets."""
+    """The page shows the skew control only where it applies, and the
+    bridge enforces the same description: a skew sent with the RF-DAC
+    preset is dropped (the chain would warn and ignore it), and the page
+    learns the default preset and the controls from list_presets."""
     from polartx.guiutil import DEFAULT_PRESET, PRESETS
     p = _ok("list_presets")
     assert p["default"] == DEFAULT_PRESET
-    assert set(p["knobs"]) == set(PRESETS)
-    assert "env_skew_s" not in p["knobs"]["WiFi 160 MHz (RF-DAC)"]
-    assert "env_skew_s" in p["knobs"]["WiFi 160 MHz"]
-    # the report now carries the run's warnings itself, so "the chain was
+    assert set(p["specs"]) == set(PRESETS)
+    ids = {n: {k["id"] for k in v} for n, v in p["specs"].items()}
+    assert "skew_ns" not in ids["WiFi 160 MHz (RF-DAC)"]
+    assert "skew_ns" in ids["WiFi 160 MHz"]
+    # the report carries the run's warnings itself, so "the chain was
     # never asked to ignore anything" is read from there
-    a = _ok("chain", preset="WiFi 160 MHz (RF-DAC)", env_skew_ns=0.0)
-    b = _ok("chain", preset="WiFi 160 MHz (RF-DAC)", env_skew_ns=1.0)
+    a = _ok("chain", preset="WiFi 160 MHz (RF-DAC)", values={"skew_ns": 0.0})
+    b = _ok("chain", preset="WiFi 160 MHz (RF-DAC)", values={"skew_ns": 1.0})
     assert a["metrics"] == b["metrics"]
     assert a["warnings"] == b["warnings"] == []
 
@@ -209,9 +211,9 @@ def test_chain_takes_knob_ids_and_returns_drawable_data():
 
     skewed = _ok("chain", preset="WiFi 160 MHz", values={"skew_ns": 0.5},
                  png=False)
-    legacy = _ok("chain", preset="WiFi 160 MHz", env_skew_ns=0.5)
-    assert skewed["metrics"] == legacy["metrics"]
-    assert "png" not in skewed and len(legacy["png"]) > 1000
+    with_png = _ok("chain", preset="WiFi 160 MHz", values={"skew_ns": 0.5})
+    assert skewed["metrics"] == with_png["metrics"]
+    assert "png" not in skewed and len(with_png["png"]) > 1000
     spec, right = skewed["plots"]
     assert spec["id"] == "spectrum" and len(spec["series"][0]["x"]) <= 2048
     assert len(right["series"][0]["x"]) == len(right["series"][0]["y"]) > 100

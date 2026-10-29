@@ -5,7 +5,7 @@ summary: "polartx 的静态检查闸门（ruff + mypy）为什么这样划范围
 tags: [polartx, 工程纪律, ruff, mypy, 重构, vendor]
 contains: [decision, lesson, experience, open_question]
 created: "2026-09-12"
-updated: "2026-09-13（新增 vendor 子树推进的三条经验；9-12 当日修订见「本地 mypy 跑在空气上」）"
+updated: "2026-10-29（GUI extras 随旧前端删除的更正）"
 related: []
 authoring_mode: ai_generated
 ---
@@ -37,6 +37,9 @@ authoring_mode: ai_generated
   淹掉真信号。下一步该加的是 `--check-untyped-defs`。
 - **lint job 装 GUI extras**。不装的话 PySide6/streamlit 退化成 `Any`，CI 检查得比
   开发机还少——闸门弱于本地是错的方向。
+  （**2026-10-29 更正**：两个 GUI extra 随 Streamlit/Qt 前端在 GUI 改版 P4b 删除，lint
+  job 现在只装 `.[dev]`。道理不变——工具与被查的依赖装在同一个环境；现在剩下的第三方
+  类型来自 numpy/matplotlib，没有存根的只有 scipy。见 `gui-redesign.md`。）
 
 ## 经验与教训
 
@@ -125,4 +128,4 @@ Python 对象（`dp_cal.step`）做在线两点增益校准。要跟进等于把
   **+139 −16**（对比 `PA_DPD@3aa1c246`）。量级比 pllsim 小一个数量级，可以照
   上一节的办法做，但同样要走 19 配置逐值比对。
 - `guiqt/` 是覆盖率最低的非 vendor 目录（widgets 65%、pages 76.5%），Qt 侧只有一个
-  smoke 测试。
+  smoke 测试。（2026-10-29：`guiqt/` 已删除，这条不再适用。）

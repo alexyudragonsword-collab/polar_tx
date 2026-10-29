@@ -395,19 +395,22 @@
   <span class="en"><b>Monte Carlo</b> (<code>polartx.montecarlo</code>): per-chip seeded draws of DPA cell mismatch, DTC
   gain error and AM/PM skew. The reference population (40 chips, skew &sigma; = 0.5 ns, −35 dB limit) yields 5% raw —
   and <b>70% with the per-chip skew calibration in the loop</b>: the quantitative case for shipping the calibration.
-  <b>GUI</b>, two flavors over one headless-tested compute layer (<code>polartx.guiutil</code>): the Streamlit web
-  workbench (<code>pip install -e .[gui]; streamlit run gui/Home.py</code>) and a native PySide6 desktop app
-  (<code>pip install -e .[guiqt]; polartx-gui</code> — worker-thread computation, embedded matplotlib canvases,
-  offscreen-smoke-tested) — chain workbench (14 presets incl. 4 literature-class benchmarks + impairment knobs), calibration lab, Monte Carlo.
+  <b>GUI</b>: one HTML/JS page (<code>src/polartx/webui/www</code>) over one headless-tested compute layer
+  (<code>polartx.guiutil</code>), shown by three hosts — the Android WebView, a desktop app window
+  (<code>polartx-gui</code>: a standard-library local server plus an Edge/Chrome <code>--app</code> window that stops
+  the server when it closes) and a browser tab (<code>polartx-gui --tab</code>). Controls are generated from the
+  presets' own signatures; the workbench recomputes as a control moves, with baseline, one-control sweep, history and
+  side-by-side topologies. (The earlier Streamlit and PySide6 front ends were retired in the 2026-10 GUI redesign.)
   <b>RTL</b>: <code>polartx.export.rtl</code> quantizes the polar-DPD dual LUT (12-bit amplitude / 14-bit &pi;-scaled
   phase), emits a <code>$readmemh</code> ROM Verilog module, a self-checking testbench and golden CSV — iverilog-verified,
   256 vectors, zero mismatches.</span>
   <span class="zh"><b>Monte Carlo</b>（<code>polartx.montecarlo</code>）：逐芯片种子抽取 DPA 单元失配、DTC 增益误差、
   AM/PM skew。参考批次（40 芯片，skew σ=0.5 ns，−35 dB 限）裸良率 5%——<b>把逐芯片 skew 校准放进流程后 70%</b>：
-  这是"校准值得流片面积"的定量论证。<b>GUI</b> 两种形态共用可脱离 GUI 测试的计算层
-  <code>polartx.guiutil</code>：Streamlit 网页工作台（<code>pip install -e .[gui]; streamlit run gui/Home.py</code>）
-  与 PySide6 原生桌面版（<code>pip install -e .[guiqt]; polartx-gui</code>——计算在工作线程、matplotlib 画布内嵌、
-  offscreen 冒烟测试）——链路工作台（14 个预设，含 4 个文献级对标 + 损伤旋钮）、校准实验室、Monte Carlo。<b>RTL</b>：
+  这是"校准值得流片面积"的定量论证。<b>GUI</b>：一个 HTML/JS 页面（<code>src/polartx/webui/www</code>）、
+  一个可脱离界面测试的计算层（<code>polartx.guiutil</code>），由三个宿主显示——Android WebView、桌面应用窗口
+  （<code>polartx-gui</code>：标准库本地服务 + Edge/Chrome 的 <code>--app</code> 窗口，关窗即停服务）、浏览器标签
+  （<code>polartx-gui --tab</code>）。控件由预设函数签名生成；工作台改参数即重算，带基线、单控件扫描、历史与拓扑并排对比。
+  （早先的 Streamlit 与 PySide6 前端已在 2026-10 的 GUI 改版中退役。）<b>RTL</b>：
   <code>polartx.export.rtl</code> 把 polar DPD 双 LUT 定点化（12-bit 幅度 / 14-bit π 标度相位），生成
   <code>$readmemh</code> ROM Verilog、自校验 testbench 与金向量 CSV——iverilog 实测 256 向量零失配。</span>
 </p>
@@ -448,8 +451,7 @@
 pytest tests/               # 87 tests: physical assertions + bit-exact regressions
 python examples/ex01_ble_gfsk_adpll.py     # ... through ex09; plots land in examples/out/
 
-pip install -e .[gui]
-streamlit run gui/Home.py   # chain workbench / calibration lab / Monte Carlo
+polartx-gui                 # the workbench: local server + browser app window
 
 # measured-data example (ex09) additionally needs the OpenDPD clone (~55 MB):
 git clone --depth 1 https://github.com/lab-emi/OpenDPD.git ../OpenDPD</code></pre>

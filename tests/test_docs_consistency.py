@@ -13,7 +13,8 @@ that no longer exists is a stale rename.
 Counts in prose are the same class of claim.  The one here is the number of
 test FUNCTIONS, counted from the AST, and deliberately not the number pytest
 prints: collection depends on what optional dependencies are installed
-(test_gui_qt.py contributes nothing without PySide6), so the printed total is
+(the in-browser page tests collect but skip without Chromium; the retired Qt
+tests used to contribute nothing without PySide6), so the printed total is
 a property of the machine, while the function count is a property of the repo.
 """
 from __future__ import annotations
@@ -29,7 +30,7 @@ README = ROOT / "README.md"
 
 #: Not part of the module map.  `__init__.py` files are package plumbing (the
 #: one in metrics/ that re-exports is described in the map's metrics/ line),
-#: and `guiqt/__main__.py` is a two-line `python -m` shim.
+#: and a `__main__.py` is a `python -m` shim.
 EXEMPT = {"__init__.py", "__main__.py"}
 
 

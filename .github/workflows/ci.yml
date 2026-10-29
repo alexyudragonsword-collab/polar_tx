@@ -17,14 +17,13 @@ jobs:
         with:
           python-version: "3.11"
           cache: pip
-      # The GUI extras are installed so mypy sees the real PySide6 and
-      # streamlit types; the tools come from the pinned dev extra so this job
-      # and a laptop cannot disagree about the version.  Everything lands in
-      # ONE environment on purpose -- mypy reads numpy's and Qt's types from
-      # the environment it runs in, so a tool installed in isolation reports
-      # success while checking almost nothing.
+      # The tools come from the pinned dev extra so this job and a laptop
+      # cannot disagree about the version.  Everything lands in ONE
+      # environment on purpose -- mypy reads numpy's and matplotlib's types
+      # from the environment it runs in, so a tool installed in isolation
+      # reports success while checking almost nothing.
       - name: Install
-        run: pip install -e ".[gui,guiqt,dev]"
+        run: pip install -e ".[dev]"
       - name: ruff
         run: ruff check .
       - name: mypy
@@ -54,12 +53,9 @@ jobs:
       - name: Test
         run: pytest tests/ -q
         # OpenDPD-dataset tests skip automatically without the dataset
-        # clone; GUI tests skip without PySide6; RTL golden tests skip
-        # without iverilog (dedicated jobs below exercise those).
+        # clone; the in-browser page tests skip without Chromium; RTL golden
+        # tests skip without iverilog (dedicated jobs below exercise those).
 
-  # Linux job with the Qt runtime + streamlit so BOTH GUI frontends are
-  # actually exercised (Qt offscreen; the web pages via streamlit AppTest,
-  # which executes each page script and clicks every button).
   # pyproject declares numpy>=1.24 / scipy>=1.10 / matplotlib>=3.7, and until
   # this job existed nothing ever ran at those versions -- the matrix above
   # always resolves the newest.  The declaration was false for months: numpy
@@ -82,20 +78,20 @@ jobs:
       - name: Test at the floor
         run: pytest tests/ -q
 
+  # The one page every host shows (src/polartx/webui/www): its script in
+  # jsdom, the page in a real Chromium against the real bridge, and the
+  # desktop host the way the Windows exe smoke-tests it.  The Streamlit and
+  # Qt front ends this job used to run retired in GUI P4b.
   test-gui:
     runs-on: ubuntu-latest
-    env:
-      QT_QPA_PLATFORM: offscreen
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
           cache: pip
-      - name: Qt runtime libs
-        run: sudo apt-get update && sudo apt-get install -y libegl1 libopengl0 libxkbcommon0
       - name: Install
-        run: pip install -e .[test,guiqt,gui]
+        run: pip install -e .[test]
       # jsdom, so the Android page harness RUNS here rather than skipping.
       # The pytest wrapper skips when jsdom is absent, which is right for a
       # laptop and wrong for CI: a green run that tested nothing looks exactly
@@ -106,8 +102,11 @@ jobs:
       - name: Android page harness (real DOM, stub bridge)
         run: node tests/android_page_harness.js
 
-      - name: GUI tests (Qt + web + headless compute layer)
-        run: pytest tests/test_gui_qt.py tests/test_gui_web.py tests/test_guiutil.py -q
+      # the same checks windows-exe*.yml run against the frozen exe, here
+      # against the package, so a broken smoke script shows up on every push
+      # rather than on the next manual Windows build
+      - name: Desktop host smoke (page, bridge, workbench run, RTL export)
+        run: python packaging/smoke_webhost.py python -m polartx.webhost
 
       # The one page every host shows (src/polartx/webui/www), in a real
       # Chromium against the real bridge through the desktop host.  The

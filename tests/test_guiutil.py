@@ -289,34 +289,10 @@ def test_skew_sensitivity_follows_the_envelope_not_the_architecture():
 
 
 # ------------------------------------------------ which knobs reach which chain
-def test_every_registered_preset_declares_its_knobs():
-    """A preset without an entry would silently get no knobs at all; the
-    benchmarks are the only ones meant to have none."""
-    from polartx.guiutil import DEFAULT_PRESET, honoured_knobs
+def test_the_default_preset_is_registered():
+    """The page opens on it by name (it was index=6 in two places)."""
+    from polartx.guiutil import DEFAULT_PRESET
     assert DEFAULT_PRESET in PRESETS
-    for name in PRESETS:
-        if name.startswith("Bench:"):
-            assert honoured_knobs(name) == ()
-        else:
-            assert honoured_knobs(name), name
-    # that every one of them acts on its chain is tested on the full knob
-    # specs (test_guispec.py), of which this legacy table is a subset
-
-
-def test_chain_overrides_keeps_the_dtc_knob_off_the_rf_dac():
-    """The RF-DAC preset's n_bits is its DAC resolution (12); the
-    workbench's DTC resolution knob (11) used to land there."""
-    from polartx.guiutil import chain_overrides
-    ov = chain_overrides("WiFi 160 MHz (RF-DAC)", n_bits=11, env_skew_s=1e-9,
-                         cfr_papr_db=None)
-    assert ov == {}
-    assert build_preset("WiFi 160 MHz (RF-DAC)", **ov).tx.rfdac.cfg.n_bits == 12
-    assert chain_overrides("WiFi 160 MHz", n_bits=11)["n_bits"] == 11
-    assert "env_skew_s" not in chain_overrides("WiFi 160 MHz (outphasing)",
-                                               env_skew_s=1e-9)
-    assert "env_skew_s" not in chain_overrides("BLE LE-1M", env_skew_s=1e-9)
-    assert chain_overrides("WiFi 160 MHz", cfr_off=True) == {"cfr_papr_db": None}
-    assert chain_overrides("BLE LE-1M", cfr_off=True) == {}
 
 
 # ------------------------------------------------- Bluetooth metric set
@@ -370,17 +346,6 @@ def test_calibration_demos_recover_what_was_injected():
     assert t["evm_after_db"] < t["evm_before_db"] - 20.0        # -21.6 -> -53.4
     d = run_dtc_cal(2)
     assert d["err_rms_after_mrad"] < 0.1 * d["err_rms_before_mrad"]   # 18.0 -> 0.57
-
-
-def test_no_page_does_its_own_calibration_physics():
-    """The pages lay out guiutil results; they must not import the cal
-    modules themselves again."""
-    import pathlib
-    root = pathlib.Path(__file__).resolve().parents[1]
-    for page in [root / "gui" / "pages" / "2_Calibration.py",
-                 root / "src" / "polartx" / "guiqt" / "pages.py"]:
-        text = page.read_text(encoding="utf-8")
-        assert "polartx.cal" not in text and "from ..cal" not in text, page
 
 
 # ------------------------------------------------- sweeps and comparisons

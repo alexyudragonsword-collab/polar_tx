@@ -34,23 +34,18 @@ Waveform → [CFR] → polar split → 包络路径（量化/skew/DPA 幅度码�
 
 ```bash
 pip install -e .          # numpy / scipy / matplotlib
-pytest tests/             # 353 个测试函数（参数化后实收更多）：物理量断言 + 与 padpd 逐位回归
+pytest tests/             # 342 个测试函数（参数化后实收更多）：物理量断言 + 与 padpd 逐位回归
 python examples/ex01_ble_gfsk_adpll.py      # 图落在 examples/out/
 
-polartx-web               # 新工作台：本地服务 + 浏览器，与 Android 是同一个页面
-                          # （改参数即重算；只依赖标准库，无需额外 extra）
-
-pip install -e .[gui]     # Streamlit 网页工作台（改版后将退役）
-streamlit run gui/Home.py
-
-pip install -e .[guiqt]   # PySide6 原生桌面版
-polartx-gui               # 或 python -m polartx.guiqt（改版后将换成新工作台）
+polartx-gui               # 工作台：本地服务 + Edge/Chrome 应用窗口，关窗即退出
+                          # （与 Android 是同一个页面；改参数即重算；只依赖标准库）
+polartx-gui --tab         # 改用默认浏览器的普通标签页（Ctrl+C 停止）
 ```
 
 **Android APK**：`android/` 用 Chaquopy 把真的 CPython + numpy/scipy/matplotlib 装进 APK，UI 是 WebView，计算全在本地，**零权限**。手动触发的 *Android APK* workflow 一次产出**两个** APK——解释版，以及把模块 Cython 编译成 `.so` 的编译版（上一次真机构建实测 42/101，
 见 [`docs/android.md`](docs/android.md)；vendored 子树此后推进过，分母已是 103，分子待重测）（`strings` 拿不到 docstring 了，但字面常量仍在——实测边界见 [`docs/android.md`](docs/android.md)）。两者由 `inspect_apk.py` 门禁证明确实不同。
 
-**Windows 免安装 exe**：两条手动触发的 GitHub Actions 打包**两个 GUI × 两种打包器 = 4 个 onefile exe**，上传前都在 runner 上冒烟测试——`windows-exe`（PyInstaller：快、自解压）和 `windows-exe-nuitka`（Nuitka：MSVC 真编译、启动快、构建慢）。各自 qt/web 两个独立 job；从 Actions → Run workflow 触发，下载 `polartx-gui-qt[-nuitka]`（桌面，windowed）和 `polartx-gui-web[-nuitka]`（启动本地服务 + 开浏览器）。
+**Windows 免安装 exe**：两条手动触发的 GitHub Actions 各打一个 onefile exe——`windows-exe`（PyInstaller：快、自解压）和 `windows-exe-nuitka`（Nuitka：MSVC 真编译、启动快、构建慢）。exe 就是 `polartx-gui`：起本地服务、用 Windows 自带的 Edge 开应用窗口，关窗即退出（控制台窗口保留，是服务日志）。上传前在 runner 上用 `packaging/smoke_webhost.py` 冒烟：页面及其资源、bridge、一次工作台运行、桌面专属的 RTL 导出，全部经冻结后的 exe。从 Actions → Run workflow 触发，下载 `polartx-gui[-nuitka]`。
 
 ```python
 from polartx import ble_1m_adpll, wifi_dtc
@@ -106,9 +101,11 @@ src/polartx/
 ├── export/rtl.py      # 定点化 + Verilog / Verilog-AMS 导出 + 金向量
 ├── selector.py        # 架构选择器（解析打分：ADPLL / DTC / outphasing / RF-DAC 四候选）
 ├── presets.py         # ★ 端到端预设（标准链路 + 文献对标）
-├── guiutil.py         # ★ 三个前端共用的全部计算（可脱离 GUI 测试）
-├── appbridge.py       # Android 的单函数 JSON 桥（薄封装，逻辑都在 guiutil）
-└── guiqt/             # PySide6 桌面 GUI（网页版 gui/、Android 版 android/ 在仓库根）
+├── guiutil.py         # ★ GUI 背后的全部计算（可脱离 GUI 测试）
+├── guispec.py         # 前端契约：旋钮规格、指标含义、图数据格式
+├── appbridge.py       # 单函数 JSON 桥（手机 WebView 与桌面宿主共用；逻辑都在 guiutil）
+├── webhost.py         # 桌面/浏览器宿主：标准库本地服务 + 应用窗口
+└── webui/www/         # 唯一的界面（HTML/JS），三个宿主显示同一份；Android 工程在仓库根 android/
 ```
 
 带 ★ 的是新人最先要读的五个文件；逐模块说明与"加东西改哪里"见
@@ -137,7 +134,8 @@ src/polartx/
   - **整链 ILA-GMP 记忆 DPD**（`cal/memory_dpd.py`，vendored ILA）：把整条极坐标链（压缩 DPA+AM-PM+线性/三次记忆）当黑盒 PA 拟合，EVM −19.8→**−68.8 dB**、ACLR −27.2→−54.2 dBc（52 系数）。关键发现：链路满量程必须固定（`fs_scale_fixed`），逐次归一化会让"PA"非静态、ILA 收益封顶在 ~4 dB（测试固化）。
   - **相位插值形状研究**：固定斜率上限下 smoothstep 因窗口加宽 1.5× 反而比线性插值差（轨迹 EVM 与 ACP 双输）——诚实结论入测试。
   - **Monte Carlo 良率**（`polartx.montecarlo`）：逐芯片种子抽取 DPA 失配/DTC 增益/skew；参考案例 40 芯片 skew σ=0.5 ns：良率 5% → 逐芯片 skew 校准后 **70%**。
-  - **双 GUI**：Streamlit 网页版（`gui/`，`streamlit run gui/Home.py`）与 PySide6 原生桌面版（`polartx.guiqt`，`polartx-gui` 入口，计算在工作线程、matplotlib 画布内嵌、offscreen 冒烟测试）——**六页**：链路工作台 / 校准实验室 / Monte Carlo / FIR+Doherty（RFIC'26 对标 + 多核合路）/ 架构选择器 / RTL-AMS 导出，计算全部在可脱离 GUI 测试的 `polartx.guiutil`。有测试固化"每个 `bench_*` 都能从 GUI 到达"，防止库先行、GUI 落后。
+  - **双 GUI**：Streamlit 网页版（`gui/`，`streamlit run gui/Home.py`）与 PySide6 原生桌面版（`polartx.guiqt`，`polartx-gui` 入口，计算在工作线程、matplotlib 画布内嵌、offscreen 冒烟测试）——**六页**：链路工作台 / 校准实验室 / Monte Carlo / FIR+Doherty（RFIC'26 对标 + 多核合路）/ 架构选择器 / RTL-AMS 导出，计算全部在可脱离 GUI 测试的 `polartx.guiutil`。有测试固化"每个 `bench_*` 都能从 GUI 到达"，防止库先行、GUI 落后。（更正说明，2026-10-29：这两个前端已在 GUI 改版中退役，见下一条。）
+- **GUI 改版（P0–P4）— 已完成**：三份手写前端（Streamlit、Qt、Android 页面）已经漂移并算错过（DTC 位数旋钮被当作 RF-DAC 的 DAC 位数发出），合并为**一套 HTML/JS 界面、三个宿主**：手机 WebView、桌面应用窗口、浏览器标签。控件由 `guispec` 从预设签名生成（全取默认时与预设逐位相同、每个旋钮拨动必改输出，均有测试）；工作台改参数即重算，带基线、单控件扫描、历史与拓扑并排对比；FIR/合路/选型/良率报告返回图数据由页面自绘；RTL 导出只在桌面宿主出现。Streamlit 与 PySide6 前端及其 extra 已删除，`polartx-gui` 改指新宿主。过程与坑见 `cairn/gui-redesign.md`。
   - **RTL 导出**（`polartx.export.rtl`）：polar DPD 双 LUT（12b 幅度/14b 有符号相位）定点化 → `$readmemh` ROM Verilog + 自校验 testbench + 金向量 CSV，iverilog 零失配验证（256 向量）。
 - **补强轮 2（评审加固 + 三个新特性）— 已完成**：
   - **真实 CI 首跑核实**：CI 触发在 `push:`，多平台矩阵（Ubuntu 3.10/3.11/3.12 + Windows + macOS）+ offscreen GUI + iverilog RTL + build 全部在真实 GitHub Actions 上**全绿**（此前误以为只在容器内跑过）。

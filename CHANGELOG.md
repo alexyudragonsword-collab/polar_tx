@@ -10,6 +10,19 @@ release 分组。
 
 ## 未发布 / Unreleased
 
+### GUI 改版 P4b：Streamlit 与 Qt 前端退役，桌面改用应用窗口（2026-10-29）
+
+- **删除** `gui/`（Streamlit）、`polartx.guiqt`、两份 GUI 测试、两个打包入口、`gui` / `guiqt`
+  extra，以及只为旧前端存在的 `guiutil.honoured_knobs` / `chain_overrides`。三份手写前端
+  曾经漂移并算错过（P0）；现在界面只有 `webui/www/` 一份，"前端同步"成了结构性保证。
+- **`polartx-gui` = 新宿主**：本地服务 + Edge/Chrome 的 `--app` 窗口（独立持久 profile），
+  关窗即停服务；`--tab` 用普通标签页；二次启动只开窗口指向已在运行的宿主。Windows 上关掉
+  `SO_REUSEADDR`，否则第二个实例能悄悄绑上同一端口。
+- **Windows exe**：两条 workflow 各打一个 `polartx-gui[-nuitka].exe`（无 Qt、无 Streamlit），
+  冒烟由 `packaging/smoke_webhost.py` 做：页面及资源、bridge、一次工作台运行、RTL 导出——
+  不再只是"HTTP 200"。CI test-gui 去掉 Qt/Streamlit，改跑同一冒烟脚本。
+- 测试 353 → 342 个函数（删 19，新增 `test_webhost.py` 8 个）。
+
 ### GUI 改版 P4a：其余页面迁入新页面（2026-10-29）
 
 - **页面分三组九页**：设计（工作台、拓扑对比、选型）、验证（校准、实测数据、合路与陷波）、
