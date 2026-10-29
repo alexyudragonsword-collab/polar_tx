@@ -137,7 +137,8 @@ auto-release"，可以照搬，但要先决定这个库要不要给外部用。
 
 两条 workflow 都在真 CI 上成功跑过（`windows-exe` ×2、`windows-exe-nuitka` ×3，
 均为手动 `workflow_dispatch`），产物正常。（2026-10-29 GUI 改版 P4b 把两条都改成只打
-一个 exe——`polartx-gui`，本地宿主 + Edge 应用窗口——冒烟改为 `packaging/smoke_webhost.py`。）
+一个 exe——`polartx-gui`，本地宿主 + Edge 应用窗口——冒烟改为 `packaging/smoke_webhost.py`；
+改后两条各在真 CI 上跑通一次，见 `cairn/gui-redesign.md` P4b。）
 但它们和 release 没有联动——
 打 tag 不会自动出 exe，也不会出 APK（`android.yml` 同样是手动触发）。
 
