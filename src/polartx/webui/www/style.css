@@ -215,3 +215,12 @@ pre.table { background: var(--bg); padding: .5em; border-radius: 6px;
   .bench-knobs.collapsed .knob-body { display: none; }
   .grid2 { grid-template-columns: 1fr 1fr; }
 }
+
+/* page groups in the page list */
+.navgroup { font: 600 .66em/1 var(--mono); letter-spacing: .08em; text-transform: uppercase;
+  color: var(--muted); padding: .9em .7em .3em; }
+.navgroup:first-child { padding-top: .2em; }
+/* desktop-only controls on the phone: an author `display` (.form-tab label)
+   beats the user agent's [hidden], so say it again with more weight */
+.desktop-only[hidden] { display: none; }
+.form-tab .chart { margin-top: .6em; }

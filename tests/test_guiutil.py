@@ -440,3 +440,79 @@ def test_the_comparison_is_the_individual_runs_with_shared_controls():
     assert m["WiFi 160 MHz"]["EVM [dB]"] > m["WiFi 160 MHz (RF-DAC)"]["EVM [dB]"] + 10
     panel = cmp["plots"][0]
     assert [s.get("color") for s in panel["series"][:3]] == [0, 1, 2]
+
+
+# ------------------------------------------- efficiency, handoff, plot data
+def test_efficiency_is_on_the_card_and_follows_the_envelope():
+    """Polar's reason to exist, next to the EVM it costs: a constant
+    envelope runs the DPA at its peak (85 %, no backoff); an OFDM burst at
+    ~9 dB average backoff pays for its crest factor."""
+    import matplotlib.pyplot as plt
+    ble = run_chain_report("BLE LE-1M", seed=1)
+    wifi = run_chain_report("WiFi 160 MHz", seed=1)
+    assert ble["metrics"]["avg efficiency [%]"] == pytest.approx(85.0, abs=0.5)
+    assert ble["metrics"]["backoff [dB]"] == 0.0
+    assert wifi["metrics"]["backoff [dB]"] > 6.0                 # measured 8.9
+    assert wifi["metrics"]["avg efficiency [%]"] < ble["metrics"]["avg efficiency [%]"] - 20
+    assert any(c["id"] == "efficiency" for c in wifi["conventions"])
+    plt.close("all")
+
+
+@pytest.mark.parametrize("kw, expect", [
+    (dict(bw_hz=1e6, modulation="gfsk", constant_envelope=True), "BLE LE-1M"),
+    (dict(bw_hz=2e6, modulation="gfsk", constant_envelope=True), "BLE LE-2M"),
+    (dict(bw_hz=20e6, modulation="ofdm"), "LTE 20 MHz"),
+    (dict(bw_hz=80e6), "WiFi 80 MHz"),
+    (dict(bw_hz=160e6), "WiFi 160 MHz"),
+    (dict(bw_hz=320e6, evm_db_max=-30.0), "WiFi 320 MHz"),
+    (dict(bw_hz=100e6, standard="5G NR"), "NR FR1 100 MHz"),
+])
+def test_the_selector_hands_its_answer_to_the_workbench(kw, expect):
+    """The selector is an analytic screen; its recommendation opens on the
+    workbench as the nearest registry preset, so it can be confirmed."""
+    import matplotlib.pyplot as plt
+
+    from polartx.guiutil import run_selector_report
+    rep = run_selector_report(**kw)
+    assert rep["workbench_preset"] == expect, rep["metrics"]["recommendation"]
+    assert rep["workbench_preset"] in PRESETS
+    plt.close(rep["fig"])
+
+
+def test_the_report_tabs_draw_from_their_plot_data():
+    """FIR, selector, combiner and yield now hand the page plot data; their
+    PNG is drawn from the same arrays (every line series matches)."""
+    import matplotlib.pyplot as plt
+    import numpy as np
+
+    from polartx.guiutil import (run_combiner_report, run_fir_report,
+                                 run_mc_report, run_selector_report)
+    for rep in (run_fir_report(n_symbols=4), run_selector_report(),
+                run_combiner_report(), run_mc_report(6)):
+        assert len(rep["fig"].axes) == len(rep["plots"])
+        for ax, pl in zip(rep["fig"].axes, rep["plots"]):
+            lines = [s for s in pl["series"] if s.get("style") != "bars"]
+            assert len(ax.get_lines()) == len(lines), pl["id"]
+            for ln, s in zip(ax.get_lines(), lines):
+                assert np.array_equal(np.asarray(ln.get_xdata(), float),
+                                      np.asarray(s["x"], float)), pl["id"]
+        plt.close(rep["fig"])
+
+
+def test_measured_report_recovers_the_virtual_dut():
+    """The stage-2 path behind one call, on the virtual DUT: the taus come
+    back within 10 % and slow state buys well over 6 dB on the burst
+    (measured 13.3).  It says the source is synthetic."""
+    import matplotlib.pyplot as plt
+
+    from polartx.guiutil import run_measured_report
+    from polartx.measured import SYNTHETIC_THERMAL_TAUS_S
+    rep = run_measured_report()
+    m = rep["metrics"]
+    for i, true in enumerate(SYNTHETIC_THERMAL_TAUS_S):
+        assert abs(m[f"tau heat {i + 1} [us]"] * 1e-6 - true) / true < 0.10
+    assert m["slow-state gain [dB]"] >= 6.0
+    assert m["+slow state NMSE [dB]"] < m["+fast memory NMSE [dB]"] \
+        < m["+memoryless NMSE [dB]"] < m["static LUT NMSE [dB]"]
+    assert "synthetic" in rep["conventions"][0]["en"]
+    plt.close(rep["fig"])

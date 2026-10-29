@@ -415,6 +415,21 @@ def _chain_plots(name: str, wf, e, f: np.ndarray, pdb: np.ndarray,
     return [spectrum, right]
 
 
+def _efficiency_metrics(tx, res) -> dict:
+    """Modulated average efficiency of this run — polar's reason to exist,
+    on the card next to the EVM it costs.  The result's own law: the DPA's
+    for the polar, outphasing and FIR chains, the RF-DAC's for the
+    Cartesian one (which takes no DPA)."""
+    if not hasattr(res, "avg_efficiency"):
+        return {}
+    dpa = getattr(tx, "dpa", None) or getattr(getattr(tx, "tx", None),
+                                               "dpa", None)
+    e = res.avg_efficiency(dpa)
+    return {"avg efficiency [%]": round(100 * float(e["eta_avg"]), 1),
+            # + 0.0: a constant-envelope burst reads -0.0 dB otherwise
+            "backoff [dB]": round(float(e["backoff_db"]), 1) + 0.0}
+
+
 def _conventions(tx, wf, eq: str) -> list[dict]:
     """Which measurement conventions this report's numbers were computed
     under, stated so the front ends can show them beside the numbers
@@ -435,6 +450,10 @@ def _conventions(tx, wf, eq: str) -> list[dict]:
         else f"mask：{src}"), "en": (
         "mask: stylized engineering template, not a conformance clause"
         if src == "stylized" else f"mask: {src}")})
+    out.append({"id": "efficiency",
+                "zh": "效率：效率律在本 burst 码流上的调制平均（模型律，非实测）",
+                "en": "efficiency: the efficiency law averaged over this "
+                      "burst's code stream (a model law, not a measurement)"})
     if _is_bluetooth(wf):
         out.append({"id": "bt", "zh": "带内发射：stylized 模板；频偏为本 burst "
                                      "载荷，不是认证码型",
@@ -505,6 +524,7 @@ def run_chain_report(name: str, *, seed: int = 1, noise: bool = True,
             pass
     f, pdb, mask_db, mask_metrics = _spectrum_metrics(res, wf)
     metrics.update(mask_metrics)
+    metrics.update(_efficiency_metrics(p.tx, res))
 
     cons = None
     if wf.kind == "ofdm":
@@ -660,6 +680,77 @@ def run_compare(names: tuple[str, ...] | list[str] = COMPARE_SET, *,
             "plots": [panel]}
 
 
+# ----------------------------------------------------------- measured data
+def run_measured_report(path: str | None = None) -> dict:
+    """Slow-state (thermal) memory inverted from a complete measured source
+    — the ex21 path behind one call.
+
+    ``path`` is a recorded complete-source npz (PA_DPD ``data/complete.py``
+    format: at least a ``step`` and a ``burst`` group).  Without one the
+    report records a VIRTUAL self-heating DUT (vendored ThermalReferencePA,
+    true taus 5 / 30 us) to the same format first, so the page works with
+    no data at all — and says so in its conventions.
+    """
+    from .guispec import render_matplotlib
+    from .measured import (dpa_from_complete_source, identify_slow_states,
+                           synthetic_thermal_source)
+    synthetic = path is None
+    src: dict
+    if path is None:
+        src = synthetic_thermal_source()
+    else:
+        from .vendor.padpd.data import load_complete_npz
+        src = load_complete_npz(path)
+    gm = identify_slow_states(src)
+    _, ch = dpa_from_complete_source(src)
+    rep = ch["memory_report"]
+    metrics: dict = {}
+    for i, tau in enumerate(gm.taus_heat_s):
+        metrics[f"tau heat {i + 1} [us]"] = round(tau * 1e6, 2)
+    metrics.update({
+        "static LUT NMSE [dB]": round(rep["static_nmse_db"], 2),
+        "+memoryless NMSE [dB]": round(rep["memoryless_nmse_db"], 2),
+        "+fast memory NMSE [dB]": round(rep["fast_only_nmse_db"], 2),
+        "+slow state NMSE [dB]": round(rep["residual_nmse_db"], 2),
+        "slow-state gain [dB]": round(rep["state_gain_db"], 2),
+        "condition (spanned space)": float(f"{rep['condition_number']:.3g}"),
+        "rank deficiency": int(rep["rank_deficiency"]),
+    })
+    step = src["extras"]["step"]
+    fs = float(src["fs"])
+    gain = 20 * np.log10(np.abs(step["y"]) / np.maximum(np.abs(step["x"]), 1e-12))
+    gain = gain - np.median(gain[-1000:])
+    t_us = np.arange(gain.size) / fs * 1e6
+    k = max(1, gain.size // 4000)                # display only: every k-th
+    taus = " / ".join(f"{t * 1e6:.1f}" for t in gm.taus_heat_s)
+    step_panel = {"id": "step", "title": f"step probe: identified tau {taus} us",
+                  "title_zh": f"阶跃探测：辨识 τ = {taus} µs",
+                  "xlabel": "time [us]", "ylabel": "gain re. final cold state [dB]",
+                  "grid": True,
+                  "series": [{"id": "g", "style": "line",
+                              "x": t_us[::k], "y": gain[::k]}]}
+    ladder_keys = ["static LUT NMSE [dB]", "+memoryless NMSE [dB]",
+                   "+fast memory NMSE [dB]", "+slow state NMSE [dB]"]
+    ladder = {"id": "ladder", "title": "residual NMSE on the burst (validation tail)",
+              "title_zh": "burst 验证尾段上的残差 NMSE",
+              "ylabel": "NMSE [dB]",
+              "xticks": [[i, k.split(" NMSE")[0]] for i, k in enumerate(ladder_keys)],
+              "series": [{"id": "nmse", "style": "bars",
+                          "x": np.arange(4.0), "width": 0.6,
+                          "y": np.array([metrics[k] for k in ladder_keys])}]}
+    plots: list[dict] = [step_panel, ladder]
+    conv = [{"id": "source",
+             "zh": ("数据源：合成自加热虚拟 DUT（真值 τ 5 / 30 µs），不是实测" if synthetic
+                    else f"数据源：{path}"),
+             "en": ("source: a synthetic self-heating virtual DUT (true taus "
+                    "5 / 30 us), not a measurement" if synthetic
+                    else f"source: {path}")},
+            {"id": "nmse", "zh": "NMSE 在链路尺度、burst 验证尾段（split 0.6）",
+             "en": "NMSE at chain scale on the burst's validation tail (split 0.6)"}]
+    return {"metrics": metrics, "plots": plots, "conventions": conv,
+            "fig": render_matplotlib(plots)}
+
+
 # ------------------------------------------------------------ calibration
 # The three calibration demos used to live inside the page code, written
 # twice (Qt and Streamlit) and therefore untestable without a GUI; the
@@ -737,11 +828,8 @@ def run_fir_report(bw: float = 40e6, *, notch_offset_hz: float = 500e6,
     baseline, which the headline OOC-noise suppression must be measured
     against — a lone dual-tap run cannot show what the notch bought.
     """
-    import matplotlib
-    matplotlib.use("Agg")
-    import matplotlib.pyplot as plt
-
-    from .fir import ooc_noise_suppression_db
+    from .fir import fir_response, ooc_noise_suppression_db
+    from .guispec import decimate_peak, render_matplotlib
     from .presets import bench_wifi7_mlo_fir_borokhovich26
 
     p = bench_wifi7_mlo_fir_borokhovich26(bw=bw,
@@ -763,26 +851,66 @@ def run_fir_report(bw: float = 40e6, *, notch_offset_hz: float = 500e6,
 
     f1, p1 = base.psd(nfft=1 << 14)
     f2, p2 = res.psd(nfft=1 << 14)
-    fig, ax = plt.subplots(1, 2, figsize=(11, 4.2))
-    ax[0].plot(f1 / 1e6, p1, lw=0.6, alpha=0.75, label="single tap")
-    ax[0].plot(f2 / 1e6, p2, lw=0.6, label="2-tap FIR")
-    for s in (-1, 1):
-        ax[0].axvline(s * notch_offset_hz / 1e6, color="r", ls=":", lw=1)
-    ax[0].set(xlabel="offset [MHz]", ylabel="dBr", ylim=(-160, 5),
-              title=f"OOC noise notch ({supp:.1f} dB at "
-                    f"{notch_offset_hz/1e6:.0f} MHz)")
-    ax[0].legend(fontsize=8)
-
-    # the FIR magnitude response that produces the notch
-    from .fir import fir_response
+    x1, y1 = decimate_peak(f1 / 1e6, p1)
+    x2, y2 = decimate_peak(f2 / 1e6, p2)
+    lim = (-160.0, 5.0)
+    notch = [{"id": f"notch{k}", "style": "ref", "x": [s * notch_offset_hz / 1e6] * 2,
+              "y": list(lim), "mpl": {"color": "r"}} for k, s in enumerate((-1, 1))]
+    spectra = {"id": "fir-spectra",
+               "title": f"OOC noise notch ({supp:.1f} dB at "
+                        f"{notch_offset_hz / 1e6:.0f} MHz)",
+               "title_zh": f"带外噪声陷波（{notch_offset_hz / 1e6:.0f} MHz 处 "
+                           f"{supp:.1f} dB）",
+               "xlabel": "offset [MHz]", "ylabel": "dBr", "ylim": list(lim),
+               "legend": True,
+               "series": [{"id": "single", "label": "single tap", "style": "trace",
+                           "color": 1, "x": x1, "y": y1},
+                          {"id": "fir", "label": "2-tap FIR", "style": "trace",
+                           "color": 0, "x": x2, "y": y2}] + notch}
     fx = np.linspace(-1.5 * notch_offset_hz, 1.5 * notch_offset_hz, 2000)
-    ax[1].plot(fx / 1e6, 20 * np.log10(np.abs(fir_response(fx, res.tau_s))
-                                       + 1e-12))
-    ax[1].set(xlabel="offset [MHz]", ylabel="|H| [dB]", ylim=(-60, 8),
-              title="2-tap FIR response  H = 1 + exp(-j2*pi*f*tau)")
-    ax[1].grid(True, alpha=0.3)
-    fig.tight_layout()
-    return {"metrics": metrics, "fig": fig, "result": res, "baseline": base}
+    resp = {"id": "fir-response",
+            "title": "2-tap FIR response  H = 1 + exp(-j2*pi*f*tau)",
+            "title_zh": "双抽头 FIR 响应 H = 1 + exp(−j2πfτ)",
+            "xlabel": "offset [MHz]", "ylabel": "|H| [dB]", "ylim": [-60, 8],
+            "grid": True,
+            "series": [{"id": "h", "style": "line", "x": fx / 1e6,
+                        "y": 20 * np.log10(np.abs(fir_response(fx, res.tau_s))
+                                           + 1e-12)}]}
+    plots = [spectra, resp]
+    return {"metrics": metrics, "plots": plots, "fig": render_matplotlib(plots),
+            "result": res, "baseline": base}
+
+
+_ARCH_LABEL = {"adpll_two_point": ("ADPLL 两点", "ADPLL two-point"),
+               "dtc_open_loop": ("开环 DTC", "open-loop DTC"),
+               "outphasing": ("outphasing（两路 DTC）", "outphasing (2 DTC branches)"),
+               "rfdac_cartesian": ("笛卡尔 RF-DAC", "Cartesian RF-DAC")}
+
+
+def workbench_preset_for(rep) -> str:
+    """The registry preset nearest a selector recommendation, so the page
+    can open it on the workbench: the selector is an analytic screen and
+    the chain is where its answer gets confirmed.  "Nearest": the registry
+    has one plan per topology for outphasing and the RF-DAC (WiFi 160 MHz),
+    and WiFi / NR at fixed bandwidths."""
+    b, req = rep.best, rep.req
+    if b is None:
+        return ""
+    if b.arch == "adpll_two_point":
+        if req.constant_envelope or req.modulation == "gfsk":
+            return "BLE LE-2M" if req.bw_hz > 1.5e6 else "BLE LE-1M"
+        if req.modulation == "dpsk":
+            return "BT EDR3 8DPSK"
+        return "LTE 20 MHz"
+    if b.arch == "outphasing":
+        return "WiFi 160 MHz (outphasing)"
+    if b.arch == "rfdac_cartesian":
+        return "WiFi 160 MHz (RF-DAC)"
+    std = req.standard.lower()
+    if "nr" in std or "5g" in std:
+        return "NR FR1 100 MHz" if req.bw_hz <= 100e6 else "NR FR2 200 MHz"
+    return ("WiFi 80 MHz" if req.bw_hz <= 80e6 else
+            "WiFi 160 MHz" if req.bw_hz <= 160e6 else "WiFi 320 MHz")
 
 
 def run_selector_report(bw_hz: float = 80e6, *, standard: str = "custom",
@@ -793,10 +921,7 @@ def run_selector_report(bw_hz: float = 80e6, *, standard: str = "custom",
     """Architecture selector: rank the four topologies (ADPLL two-point,
     open-loop DTC, outphasing, Cartesian RF-DAC) and chart the
     EVM-vs-bandwidth crossover around the requested point."""
-    import matplotlib
-    matplotlib.use("Agg")
-    import matplotlib.pyplot as plt
-
+    from .guispec import render_matplotlib
     from .selector import Requirement, select
 
     req = Requirement(standard=standard, bw_hz=bw_hz, modulation=modulation,
@@ -813,8 +938,7 @@ def run_selector_report(bw_hz: float = 80e6, *, standard: str = "custom",
     rows["closest preset"] = rep.suggest_preset()
 
     bws = np.logspace(6, np.log10(320e6), 40)
-    curves: dict[str, list] = {"adpll_two_point": [], "dtc_open_loop": [],
-                               "outphasing": [], "rfdac_cartesian": []}
+    curves: dict[str, list] = {a: [] for a in _ARCH_LABEL}
     for b in bws:
         r = select(Requirement(standard="s", bw_hz=b, modulation=modulation,
                                evm_db_max=evm_db_max, fout=fout,
@@ -823,25 +947,26 @@ def run_selector_report(bw_hz: float = 80e6, *, standard: str = "custom",
                                constant_envelope=constant_envelope))
         for c in r.candidates:
             curves[c.arch].append(c.evm_db if c.feasible else np.nan)
-
-    fig, ax = plt.subplots(figsize=(8, 4.6))
-    ax.semilogx(bws / 1e6, curves["adpll_two_point"], "-o", ms=3,
-                label="ADPLL two-point")
-    ax.semilogx(bws / 1e6, curves["dtc_open_loop"], "-^", ms=3,
-                label="open-loop DTC")
-    ax.semilogx(bws / 1e6, curves["outphasing"], "-s", ms=3,
-                label="outphasing (2 DTC branches)")
-    ax.semilogx(bws / 1e6, curves["rfdac_cartesian"], "-d", ms=3,
-                label="Cartesian RF-DAC")
-    ax.axvline(bw_hz / 1e6, color="k", ls=":", lw=1,
-               label=f"request {bw_hz/1e6:.0f} MHz")
-    ax.axhline(evm_db_max, color="r", ls="--", lw=1, label="EVM target")
-    ax.set(xlabel="signal bandwidth [MHz]", ylabel="estimated EVM [dB]",
-           title="architecture crossover (analytic)")
-    ax.grid(True, which="both", alpha=0.3)
-    ax.legend(fontsize=8)
-    fig.tight_layout()
-    return {"metrics": rows, "table": rep.table(), "fig": fig, "report": rep}
+    finite = [v for c in curves.values() for v in c if np.isfinite(v)]
+    ylo = min(finite + [evm_db_max]) - 2
+    yhi = max(finite + [evm_db_max]) + 2
+    series = [{"id": a, "label": _ARCH_LABEL[a][1], "label_zh": _ARCH_LABEL[a][0],
+               "style": "line", "color": i, "mpl": {"marker": "o", "ms": 3},
+               "x": bws / 1e6, "y": np.asarray(curves[a])}
+              for i, a in enumerate(_ARCH_LABEL)]
+    series += [{"id": "request", "style": "ref",
+                "label": f"request {bw_hz / 1e6:.0f} MHz",
+                "x": [bw_hz / 1e6] * 2, "y": [ylo, yhi]},
+               {"id": "target", "style": "mask", "label": "EVM target",
+                "x": [1.0, 320.0], "y": [evm_db_max] * 2}]
+    panel = {"id": "crossover", "title": "architecture crossover (analytic)",
+             "title_zh": "架构交叉（解析）", "xlabel": "signal bandwidth [MHz]",
+             "ylabel": "estimated EVM [dB]", "xlog": True, "grid": True,
+             "legend": True, "ylim": [ylo, yhi], "series": series}
+    plots = [panel]
+    return {"metrics": rows, "table": rep.table(), "plots": plots,
+            "fig": render_matplotlib(plots), "report": rep,
+            "workbench_preset": workbench_preset_for(rep)}
 
 
 def run_combiner_report(n_way: int = 2, *, backoff_db: float = 6.0,
@@ -851,12 +976,9 @@ def run_combiner_report(n_way: int = 2, *, backoff_db: float = 6.0,
                         phase_imbalance_deg: float = 0.0) -> dict:
     """Multi-core / Doherty combining: derived efficiency vs backoff and
     the AM-AM/AM-PM handoff distortion from core-to-core imbalance."""
-    import matplotlib
-    matplotlib.use("Agg")
-    import matplotlib.pyplot as plt
-
     from .dpa.characteristics import efficiency_curve
     from .dpa.combiner import DohertyCombiner
+    from .guispec import render_matplotlib
 
     gi = tuple([0.0] + [gain_imbalance_pct / 100.0] * (n_way - 1))
     pi_ = tuple([0.0] + [phase_imbalance_deg] * (n_way - 1))
@@ -892,28 +1014,37 @@ def run_combiner_report(n_way: int = 2, *, backoff_db: float = 6.0,
         "combining loss [dB]": round(c.combining_loss_db(), 2),
     }
 
-    fig, ax = plt.subplots(1, 2, figsize=(11, 4.2))
     bo = -20 * np.log10(x)
-    ax[0].plot(bo, 100 * eta_d, label=f"{n_way}-way Doherty (class-{peaking})")
-    ax[0].plot(bo, 100 * eta_s, "--", label="single-core SCPA")
-    ax[0].axvline(backoff_db, color="k", ls=":", lw=1, label="backoff point")
-    ax[0].set(xlabel="output backoff [dB]", ylabel="drain efficiency [%]",
-              title="load-modulated efficiency")
-    ax[0].set_xlim(18, 0)
-    ax[0].grid(True, alpha=0.3)
-    ax[0].legend(fontsize=8)
-
+    eff = {"id": "efficiency", "title": "load-modulated efficiency",
+           "title_zh": "负载调制效率", "xlabel": "output backoff [dB]",
+           "ylabel": "drain efficiency [%]", "xlim": [0, 18], "xinvert": True,
+           "grid": True, "legend": True,
+           "series": [{"id": "doherty", "style": "line", "color": 0,
+                       "label": f"{n_way}-way Doherty (class-{peaking})",
+                       "x": bo, "y": 100 * eta_d},
+                      {"id": "scpa", "style": "line", "color": 1,
+                       "label": "single-core SCPA", "mpl": {"ls": "--"},
+                       "x": bo, "y": 100 * eta_s},
+                      {"id": "bo", "style": "ref", "label": "backoff point",
+                       "x": [backoff_db] * 2,
+                       "y": [0.0, 100 * float(max(eta_d.max(), eta_s.max()))]}]}
     xs = np.clip(cur["x"], 1e-6, None)
-    ax[1].plot(cur["x"], 20 * np.log10(np.clip(cur["amam"], 1e-6, None) / xs),
-               label="AM-AM gain error [dB]")
-    ax[1].plot(cur["x"], np.rad2deg(cur["ampm_rad"]), label="AM-PM [deg]")
-    ax[1].axvline(10 ** (-backoff_db / 20), color="k", ls=":", lw=1,
-                  label="handoff")
-    ax[1].set(xlabel="input amplitude", title="core-imbalance distortion")
-    ax[1].grid(True, alpha=0.3)
-    ax[1].legend(fontsize=8)
-    fig.tight_layout()
-    return {"metrics": metrics, "fig": fig, "combiner": c}
+    amam = 20 * np.log10(np.clip(cur["amam"], 1e-6, None) / xs)
+    ampm = np.rad2deg(cur["ampm_rad"])
+    lo = float(min(amam.min(), ampm.min())) - 0.1
+    hi = float(max(amam.max(), ampm.max())) + 0.1
+    dist = {"id": "handoff", "title": "core-imbalance distortion",
+            "title_zh": "核间失配失真", "xlabel": "input amplitude", "grid": True,
+            "legend": True,
+            "series": [{"id": "amam", "style": "line", "color": 0,
+                        "label": "AM-AM gain error [dB]", "x": cur["x"], "y": amam},
+                       {"id": "ampm", "style": "line", "color": 1,
+                        "label": "AM-PM [deg]", "x": cur["x"], "y": ampm},
+                       {"id": "handoff", "style": "ref", "label": "handoff",
+                        "x": [10 ** (-backoff_db / 20)] * 2, "y": [lo, hi]}]}
+    plots = [eff, dist]
+    return {"metrics": metrics, "plots": plots, "fig": render_matplotlib(plots),
+            "combiner": c}
 
 
 def run_rtl_export(outdir: str, *, n_bits: int = 10, n_thermo: int = 7,
@@ -951,25 +1082,30 @@ def run_rtl_export(outdir: str, *, n_bits: int = 10, n_thermo: int = 7,
 def run_mc_report(n_chips: int = 30, *, bw: float = 160e6,
                   skew_sigma_ns: float = 0.5, calibrated: bool = False,
                   limit_db: float = -35.0) -> dict:
-    """Monte Carlo yield run rendered for the GUI: metrics, summary table
-    and histogram figure.  Runs headless (Agg), so both frontends and the
-    tests call the same function."""
-    import matplotlib
-    matplotlib.use("Agg")
-    import matplotlib.pyplot as plt
-
+    """Monte Carlo yield run rendered for the front ends: summary, the
+    histogram as plot data and as a figure.  Runs headless, so the page
+    and the tests call the same function."""
+    from .guispec import render_matplotlib
     from .montecarlo import run_mc, wifi_chip_builder
 
     mc = run_mc(wifi_chip_builder(bw=bw, n_symbols=3,
                                   skew_sigma_s=skew_sigma_ns * 1e-9,
                                   calibrated_skew=calibrated),
                 n_chips, limit=limit_db)
-    fig, ax = plt.subplots(figsize=(7, 4))
-    ax.hist(mc.values, bins=15, alpha=0.75)
-    ax.axvline(limit_db, color="r", ls="--", label=f"limit {limit_db} dB")
-    ax.set(xlabel="EVM [dB]", ylabel="chips",
-           title=f"yield {100 * mc.yield_frac:.0f}% "
-                 f"({'with' if calibrated else 'no'} skew cal)")
-    ax.legend()
-    fig.tight_layout()
-    return {"summary": mc.summary(), "fig": fig}
+    counts, edges = np.histogram(mc.values, bins=15)
+    centres = 0.5 * (edges[1:] + edges[:-1])
+    panel = {"id": "yield",
+             "title": f"yield {100 * mc.yield_frac:.0f}% "
+                      f"({'with' if calibrated else 'no'} skew cal)",
+             "title_zh": f"良率 {100 * mc.yield_frac:.0f}%"
+                         f"（{'有' if calibrated else '无'} skew 校准）",
+             "xlabel": "EVM [dB]", "ylabel": "chips",
+             "series": [{"id": "hist", "style": "bars", "x": centres,
+                         "y": counts.astype(float),
+                         "width": float(edges[1] - edges[0])},
+                        {"id": "limit", "style": "mask",
+                         "label": f"limit {limit_db} dB",
+                         "x": [limit_db] * 2, "y": [0.0, float(counts.max())]}]}
+    plots = [panel]
+    return {"summary": mc.summary(), "plots": plots,
+            "fig": render_matplotlib(plots, figsize=(7, 4))}

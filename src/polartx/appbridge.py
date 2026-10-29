@@ -86,7 +86,8 @@ def _png(fig: Any, dpi: int = 130) -> str:
     return base64.b64encode(buf.getvalue()).decode("ascii")
 
 
-def _report(r: dict, *, metrics_key: str = "metrics") -> dict:
+def _report(r: dict, *, metrics_key: str = "metrics",
+            describe: bool = False) -> dict:
     """Strip a guiutil report down to what can cross the bridge.
 
     guiutil returns live objects beside the numbers (``result``,
@@ -109,7 +110,7 @@ def _report(r: dict, *, metrics_key: str = "metrics") -> dict:
     for key in ("conventions", "warnings"):
         if key in r:
             out[key] = _clean(r[key])
-    if metrics_key == "metrics" and "plots" in r:
+    if describe:                     # chain reports: every key is described
         from .guispec import metric_info
         out["metric_info"] = {k: metric_info(k) for k in out[metrics_key]}
     return out
@@ -188,7 +189,7 @@ def _chain(preset: str = "BLE LE-1M", seed: int = 1, noise: bool = True,
         overrides.update(overrides_from_ui(preset, values))
     r = run_chain_report(preset, seed=int(seed), noise=bool(noise),
                          n_units=n_units, figure=bool(png), **overrides)
-    return _report(r)
+    return _report(r, describe=True)
 
 
 def _sweep(preset: str, knob: str, values: dict | None = None,
@@ -212,6 +213,32 @@ def _compare(values: dict | None = None, seed: int = 1, noise: bool = True,
                     seed=int(seed), noise=bool(noise))
     r["plots"] = compact_plots(r["plots"])
     return _clean(r)
+
+
+def _calibrate(kind: str, skew_ns: float = 2.0, method: str = "waveform align",
+               gain_err_pct: float = 3.0, iterations: int = 2) -> dict:
+    """The three calibration demos: inject an impairment, estimate it back
+    (and correct it).  ``kind`` is ``"skew"``, ``"twopoint"`` or ``"dtc"``."""
+    from .guiutil import run_dtc_cal, run_skew_cal, run_twopoint_cal
+    if kind == "skew":
+        return _clean(run_skew_cal(float(skew_ns), method=str(method)))
+    if kind == "twopoint":
+        return _clean(run_twopoint_cal(float(gain_err_pct)))
+    if kind == "dtc":
+        return _clean(run_dtc_cal(int(iterations)))
+    raise ValueError(f"unknown calibration {kind!r}; "
+                     "expected 'skew', 'twopoint' or 'dtc'")
+
+
+def _measured(path: str | None = None) -> dict:
+    """Slow-state memory from a complete measured source (ex21).  With no
+    ``path`` it records the virtual self-heating DUT first, which is what a
+    phone does: there is no capture on a phone to point at."""
+    from .guiutil import run_measured_report
+    r = run_measured_report(path or None)
+    out = _report(r)
+    out["conventions"] = _clean(r["conventions"])
+    return out
 
 
 def _fir(bw: float = 40e6, notch_offset_hz: float = 500e6,
@@ -247,12 +274,13 @@ def _selector(bw_hz: float = 80e6, standard: str = "custom",
               fout: float = 5.8e9, dtc_bits: int = 11,
               two_point_gain_match: float = 2e-3,
               constant_envelope: bool = False) -> dict:
-    """Score both architectures against a requirement (analytic screen).
+    """Rank the four topologies against a requirement (analytic screen).
 
-    Returns the verdict, the per-contributor breakdown table and the
-    EVM-vs-bandwidth figure.  This is a screen, not a simulation: it says
-    which architecture to reach for first, and ``chain`` is how you confirm
-    it.
+    Returns the verdict, the per-contributor breakdown table, the
+    EVM-vs-bandwidth crossover and ``workbench_preset``, the registry
+    preset nearest the recommendation.  This is a screen, not a
+    simulation: it says which architecture to reach for first, and the
+    page opens that preset on the workbench to confirm it.
     """
     from .guiutil import run_selector_report
     r = run_selector_report(
@@ -261,7 +289,9 @@ def _selector(bw_hz: float = 80e6, standard: str = "custom",
         dtc_bits=int(dtc_bits),
         two_point_gain_match=float(two_point_gain_match),
         constant_envelope=bool(constant_envelope))
-    return _report(r)
+    out = _report(r)
+    out["workbench_preset"] = r["workbench_preset"]
+    return out
 
 
 def _combiner(n_way: int = 2, backoff_db: float = 6.0,
@@ -308,6 +338,8 @@ _METHODS: dict[str, Callable[..., Any]] = {
     "chain": _chain,
     "sweep": _sweep,
     "compare": _compare,
+    "calibrate": _calibrate,
+    "measured": _measured,
     "fir": _fir,
     "selector": _selector,
     "combiner": _combiner,

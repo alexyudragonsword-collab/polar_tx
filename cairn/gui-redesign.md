@@ -5,7 +5,7 @@ summary: "GUI 改版：三端各写一份表单 + 批处理交互换成一份界
 tags: [polartx, gui, 前端, android, streamlit, pyside6]
 contains: [decision, lesson, pitfall, experience]
 created: "2026-10-28"
-updated: "2026-10-29（P3 基线/扫描/历史/对比）"
+updated: "2026-10-29（P4a 其余页面迁入）"
 related: [android-app.md]
 authoring_mode: ai_generated
 ---
@@ -124,6 +124,27 @@ break-check：生成的控件不触发重算 → harness 红；控件不用规�
 
 **迁移期规矩**：新交互（基线、扫描、历史、对比）只做在新页面里；Streamlit 与 Qt 在 P4
 退役，不再为它们补这些功能。
+
+## P4a：其余页面迁入，旧标签改画图数据
+
+**页面分组**：设计（工作台、拓扑对比、选型）、验证（校准、实测数据、合路与陷波）、量产与
+交付（良率、RTL 导出）。FIR 陷波并入"合路与陷波"。旧的 FIR / 合路 / 选型 / 良率报告也改为
+返回图数据（PNG 由它画出，测试逐线比对），页面在 canvas 上画；`charts.js` 为此加了对数横轴、
+反向横轴（回退轴从右往左读）、分类刻度和柱状图。
+
+**效率进工作台**：调制平均效率与平均回退成为每次运行的指标（ex10 的结论落到最常看的地方），
+CFR 的效率–EVM 取舍直接用"扫描 CFR、看效率"得到，不需要单独的页。BLE 恒包络 85 %、无回退；
+WiFi 160 约 43 %、回退 8.9 dB；RF-DAC 约 28 %。
+
+**选型 → 工作台**：选型报告带 `workbench_preset`（最近的注册预设），页面给"在工作台打开"。
+
+**桌面专属方法**：RTL 导出只在电脑上有意义，由 `webhost.DESKTOP_METHODS` 提供，页面在没有
+注入 `window.host` 时才显示该标签；parity 测试把桌面方法纳入双向检查，jsdom harness 断言
+手机宿主下该标签隐藏。
+
+**坑：搬卡片时把 FIR 表单嵌进了 `cb-out`**。拼接 HTML 时找错了闭合标签，FIR 的整张表单落进
+合路结果的输出容器里——第一次跑合路就把 FIR 控件冲掉。静态检查全过（id 都在），是 jsdom harness
+的"跑完后控件还在吗"那一条抓到的；修完后加了一次全页标签平衡检查。
 
 ## 本地环境（pitfall）
 

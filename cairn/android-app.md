@@ -197,11 +197,12 @@ APK 都必须含这四个页面文件的检查；`test_android_parity.py` 卡住
 
 | 手机上没有 | 为什么 |
 |---|---|
-| RTL / AMS 导出 | 输出是 Verilog 目录，验证要 shell 调 `iverilog`；两样在手机上都没有意义 |
+| RTL / AMS 导出 | 输出是 Verilog 目录，验证要 shell 调 `iverilog`；两样在手机上都没有意义。2026-10-29 起由桌面宿主提供（`webhost.DESKTOP_METHODS`），同一页面在手机上隐藏这个标签 |
+| 实测数据的文件路径 | 手机上无文件可指；实测页在手机上只跑合成虚拟 DUT |
 | `run_mc_parallel` | 报告层走串行 `run_mc`；`ProcessPoolExecutor` 不该在 Android 下 fork |
 
-页面五个标签覆盖 bridge 全部 7 个方法，双向由 `tests/test_android_parity.py`
-卡死。
+校准与实测数据（2026-10-29 前只在两个桌面 GUI 里）现在手机上也有。页面与 bridge
+（含桌面专属方法）的双向对齐由 `tests/test_android_parity.py` 卡死。
 
 ## 开放问题
 
