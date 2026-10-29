@@ -52,6 +52,8 @@ dev = ["ruff==0.15.8", "mypy==1.19.1"]
 
 [project.scripts]
 polartx-gui = "polartx.guiqt.app:main"
+# the one page (webui/www) on a local server, opened in the browser
+polartx-web = "polartx.webhost:main"
 
 [project.urls]
 Repository = "https://github.com/alexyudragonsword-collab/polar_tx"
@@ -65,7 +67,8 @@ where = ["src"]
 # exporting because CI type-checks them (CONTRIBUTING.md 8.1) -- a py.typed
 # marker on unchecked annotations exports someone else's problem.
 [tool.setuptools.package-data]
-polartx = ["py.typed"]
+# webui/www: the one page every front end shows (phone assets, local server)
+polartx = ["py.typed", "webui/www/*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

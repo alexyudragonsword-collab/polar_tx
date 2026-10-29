@@ -2,6 +2,15 @@
 
 本文件按倒序记录实质性进展——最新的一条在这行下面。每条保持简短，只写摘要和指针；结论沉淀进 `cairn/<topic>.md`。
 
+## 2026-10-29 · GUI 改版 P2：一个页面三个宿主，新工作台
+
+- 页面移入 `src/polartx/webui/www`；APK 经 Gradle assets 源目录取同一份，桌面/浏览器用 `polartx-web`
+  （标准库本地服务）。工作台：规格生成控件、改参数即重算（合并请求）、canvas 画报告数据、口径与告警常驻。
+- `tests/test_webui.py` 真 Chromium 对真 bridge（CI 跳过即失败）；jsdom harness 改为加载全部脚本。
+  两处 break-check 均红。
+- 编译版 APK：本机 Cython 编译 `presets` 后 62 个旋钮默认值与纯 Python 一致。
+- 测试 331 → 339。详见 `cairn/gui-redesign.md` P2 节、`cairn/android-app.md`。
+
 ## 2026-10-28 · GUI 改版 P1：界面规格层 guispec
 
 - 旋钮规格（默认值读签名）、指标描述、图数据（PNG 由它画出）、运行告警与计算口径都进报告；桥按旋钮 id 收值、

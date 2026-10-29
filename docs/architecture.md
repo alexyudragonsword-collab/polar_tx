@@ -83,7 +83,9 @@ src/polartx/
 ├── guiutil.py        ★ 三个前端共用的全部计算（可脱离前端测试）
 ├── guispec.py        前端契约：每个预设的旋钮（默认值读自预设函数签名）、指标含义、
 │                     图数据格式与 matplotlib 渲染；只描述，不算物理
-├── appbridge.py      Android 的单函数 JSON 桥（薄封装；见 docs/android.md）
+├── appbridge.py      页面的单函数 JSON 桥（薄封装；手机经 JavascriptInterface，桌面经 webhost）
+├── webhost.py        桌面/浏览器宿主：标准库本地服务，GET 页面、POST /call 转 appbridge（`polartx-web`）
+├── webui/www/        **唯一的页面**：index.html · app.js · charts.js · style.css；APK 把它当 assets
 ├── guiqt/            PySide6 桌面 GUI
 │   ├── app.py        主窗口与入口（`polartx-gui`）
 │   ├── pages.py      各功能页；计算一律经 guiutil，页面里不放物理
@@ -207,7 +209,7 @@ sibling checkout 因此钉 `08b9725`，`44cbcb3` 是它的祖先，靠 `fetch-de
 | 新指标键 | `guiutil.run_chain_report` | 在 `guispec._METRICS` 写标签、单位与好坏方向，否则 `test_every_reported_metric_is_described` 红 |
 | 新 GUI 页面 | `guiutil.py` 放计算 | **两个桌面/网页前端都要接**，两边都要有测试 |
 | 新发射机拓扑 | 兄弟类包住 `PolarTX`（照 `fir.py` / `outphasing.py`），自带结果类并提供同名指标方法 `evm/aclr/psd/check_mask/avg_efficiency` + `evm_equalize_default`，预设带 `.tx` 别名进 `guiutil.PRESETS` | **不在 `ChainConfig` 加开关、不改 `chain.py`**；理想链下 EVM 必须与极坐标理想链一致（有测试挡），不适用的 `ChainConfig` 字段在 docstring 里列明，且被设成非默认值时要**告警**而不是静默忽略（照 `cartesian.py` 的 `ignored_chain_settings` 与 `outphasing.py` 的 `OUTPHASING_IGNORED_FIELDS`，有测试挡） |
-| Android 能力 | `appbridge.py` 加方法 + `app.js` 加 render | 必须**同一次改动**里配对，`test_android_parity.py` 双向卡死 |
+| 页面能力（手机/桌面/浏览器同一页） | `appbridge.py` 加方法 + `webui/www/app.js` 加 render | 必须**同一次改动**里配对，`test_android_parity.py` 双向卡死；`test_webui.py` 在真 Chromium 里对真 bridge 驱动 |
 
 ## 7. 已知边界
 

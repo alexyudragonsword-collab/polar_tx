@@ -34,14 +34,17 @@ Waveform → [CFR] → polar split → 包络路径（量化/skew/DPA 幅度码�
 
 ```bash
 pip install -e .          # numpy / scipy / matplotlib
-pytest tests/             # 331 个测试函数（参数化后实收更多）：物理量断言 + 与 padpd 逐位回归
+pytest tests/             # 339 个测试函数（参数化后实收更多）：物理量断言 + 与 padpd 逐位回归
 python examples/ex01_ble_gfsk_adpll.py      # 图落在 examples/out/
 
-pip install -e .[gui]     # Streamlit 网页工作台
+polartx-web               # 新工作台：本地服务 + 浏览器，与 Android 是同一个页面
+                          # （改参数即重算；只依赖标准库，无需额外 extra）
+
+pip install -e .[gui]     # Streamlit 网页工作台（改版后将退役）
 streamlit run gui/Home.py
 
 pip install -e .[guiqt]   # PySide6 原生桌面版
-polartx-gui               # 或 python -m polartx.guiqt
+polartx-gui               # 或 python -m polartx.guiqt（改版后将换成新工作台）
 ```
 
 **Android APK**：`android/` 用 Chaquopy 把真的 CPython + numpy/scipy/matplotlib 装进 APK，UI 是 WebView，计算全在本地，**零权限**。手动触发的 *Android APK* workflow 一次产出**两个** APK——解释版，以及把模块 Cython 编译成 `.so` 的编译版（上一次真机构建实测 42/101，

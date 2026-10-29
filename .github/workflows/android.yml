@@ -145,6 +145,17 @@ jobs:
       # failure is the second reusing the first's pip output and the
       # "compiled" APK being the interpreted one renamed.  Nothing in the
       # build log would say so — look inside instead.
+      # The page is not in android/ any more: Gradle reads it from the
+      # Python package (src/polartx/webui).  An APK without it installs and
+      # opens on a blank WebView, so look for it in both.
+      - name: Both APKs carry the page
+        run: |
+          for apk in out/polartx-interpreted-debug.apk out/polartx-compiled-debug.apk; do
+            for f in index.html app.js charts.js style.css; do
+              unzip -l "$apk" | grep -q "assets/www/$f" || { echo "::error::$apk lacks assets/www/$f"; exit 1; }
+            done
+            echo "$apk: page present"
+          done
       - name: Prove the two APKs actually differ
         run: |
           set -o pipefail

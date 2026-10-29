@@ -18,12 +18,12 @@ const fs = require("fs");
 const path = require("path");
 const { JSDOM, VirtualConsole } = require("jsdom");
 
-const WWW = path.resolve(__dirname, "../android/app/src/main/assets/www");
+// the page lives in the Python package; the APK takes it as its assets
+const WWW = path.resolve(__dirname, "../src/polartx/webui/www");
 
 /* What the buttons are expected to send, and which argument proves the
  * form was actually read rather than defaulted away. */
 const BUTTONS = [
-  { id: "run-chain", method: "chain", key: "preset" },
   { id: "run-fir", method: "fir", key: "bw" },
   { id: "run-combiner", method: "combiner", key: "n_way" },
   { id: "run-selector", method: "selector", key: "bw_hz" },
@@ -41,8 +41,22 @@ function makeHost(win, calls) {
           ? { lib: "0.0.0-test", python: "3.10.0", numpy: "1.26.0" }
           : method === "list_presets"
             ? { presets: ["BLE LE-1M", "WiFi 160 MHz"],
-                benchmarks: ["Bench: Degani'24 WiFi7"] }
-            : { metrics: { "EVM [dB]": "-40.0", mask: "PASS" }, png: "" };
+                benchmarks: ["Bench: Degani'24 WiFi7"],
+                default: "WiFi 160 MHz",
+                groups: { envelope: ["包络通路", "envelope path"] },
+                specs: { "WiFi 160 MHz": [{
+                  id: "skew_ns", kw: "env_skew_s", kind: "float",
+                  zh: "AM/PM skew", en: "AM/PM skew", unit: "ns",
+                  group: "envelope", lo: -4, hi: 4, step: 0.05, default: 0,
+                  allow_off: false, choices: [], help_zh: "", help_en: "" }] } }
+            : { metrics: { "EVM [dB]": -40.0, mask: "PASS" }, png: "",
+                metric_info: {
+                  "EVM [dB]": { zh: "EVM", en: "EVM", unit: "dB", kind: "number" },
+                  mask: { zh: "频谱 mask", en: "mask", unit: "", kind: "verdict" } },
+                plots: [{ id: "spectrum", title: "s", series: [
+                  { style: "trace", x: [0, 1], y: [0, -1] }] }],
+                conventions: [{ id: "mask", zh: "mask", en: "mask" }],
+                warnings: [] };
       // the real bridge replies asynchronously, off the binder thread
       setTimeout(
         () => win.onHostReply(id, JSON.stringify({ ok: true, result })), 0);
@@ -56,7 +70,12 @@ async function main() {
   const failures = [];
   const virtualConsole = new VirtualConsole();
   const pageErrors = [];
-  virtualConsole.on("jsdomError", e => pageErrors.push(e.message));
+  // jsdom has no canvas; the chart code checks for a context and draws
+  // nothing, which is right — the harness is about wiring, not pixels
+  virtualConsole.on("jsdomError", e => {
+    if (!/HTMLCanvasElement.*getContext/.test(e.message))
+      pageErrors.push(e.message);
+  });
 
   const dom = new JSDOM(fs.readFileSync(path.join(WWW, "index.html"), "utf8"), {
     runScripts: "outside-only",
@@ -70,7 +89,11 @@ async function main() {
   // silent, so record rather than ignore
   win.addEventListener("error", e => pageErrors.push(String(e.error || e.message)));
 
-  win.eval(fs.readFileSync(path.join(WWW, "app.js"), "utf8"));
+  // every script the page loads, in the page's own order
+  const html = fs.readFileSync(path.join(WWW, "index.html"), "utf8");
+  for (const m of html.matchAll(/<script src="([^"]+)"/g)) {
+    win.eval(fs.readFileSync(path.join(WWW, m[1]), "utf8"));
+  }
   await sleep(60);                                   // let boot() settle
 
   const doc = win.document;
@@ -82,7 +105,7 @@ async function main() {
   }
 
   /* The regression that shipped: controls must survive applyLang(). */
-  const controls = ["ch-preset", "ch-seed", "ch-skew", "ch-noise",
+  const controls = ["bench-preset", "bench-seed", "bench-noise", "knob-skew_ns",
                     "fir-bw", "fir-notch", "fir-syms", "fir-osr",
                     "cb-nway", "cb-peaking", "cb-backoff", "cb-loss",
                     "sel-bw", "sel-evm", "sel-fout", "sel-bits",
@@ -92,9 +115,32 @@ async function main() {
     failures.push(`controls destroyed after boot: ${gone.join(", ")}`);
   }
 
-  const sel = doc.getElementById("ch-preset");
+  const sel = doc.getElementById("bench-preset");
   if (sel && sel.options.length === 0) {
     failures.push("the preset select is present but empty — boot's options were lost");
+  }
+
+  /* The workbench has no Run button: it runs on boot and on every change.
+   * A control generated from the spec must reach the bridge by its id. */
+  await sleep(350);                                  // past the debounce
+  if (!calls.some(c => c.method === "chain")) {
+    failures.push("the workbench never ran the chain after boot");
+  }
+  const knob = doc.getElementById("knob-skew_ns");
+  if (knob) {
+    const before = calls.length;
+    knob.value = "0.3";
+    knob.dispatchEvent(new win.Event("input", { bubbles: true }));
+    await sleep(400);
+    const sent = calls.slice(before).filter(c => c.method === "chain");
+    if (!sent.length) {
+      failures.push("moving a generated control sent no chain call");
+    } else if (!sent[0].args.values || sent[0].args.values.skew_ns !== 0.3) {
+      failures.push(`the generated control sent values=${JSON.stringify(sent[0].args.values)}`);
+    }
+  }
+  if (!doc.querySelector("#bench-cards .mcard")) {
+    failures.push("the workbench rendered no metric cards");
   }
 
   /* Every Run button must reach the bridge. */

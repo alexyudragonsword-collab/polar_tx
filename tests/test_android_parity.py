@@ -13,11 +13,14 @@ import pytest
 
 from polartx import appbridge
 
-WWW = Path(__file__).resolve().parents[1] / "android/app/src/main/assets/www"
+ROOT = Path(__file__).resolve().parents[1]
+# the page lives in the Python package so the desktop host can serve it;
+# the APK takes the same files as its assets (android/app/build.gradle.kts)
+WWW = ROOT / "src/polartx/webui/www"
 APP_JS = WWW / "app.js"
 INDEX = WWW / "index.html"
 CSS = WWW / "style.css"
-MANIFEST = WWW.parents[1] / "AndroidManifest.xml"
+MANIFEST = ROOT / "android/app/src/main/AndroidManifest.xml"
 
 
 def read(path: Path) -> str:
@@ -72,7 +75,7 @@ def test_every_element_app_js_drives_exists_in_the_page():
 def test_every_tab_button_has_a_panel_and_vice_versa():
     html = read(INDEX)
     tabs = set(re.findall(r'<button data-tab="([a-z]+)"', html))
-    panels = set(re.findall(r'<div id="tab-([a-z]+)"', html))
+    panels = set(re.findall(r'<(?:div|section) id="tab-([a-z]+)"', html))
     assert tabs == panels, f"tabs {tabs} but panels {panels}"
     assert tabs, "no tabs at all — the regex stopped matching"
 
@@ -187,3 +190,22 @@ def test_no_translatable_element_wraps_a_control():
     assert not scan.bad, (
         "a data-zh element wraps another element; applyLang() will delete it:\n  "
         + "\n  ".join(scan.bad))
+
+
+def test_the_apk_takes_its_assets_from_the_package_page():
+    """One page for every host only holds if the APK really reads the
+    package copy; a stale android/.../assets/www would quietly win."""
+    gradle = read(ROOT / "android/app/build.gradle.kts")
+    assert 'assets.setSrcDirs(listOf("../../src/polartx/webui"))' in gradle
+    assert not (ROOT / "android/app/src/main/assets/www").exists()
+    kt = read(ROOT / "android/app/src/main/java/com/polartx/app/MainActivity.kt")
+    assert "file:///android_asset/www/index.html" in kt
+    assert (WWW / "index.html").is_file()
+
+
+def test_every_script_the_page_loads_exists():
+    html = read(INDEX)
+    scripts = re.findall(r'<script src="([^"]+)"', html)
+    assert "app.js" in scripts and scripts.index("charts.js") < scripts.index("app.js")
+    for src in scripts:
+        assert (WWW / src).is_file(), src

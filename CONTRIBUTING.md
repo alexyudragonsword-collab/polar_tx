@@ -94,9 +94,11 @@ push 都跑：
 
 ## 4. 前端不能落后于库 / All surfaces, or none
 
-这个工程有**三个**前端：Streamlit 网页版（`gui/`）、PySide6 桌面版
-（`src/polartx/guiqt/`）和 Android WebView 版（`android/`，经
-`src/polartx/appbridge.py`）。计算全部住在 `src/polartx/guiutil.py`，可以脱离
+这个工程现在有**三个**前端：Streamlit 网页版（`gui/`）、PySide6 桌面版
+（`src/polartx/guiqt/`），以及**一个页面三个宿主**的新工作台——页面在
+`src/polartx/webui/www/`，手机（`android/`，Chaquopy + WebView）把它当 assets，
+桌面与浏览器由 `polartx-web`（`polartx.webhost`）提供，两者都经
+`src/polartx/appbridge.py`。改版完成后前两个退役（`cairn/gui-redesign.md`）。计算全部住在 `src/polartx/guiutil.py`，可以脱离
 三个前端单独测试——**新功能先落在 `guiutil`，再由各前端接线**。
 
 规矩：

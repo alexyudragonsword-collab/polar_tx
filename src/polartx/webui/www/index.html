@@ -8,10 +8,17 @@
       content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>polartx</title>
 <link rel="stylesheet" href="style.css">
+<link rel="icon" href="data:,">
 </head>
 <body>
-<header>
-  <h1>polartx <span id="version"></span></h1>
+<!-- One page, three hosts: the Android WebView (assets), the desktop and
+     the browser (polartx.webhost).  All computation is behind call(); see
+     app.js. -->
+<header id="top">
+  <button id="nav-toggle" class="icon" aria-label="pages / 页面"
+          aria-controls="nav" aria-expanded="false">&#9776;</button>
+  <span class="brand">polartx</span>
+  <span id="version"></span>
   <button id="lang" class="ghost">EN</button>
 </header>
 
@@ -22,46 +29,56 @@
   <p class="error" id="boot-error" hidden></p>
 </div>
 
-<main id="app" hidden>
-<nav id="tabs">
-  <button data-tab="chain" class="active" data-zh="链路" data-en="Chain">链路</button>
-  <button data-tab="fir" data-zh="FIR 陷波" data-en="FIR">FIR 陷波</button>
+<div id="app" hidden>
+<nav id="nav" aria-label="pages">
+  <button data-tab="bench" class="active" data-zh="工作台" data-en="Workbench">工作台</button>
+  <button data-tab="fir" data-zh="FIR 陷波" data-en="FIR notch">FIR 陷波</button>
   <button data-tab="combiner" data-zh="合路" data-en="Doherty">合路</button>
-  <button data-tab="selector" data-zh="选型" data-en="Select">选型</button>
+  <button data-tab="selector" data-zh="选型" data-en="Selector">选型</button>
   <button data-tab="mc" data-zh="良率" data-en="Yield">良率</button>
 </nav>
+<main>
 
-<!-- ------------------------------------------------------------ chain -->
-<div id="tab-chain" class="tab">
-  <section class="card">
-    <h2 data-zh="端到端链路" data-en="End-to-end chain">端到端链路</h2>
-    <label><span data-zh="预设" data-en="Preset">预设</span>
-      <select id="ch-preset"></select>
-    </label>
-    <div class="grid2">
-      <label><span data-zh="随机种子" data-en="Seed">随机种子</span>
-        <input id="ch-seed" type="number" value="1" step="1">
+<!-- --------------------------------------------------------- workbench -->
+<section id="tab-bench" class="tab bench">
+  <div class="bench-knobs" id="bench-knobs">
+    <button id="bench-sheet" class="sheet-handle" aria-expanded="true">
+      <span data-zh="参数" data-en="Controls">参数</span></button>
+    <div class="knob-body">
+      <label class="field"><span data-zh="预设" data-en="Preset">预设</span>
+        <select id="bench-preset"></select>
       </label>
-      <label><span data-zh="AM/PM skew [ns]" data-en="AM/PM skew [ns]">AM/PM skew [ns]</span>
-        <input id="ch-skew" type="number" value="0" step="0.1">
-      </label>
+      <div class="row2">
+        <label class="field"><span data-zh="随机种子" data-en="Seed">随机种子</span>
+          <input id="bench-seed" type="number" value="1" step="1" min="0">
+        </label>
+        <label class="check">
+          <input id="bench-noise" type="checkbox" checked>
+          <span data-zh="随机噪声" data-en="random noise">随机噪声</span>
+        </label>
+      </div>
+      <div id="bench-form"></div>
+      <button id="bench-reset" class="ghost small"
+              data-zh="全部恢复默认" data-en="Reset all to defaults">全部恢复默认</button>
     </div>
-    <label>
-      <input id="ch-noise" type="checkbox" checked>
-      <span data-zh="含随机噪声（关掉只看数据通路）"
-            data-en="random noise on (off isolates the datapath)">含随机噪声（关掉只看数据通路）</span>
-    </label>
-    <p class="muted"
-       data-zh="skew 是极坐标架构最尖锐的损伤：WiFi 160 MHz 在 0.2 ns 就掉 mask，LTE-20 在 1 ns，恒包络 BLE 免疫。"
-       data-en="Skew is this architecture's sharpest impairment: WiFi 160 MHz fails its mask at 0.2 ns, LTE-20 at 1 ns, constant-envelope BLE is immune.">
-       skew 是极坐标架构最尖锐的损伤：WiFi 160 MHz 在 0.2 ns 就掉 mask，LTE-20 在 1 ns，恒包络 BLE 免疫。</p>
-    <button id="run-chain" class="primary" data-zh="运行" data-en="Run">运行</button>
-  </section>
-  <section class="card" id="ch-out"></section>
-</div>
+  </div>
+  <div class="bench-plots">
+    <div id="bench-plot-tabs" class="seg" role="tablist"></div>
+    <div class="chart">
+      <canvas id="bench-canvas"></canvas>
+      <div id="bench-readout" class="readout"></div>
+    </div>
+    <p id="bench-status" class="muted status"></p>
+  </div>
+  <div class="bench-side">
+    <div id="bench-notes"></div>
+    <div id="bench-cards" class="cards"></div>
+    <div id="bench-conv" class="conv"></div>
+  </div>
+</section>
 
 <!-- -------------------------------------------------------------- fir -->
-<div id="tab-fir" class="tab" hidden>
+<section id="tab-fir" class="tab form-tab" hidden>
   <section class="card">
     <h2 data-zh="双抽头 FIR 陷波（RFIC'26 MLO）"
         data-en="Dual-tap FIR notch (RFIC'26 MLO)">双抽头 FIR 陷波（RFIC'26 MLO）</h2>
@@ -86,10 +103,10 @@
     <button id="run-fir" class="primary" data-zh="运行" data-en="Run">运行</button>
   </section>
   <section class="card" id="fir-out"></section>
-</div>
+</section>
 
 <!-- --------------------------------------------------------- combiner -->
-<div id="tab-combiner" class="tab" hidden>
+<section id="tab-combiner" class="tab form-tab" hidden>
   <section class="card">
     <h2 data-zh="多核 / Doherty 合路" data-en="Multi-core / Doherty combining">多核 / Doherty 合路</h2>
     <div class="grid2">
@@ -125,10 +142,10 @@
     <button id="run-combiner" class="primary" data-zh="运行" data-en="Run">运行</button>
   </section>
   <section class="card" id="cb-out"></section>
-</div>
+</section>
 
 <!-- --------------------------------------------------------- selector -->
-<div id="tab-selector" class="tab" hidden>
+<section id="tab-selector" class="tab form-tab" hidden>
   <section class="card">
     <h2 data-zh="架构选择器" data-en="Architecture selector">架构选择器</h2>
     <div class="grid2">
@@ -156,10 +173,10 @@
     <button id="run-selector" class="primary" data-zh="运行" data-en="Run">运行</button>
   </section>
   <section class="card" id="sel-out"></section>
-</div>
+</section>
 
 <!-- --------------------------------------------------------------- mc -->
-<div id="tab-mc" class="tab" hidden>
+<section id="tab-mc" class="tab form-tab" hidden>
   <section class="card">
     <h2 data-zh="蒙特卡洛良率" data-en="Monte Carlo yield">蒙特卡洛良率</h2>
     <div class="grid2">
@@ -187,14 +204,16 @@
     <button id="run-mc" class="primary" data-zh="运行" data-en="Run">运行</button>
   </section>
   <section class="card" id="mc-out"></section>
-</div>
+</section>
 </main>
+</div>
 
 <div id="busy" hidden>
   <div class="spinner"></div>
   <p id="busy-text"></p>
 </div>
 
+<script src="charts.js"></script>
 <script src="app.js"></script>
 </body>
 </html>
