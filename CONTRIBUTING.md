@@ -98,7 +98,8 @@ push 都跑：
 （`src/polartx/guiqt/`），以及**一个页面三个宿主**的新工作台——页面在
 `src/polartx/webui/www/`，手机（`android/`，Chaquopy + WebView）把它当 assets，
 桌面与浏览器由 `polartx-web`（`polartx.webhost`）提供，两者都经
-`src/polartx/appbridge.py`。改版完成后前两个退役（`cairn/gui-redesign.md`）。计算全部住在 `src/polartx/guiutil.py`，可以脱离
+`src/polartx/appbridge.py`。改版完成后前两个退役（`cairn/gui-redesign.md`）；迁移期间新交互（基线、扫描、
+历史、拓扑对比）只做在新页面里，不再给前两个补。计算全部住在 `src/polartx/guiutil.py`，可以脱离
 三个前端单独测试——**新功能先落在 `guiutil`，再由各前端接线**。
 
 规矩：

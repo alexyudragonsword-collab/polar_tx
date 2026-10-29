@@ -33,6 +33,9 @@ def test_every_method_round_trips_as_json():
     returns a numpy scalar or a bare NaN would have raised there."""
     cheap = {"version": {}, "list_presets": {},
              "chain": {"preset": "BLE LE-1M"},
+             "sweep": {"preset": "BLE LE-1M", "knob": "dp_err_pct",
+                       "points": [0.0, 2.0]},
+             "compare": {},
              "fir": {"n_symbols": 2},
              "selector": {}, "combiner": {},
              "montecarlo": {"n_chips": 3}}
@@ -220,3 +223,18 @@ def test_chain_takes_knob_ids_and_returns_drawable_data():
     # a run-time warning arrives with the result
     ev = _ok("chain", preset="LTE 20 MHz", values={"mode": "event"}, png=False)
     assert any("validity domain" in w for w in ev["warnings"])
+
+
+def test_sweep_and_compare_cross_the_bridge():
+    sw = _ok("sweep", preset="WiFi 160 MHz", knob="skew_ns",
+             points=[0.0, 0.3])
+    assert sw["x"] == [0.0, 0.3] and sw["knob"]["unit"] == "ns"
+    evm = sw["metrics"]["EVM [dB]"]
+    assert evm[1] > evm[0] + 10.0                  # the skew bites
+    assert sw["metrics"]["mask"] == ["PASS", "FAIL"]
+    bad = _err("sweep", preset="WiFi 160 MHz (RF-DAC)", knob="skew_ns")
+    assert "offers no control" in bad["error"]
+    cmp = _ok("compare", values={"dtc_bits": 9})
+    assert len(cmp["names"]) == 3 and set(cmp["metrics"]) == set(cmp["names"])
+    assert set(cmp["keys"]) == set(cmp["metric_info"])
+    assert len(cmp["plots"][0]["series"]) == 4                 # 3 spectra + mask

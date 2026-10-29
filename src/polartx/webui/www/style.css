@@ -5,7 +5,7 @@
 :root {
   --bg: #f2f4f5; --surface: #ffffff; --sunken: #e8edef;
   --ink: #15222b; --muted: #586974; --line: #d4dde1;
-  --accent: #0a6b86; --base: #a76d12;
+  --accent: #0a6b86; --base: #a76d12; --c3: #6b4fb3; --c4: #3d7d2a;
   --pass: #1d7440; --fail: #b02a20; --warn: #8a5a00;
   --mono: ui-monospace, "SFMono-Regular", Menlo, Consolas, "Roboto Mono", monospace;
   color-scheme: light;
@@ -14,7 +14,7 @@
   :root {
     --bg: #0e161b; --surface: #15212a; --sunken: #1b2a34;
     --ink: #e2eaee; --muted: #93a5b0; --line: #2a3a45;
-    --accent: #53c4e3; --base: #e2a64b;
+    --accent: #53c4e3; --base: #e2a64b; --c3: #b39cf0; --c4: #8fd16f;
     --pass: #4fc07c; --fail: #ff7365; --warn: #e6b450;
     color-scheme: dark;
   }
@@ -99,7 +99,26 @@ main { min-width: 0; padding: .8em; }
 .readout { position: absolute; right: 12px; top: 10px; font: .74em/1.3 var(--mono);
   color: var(--muted); background: var(--surface); padding: 1px 5px; border-radius: 4px;
   pointer-events: none; }
-.status { min-height: 1.3em; }
+.status { min-height: 1.3em; flex: 1; }
+.bench-tools { display: flex; align-items: center; gap: .5em; flex-wrap: wrap; margin-top: .45em; }
+.bench-tools button.small { margin-top: 0; }
+.bench-tools select { font-size: .8em; padding: .2em; border-radius: 6px; border: 1px solid var(--line);
+  background: var(--surface); }
+.history { display: flex; gap: 6px; flex-wrap: wrap; margin-top: .45em; }
+.history button { font: .72em/1.3 var(--mono); border-radius: 99px; padding: .25em .7em;
+  background: var(--bg); }
+.history button.isbase { border-color: var(--base); }
+.history button.now { border-color: var(--accent); }
+.knob .knob-sweep { font-size: .72em; padding: .05em .5em; margin: 0 0 0 .5em; border-radius: 5px; }
+.cmp { max-width: 760px; }
+.delta { font: .7em var(--mono); white-space: nowrap; }
+.delta.worse { color: var(--fail); } .delta.better { color: var(--pass); }
+.delta.same { color: var(--muted); }
+table.cmp { border-collapse: collapse; width: 100%; font-size: .84em; }
+table.cmp th, table.cmp td { text-align: left; padding: .35em .5em; border-bottom: 1px solid var(--line); }
+table.cmp td.n { font-family: var(--mono); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.tbl { overflow-x: auto; }
+.cmp-swatch { display: inline-block; width: 14px; height: 3px; vertical-align: middle; margin-right: .35em; }
 
 .cards { display: grid; grid-template-columns: 1fr; gap: 6px; }
 .mcard { background: var(--surface); border: 1px solid var(--line); border-radius: 8px;

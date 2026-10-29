@@ -24,6 +24,7 @@ const WWW = path.resolve(__dirname, "../src/polartx/webui/www");
 /* What the buttons are expected to send, and which argument proves the
  * form was actually read rather than defaulted away. */
 const BUTTONS = [
+  { id: "run-compare", method: "compare", key: "seed" },
   { id: "run-fir", method: "fir", key: "bw" },
   { id: "run-combiner", method: "combiner", key: "n_way" },
   { id: "run-selector", method: "selector", key: "bw_hz" },

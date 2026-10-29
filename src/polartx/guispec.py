@@ -327,8 +327,12 @@ def render_matplotlib(plots: list[dict], figsize=(11, 4.2)):
     for ax, pl in zip(axs[0], plots):
         for s in pl["series"]:
             st: dict[str, Any] = dict(_STYLE[s.get("style", "line")])
+            if "color" in s:                   # several traces on one panel
+                st["color"] = f"C{int(s['color'])}"
             st.update(s.get("mpl", {}))
             ax.plot(s["x"], s["y"], label=s.get("label"), **st)
+        if pl.get("legend"):
+            ax.legend(fontsize=8)
         ax.set(xlabel=pl.get("xlabel", ""), ylabel=pl.get("ylabel", ""))
         ax.set_title(pl["title"], fontsize=pl.get("title_size", None))
         if pl.get("xlim"):

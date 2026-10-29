@@ -5,7 +5,7 @@ summary: "GUI 改版：三端各写一份表单 + 批处理交互换成一份界
 tags: [polartx, gui, 前端, android, streamlit, pyside6]
 contains: [decision, lesson, pitfall, experience]
 created: "2026-10-28"
-updated: "2026-10-29（P2 一个页面三个宿主）"
+updated: "2026-10-29（P3 基线/扫描/历史/对比）"
 related: [android-app.md]
 authoring_mode: ai_generated
 ---
@@ -104,6 +104,26 @@ break-check：生成的控件不触发重算 → harness 红；控件不用规�
 **经验：编译版 APK 读得到默认值**。`guispec` 靠 `inspect.signature` 读预设默认值，而编译版
 把 `presets` Cython 化。按 `android_wheel.py` 的同样参数（`-3 --no-docstrings`）本机编译
 `presets`、删掉 .py 后对比：62 个旋钮默认值与纯 Python 版完全一致（Cython 3 默认 binding）。
+
+## P3：基线、扫描、历史、拓扑对比
+
+**决策：计算只是编排**。`guiutil.run_sweep`（一个控件扫一遍，其余保持当前值）和
+`run_compare`（几个预设同 seed、同一组共享控件）每个点都是普通的 `run_chain_report`，
+测试要求扫描与对比结果和手工逐点单跑**逐项相等**。基线与历史纯在页面里：钉住的是一次
+运行的报告，指标卡按 `metric_info.better` 给 Δ 着色，图在同 id 的面板下叠画基线；历史
+最多 8 条，存 localStorage（读写都 try/catch，存不了就只在内存里）。
+
+**经验：扫描结果里指标集会变**。口径残差（"按子载波均衡后的 EVM"）只在差距 >1 dB 时才
+报告：skew 0 时没有、0.1 ns 起才有。所以扫描按并集取键、缺的点给 `None`，图上断线，而不是
+把第一点的键集当全部。
+
+**坑：两个表单复用一个控件生成函数会造出重复 id**。对比页的 skew 控件与工作台的同为
+`#knob-skew_ns`，`getElementById` 只认第一个，浏览器测试里 RF-DAC 那条（"不该有 skew 控件"）
+因此红了——不是 RF-DAC 的问题，是对比页的。现在控件 id 带表单前缀，浏览器测试顺带断言
+全页 id 唯一。
+
+**迁移期规矩**：新交互（基线、扫描、历史、对比）只做在新页面里；Streamlit 与 Qt 在 P4
+退役，不再为它们补这些功能。
 
 ## 本地环境（pitfall）
 

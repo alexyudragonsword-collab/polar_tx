@@ -203,3 +203,65 @@ def test_phone_layout_has_no_sideways_scroll_and_the_old_tabs_run(browser, serve
     assert page.is_hidden("#busy")
     assert not page._errors                      # noqa: SLF001
     page.close()
+
+
+def test_baseline_sweep_and_history(browser, server):
+    """Pin a baseline, move a control: the cards show the change against it
+    (EVM worse, coloured as worse) and the plot overlays it.  A sweep adds
+    a plot tab whose points carry the mask verdicts.  The history restores
+    an earlier setting."""
+    page = _open(browser, server, viewport={"width": 1366, "height": 860})
+    _settle(page)
+    page.click("#bench-pin")
+    assert page.is_visible("#bench-unpin")
+    _set_range(page, "skew_ns", 0.3)
+    delta = page.locator("#bench-cards .mcard", has_text="EVM").first \
+        .locator(".delta")
+    assert float(delta.inner_text()) > 10.0              # dB worse than baseline
+    assert "worse" in delta.get_attribute("class")
+    # the sweep: one control across its range, as an extra plot tab
+    page.click("#sweep-dtc_bits")
+    page.wait_for_function("document.getElementById('busy').hidden",
+                           timeout=120_000)
+    tabs = page.locator("#bench-plot-tabs button")
+    assert "DTC" in tabs.last.inner_text()
+    assert tabs.last.get_attribute("aria-selected") == "true"
+    assert page.is_visible("#sweep-metric")
+    assert page.locator("#sweep-metric option").count() >= 3
+    # history: the newest first; restoring the baseline setting undoes skew
+    chips = page.locator("#bench-history button")
+    assert chips.count() >= 2 and "0.3" in chips.first.inner_text()
+    chips.last.click()
+    page.wait_for_timeout(300)
+    _settle(page)
+    assert page.input_value("#knob-skew_ns") == "0"
+    assert _card(page, "频谱 mask") == "通过"
+    page.click("#bench-unpin")
+    assert page.locator("#bench-cards .delta").count() == 0
+    # ids are unique: the comparison's controls do not shadow the workbench's
+    dup = page.evaluate("""() => { const seen = {}, dup = [];
+        document.querySelectorAll('[id]').forEach(e => {
+          if (seen[e.id]) dup.push(e.id); seen[e.id] = 1; }); return dup; }""")
+    assert dup == []
+    assert not page._errors                      # noqa: SLF001
+    page.close()
+
+
+def test_topologies_side_by_side(browser, server):
+    """Three topologies on one burst: a skew hurts the polar chain only."""
+    page = _open(browser, server, viewport={"width": 1366, "height": 860})
+    page.click("#nav button[data-tab=compare]")
+    page.eval_on_selector(
+        "#cmp-knob-skew_ns",
+        "e => { e.value = 0.5; e.dispatchEvent(new Event('input')); }")
+    page.click("#run-compare")
+    page.wait_for_selector("#cmp-out table", timeout=120_000)
+    head = page.locator("#cmp-out thead th").all_inner_texts()
+    assert len(head) == 4 and "RF-DAC" in head[3]
+    evm = page.locator("#cmp-out tbody tr", has_text="EVM").first \
+        .locator("td.n").all_inner_texts()
+    polar, outph, rfdac = (float(v) for v in evm)
+    assert polar > rfdac + 10.0 and polar > outph + 10.0
+    assert page.is_visible("#cmp-canvas")
+    assert not page._errors                      # noqa: SLF001
+    page.close()

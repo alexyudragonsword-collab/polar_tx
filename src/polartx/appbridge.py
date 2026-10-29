@@ -191,6 +191,29 @@ def _chain(preset: str = "BLE LE-1M", seed: int = 1, noise: bool = True,
     return _report(r)
 
 
+def _sweep(preset: str, knob: str, values: dict | None = None,
+           points: list | None = None, seed: int = 1,
+           noise: bool = True) -> dict:
+    """Sweep one control (by knob id) with the others held at ``values``:
+    the workbench's "sweep" button.  Every point is an ordinary chain run;
+    about 11 runs, so seconds on a laptop and longer on a phone."""
+    from .guiutil import run_sweep
+    return _clean(run_sweep(preset, knob, values=values, points=points,
+                            seed=int(seed), noise=bool(noise)))
+
+
+def _compare(values: dict | None = None, seed: int = 1, noise: bool = True,
+             names: list | None = None) -> dict:
+    """The topologies side by side on one burst and one seed (default: the
+    WiFi 160 MHz polar / outphasing / RF-DAC trio), with shared controls."""
+    from .guispec import compact_plots
+    from .guiutil import COMPARE_SET, run_compare
+    r = run_compare(tuple(names) if names else COMPARE_SET, values=values,
+                    seed=int(seed), noise=bool(noise))
+    r["plots"] = compact_plots(r["plots"])
+    return _clean(r)
+
+
 def _fir(bw: float = 40e6, notch_offset_hz: float = 500e6,
          n_symbols: int = 16, seed: int = 0, noise: bool = True,
          osr: int = 50) -> dict:
@@ -283,6 +306,8 @@ _METHODS: dict[str, Callable[..., Any]] = {
     "version": _version,
     "list_presets": _list_presets,
     "chain": _chain,
+    "sweep": _sweep,
+    "compare": _compare,
     "fir": _fir,
     "selector": _selector,
     "combiner": _combiner,

@@ -557,6 +557,109 @@ def run_setup(doc: dict) -> dict:
                             noise=bool(doc["noise"]), **doc["overrides"])
 
 
+# ------------------------------------------------- sweeps and comparisons
+# Orchestration only: every point is an ordinary run_chain_report, so a
+# sweep or a comparison can never disagree with the single run a user would
+# make by hand (tests/test_guiutil.py checks exactly that).
+
+
+def sweep_points(name: str, knob_id: str, n: int = 11) -> list:
+    """Display-unit values for sweeping one control across its range:
+    ``n`` evenly spaced on the knob's own step grid (integers stay
+    integers), or every option of a bool / choice control."""
+    from .guispec import knob_specs
+    k = {s.id: s for s in knob_specs(name)}.get(knob_id)
+    if k is None:
+        raise ValueError(f"{name!r} offers no control {knob_id!r}")
+    if k.kind == "bool":
+        return [False, True]
+    if k.kind == "choice":
+        return [c[0] for c in k.choices]
+    assert k.lo is not None and k.hi is not None and k.step is not None
+    raw = np.linspace(k.lo, k.hi, n)
+    snapped = np.round(raw / k.step) * k.step
+    if k.kind == "int":
+        return sorted({int(round(v)) for v in snapped})
+    return [round(float(v), 9) for v in snapped]
+
+
+def _union_keys(rows: list[dict]) -> list[str]:
+    keys: list[str] = []
+    for r in rows:
+        keys += [k for k in r if k not in keys]
+    return keys
+
+
+def run_sweep(name: str, knob_id: str, *, values: dict | None = None,
+              points: list | None = None, seed: int = 1,
+              noise: bool = True) -> dict:
+    """Sweep one control of preset ``name``, the other controls held at
+    ``values`` (display units, by knob id).
+
+    Returns the swept values, every metric as a list over them (``None``
+    where a point did not report that metric — the convention residuals
+    only appear once they matter), their descriptions and the union of the
+    run-time warnings."""
+    from .guispec import knob_specs, metric_info, overrides_from_ui
+    specs = {k.id: k for k in knob_specs(name)}
+    if knob_id not in specs:
+        raise ValueError(f"{name!r} offers no control {knob_id!r}")
+    pts = list(points) if points is not None else sweep_points(name, knob_id)
+    rows, warns = [], []
+    for v in pts:
+        ui = dict(values or {})
+        ui[knob_id] = v
+        rep = run_chain_report(name, seed=seed, noise=noise, figure=False,
+                               **overrides_from_ui(name, ui))
+        rows.append(rep["metrics"])
+        warns += rep["warnings"]
+    keys = _union_keys(rows)
+    return {"preset": name, "knob": specs[knob_id].as_dict(), "x": pts,
+            "metrics": {k: [r.get(k) for r in rows] for k in keys},
+            "metric_info": {k: metric_info(k) for k in keys},
+            "warnings": list(dict.fromkeys(warns))}
+
+
+#: the three topologies on one WiFi 160 MHz plan (ex20)
+COMPARE_SET = ("WiFi 160 MHz", "WiFi 160 MHz (outphasing)",
+               "WiFi 160 MHz (RF-DAC)")
+
+
+def run_compare(names: tuple[str, ...] | list[str] = COMPARE_SET, *,
+                values: dict | None = None, seed: int = 1,
+                noise: bool = True) -> dict:
+    """Run several presets on one seed with one set of shared controls and
+    line them up: a metric table and their spectra on one panel.
+
+    Each preset takes only the control ids it offers (``overrides_from_ui``
+    drops the rest), so a DTC resolution reaches the polar and outphasing
+    chains and not the RF-DAC.  The presets in ``COMPARE_SET`` draw their
+    waveform from one ``wifi_dtc`` description, so they see the same burst.
+    """
+    from .guispec import metric_info, overrides_from_ui
+    reps = {n: run_chain_report(n, seed=seed, noise=noise, figure=False,
+                                **overrides_from_ui(n, values or {}))
+            for n in names}
+    keys = _union_keys([r["metrics"] for r in reps.values()])
+    series = []
+    for i, (n, r) in enumerate(reps.items()):
+        psd = r["plots"][0]["series"][0]
+        series.append({"id": f"psd{i}", "label": n, "style": "trace",
+                       "color": i, "x": psd["x"], "y": psd["y"]})
+    mask = next(iter(reps.values()))["plots"][0]["series"][1]
+    series.append({**mask, "label": "mask"})
+    panel = {"id": "compare", "title": "spectra, same burst",
+             "title_zh": "同一 burst 的频谱", "xlabel": "offset [MHz]",
+             "ylabel": "dBr", "ylim": [-90, 5], "legend": True,
+             "series": series}
+    return {"names": list(names),
+            "metrics": {n: r["metrics"] for n, r in reps.items()},
+            "keys": keys, "metric_info": {k: metric_info(k) for k in keys},
+            "warnings": {n: r["warnings"] for n, r in reps.items()},
+            "conventions": next(iter(reps.values()))["conventions"],
+            "plots": [panel]}
+
+
 # ------------------------------------------------------------ calibration
 # The three calibration demos used to live inside the page code, written
 # twice (Qt and Streamlit) and therefore untestable without a GUI; the
