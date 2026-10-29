@@ -10,6 +10,23 @@ release 分组。
 
 ## 未发布 / Unreleased
 
+### GUI 改版 P2：一个页面，三个宿主；新工作台（2026-10-29）
+
+- **页面进 Python 包**：`src/polartx/webui/www/`（wheel / sdist 都带，CI build 任务检查）。
+  APK 经 Gradle `assets.setSrcDirs` 打包同一份文件（路径与 `MainActivity` 不变，Android
+  workflow 检查两个 APK 都带）；桌面与浏览器用新入口 **`polartx-web`**（`polartx.webhost`：
+  标准库本地服务，`POST /call` 即 `appbridge.call`，只绑 127.0.0.1）。
+- **新工作台**：控件全部由 `guispec` 规格生成（默认值来自预设签名），改参数 250 ms 后重算，
+  请求合并不积压；指标卡带中英标签与单位，口径与运行告警常驻；图由 `charts.js` 在 canvas
+  上画报告的 plot 数据（明暗主题、指针读数取真实采样点）。桌面三栏，手机为指标、图、
+  底部参数抽屉，页面列表在桌面是侧栏、手机是抽屉。FIR / 合路 / 选型 / 良率四个标签暂留原表单。
+- **真浏览器测试**：`tests/test_webui.py` 用 Chromium 对真 bridge 驱动——skew 0→0.3 ns 时
+  EVM 恶化 >10 dB 且 mask 由通过变失败、RF-DAC 只给 DAC 位数（12）、LTE event 引擎的越界告警
+  上页面、语言切换不丢控件、390 px 无横向滚动。CI test-gui 装 Chromium，跳过即失败。
+- 编译版 APK 风险已排除：本机按同样参数 Cython 编译 `presets` 后，62 个旋钮默认值与纯
+  Python 版一致。
+- 测试 331 → 339 个函数。
+
 ### GUI 改版 P1：界面规格层 `guispec`（2026-10-28）
 
 前端从此渲染描述，而不是各自手写表单（计划见 `cairn/gui-redesign.md`）。

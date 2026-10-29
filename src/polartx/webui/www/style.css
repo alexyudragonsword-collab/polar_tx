@@ -1,0 +1,198 @@
+/* polartx workbench — one stylesheet for the phone, the desktop and the
+ * browser.  Layout: header; a page list (sidebar on wide screens, a drawer
+ * on the phone); the workbench is controls | plot | metrics on a desktop
+ * and metrics, plot, then a bottom sheet of controls on a phone. */
+:root {
+  --bg: #f2f4f5; --surface: #ffffff; --sunken: #e8edef;
+  --ink: #15222b; --muted: #586974; --line: #d4dde1;
+  --accent: #0a6b86; --base: #a76d12;
+  --pass: #1d7440; --fail: #b02a20; --warn: #8a5a00;
+  --mono: ui-monospace, "SFMono-Regular", Menlo, Consolas, "Roboto Mono", monospace;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0e161b; --surface: #15212a; --sunken: #1b2a34;
+    --ink: #e2eaee; --muted: #93a5b0; --line: #2a3a45;
+    --accent: #53c4e3; --base: #e2a64b;
+    --pass: #4fc07c; --fail: #ff7365; --warn: #e6b450;
+    color-scheme: dark;
+  }
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0; background: var(--bg); color: var(--ink);
+  font: 15px/1.45 system-ui, -apple-system, "Segoe UI", "Noto Sans SC",
+        "PingFang SC", "Microsoft YaHei", sans-serif;
+  /* phones have notches and gesture bars; without these the first control
+     sits under the status bar and the last one under the home indicator.
+     Only visible on a device, which is why it is easy to ship without. */
+  padding: env(safe-area-inset-top) env(safe-area-inset-right)
+           env(safe-area-inset-bottom) env(safe-area-inset-left);
+}
+button, input, select { font: inherit; color: inherit; }
+button:focus-visible, input:focus-visible, select:focus-visible {
+  outline: 2px solid var(--accent); outline-offset: 2px;
+}
+
+/* ------------------------------------------------------------- header */
+header#top {
+  display: flex; align-items: center; gap: .6em;
+  padding: .55em 1em; background: var(--surface);
+  border-bottom: 1px solid var(--line);
+  position: sticky; top: 0; z-index: 5;
+}
+.brand { font-weight: 700; }
+#version { color: var(--muted); font-size: .78em; flex: 1; min-width: 0;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+button.icon { background: none; border: none; font-size: 1.2em; padding: .1em .3em;
+  cursor: pointer; display: none; }
+
+/* -------------------------------------------------------------- shell */
+#app { display: grid; grid-template-columns: 168px minmax(0, 1fr); min-height: calc(100vh - 3em); }
+#app[hidden] { display: none; }
+#nav { display: flex; flex-direction: column; gap: 2px; padding: .8em .5em;
+  border-right: 1px solid var(--line); background: var(--bg); }
+#nav button { text-align: left; background: none; border: none; border-radius: 6px;
+  padding: .45em .7em; color: var(--muted); cursor: pointer; }
+#nav button.active { background: var(--sunken); color: var(--ink); font-weight: 600; }
+main { min-width: 0; padding: .8em; }
+.tab[hidden] { display: none; }
+
+/* --------------------------------------------------------- workbench */
+.bench { display: grid; grid-template-columns: 260px minmax(0, 1fr) 270px;
+  gap: .8em; align-items: start; }
+.bench-knobs, .bench-plots, .bench-side { min-width: 0; }
+.bench-knobs { background: var(--surface); border: 1px solid var(--line);
+  border-radius: 10px; padding: .7em .8em; }
+.sheet-handle { display: none; }
+.field { display: block; font-size: .82em; color: var(--muted); margin: .35em 0; }
+.field select, .field input { display: block; width: 100%; margin-top: .15em;
+  padding: .35em .45em; border: 1px solid var(--line); border-radius: 6px;
+  background: var(--surface); color: var(--ink); font-size: 1.05em; }
+.row2 { display: grid; grid-template-columns: 1fr auto; gap: .6em; align-items: end; }
+.check { display: flex; align-items: center; gap: .35em; font-size: .85em; margin: .4em 0; }
+.check input { width: auto; margin: 0; }
+.kgroup { margin: .9em 0 .2em; font: 600 .68em/1 var(--mono); letter-spacing: .07em;
+  text-transform: uppercase; color: var(--muted); }
+.knob { padding: .35em 0; border-bottom: 1px dashed var(--line); }
+.knob:last-child { border-bottom: none; }
+.knob .head { display: flex; justify-content: space-between; gap: .5em; align-items: baseline;
+  font-size: .86em; }
+.knob .val { font-family: var(--mono); font-size: .9em; white-space: nowrap; }
+.knob .dot { display: inline-block; width: 6px; height: 6px; border-radius: 50%;
+  background: var(--accent); margin-left: .35em; vertical-align: middle; }
+.knob input[type=range] { width: 100%; accent-color: var(--accent); margin: .25em 0 0; }
+.knob select { width: 100%; margin-top: .25em; padding: .3em; border-radius: 6px;
+  border: 1px solid var(--line); background: var(--surface); }
+.knob .help { font-size: .74em; color: var(--muted); margin-top: .15em; line-height: 1.35; }
+.knob .off { font-size: .78em; color: var(--muted); display: inline-flex; gap: .25em;
+  align-items: center; }
+
+.seg { display: flex; gap: 4px; flex-wrap: wrap; margin-bottom: .5em; }
+.seg button { border: 1px solid var(--line); background: none; color: var(--muted);
+  border-radius: 6px; padding: .25em .7em; font-size: .82em; cursor: pointer; }
+.seg button[aria-selected=true] { color: var(--ink); border-color: var(--ink); }
+.chart { position: relative; background: var(--surface); border: 1px solid var(--line);
+  border-radius: 10px; padding: 6px; }
+.chart canvas { display: block; width: 100%; touch-action: none; }
+.readout { position: absolute; right: 12px; top: 10px; font: .74em/1.3 var(--mono);
+  color: var(--muted); background: var(--surface); padding: 1px 5px; border-radius: 4px;
+  pointer-events: none; }
+.status { min-height: 1.3em; }
+
+.cards { display: grid; grid-template-columns: 1fr; gap: 6px; }
+.mcard { background: var(--surface); border: 1px solid var(--line); border-radius: 8px;
+  padding: .45em .7em; }
+.mcard .k { font-size: .74em; color: var(--muted); display: flex; justify-content: space-between;
+  gap: .4em; }
+.mcard .v { font: 500 1.2em/1.25 var(--mono); font-variant-numeric: tabular-nums; }
+.mcard .v small { font-size: .62em; color: var(--muted); font-weight: 400; }
+.mcard.text .v { font: 500 .95em/1.3 system-ui, sans-serif; }
+.pill { font: 600 .72em/1 var(--mono); padding: 3px 7px; border-radius: 99px;
+  color: var(--surface); }
+.pill.pass { background: var(--pass); } .pill.fail { background: var(--fail); }
+.conv { display: flex; flex-direction: column; gap: 4px; margin-top: .6em; }
+.conv span { font-size: .72em; color: var(--muted); border: 1px dashed var(--line);
+  border-radius: 5px; padding: 3px 7px; line-height: 1.35; }
+.bench.stale .cards, .bench.stale .chart { opacity: .55; transition: opacity .15s; }
+
+/* ------------------------------------------------- older form tabs */
+.card { background: var(--surface); border: 1px solid var(--line);
+  border-radius: 10px; padding: .9em; margin-bottom: .8em; }
+.form-tab { max-width: 760px; }
+h2 { font-size: 1em; margin: 0 0 .5em; }
+.form-tab label { display: block; font-size: .85em; color: var(--muted); margin: .4em 0; }
+.form-tab input, .form-tab select { width: 100%; padding: .45em .5em; margin-top: .15em;
+  border: 1px solid var(--line); border-radius: 6px; background: var(--surface); }
+.form-tab input[type=checkbox] { width: auto; }
+.grid2 { display: grid; grid-template-columns: repeat(2, 1fr); gap: .5em; }
+button { border-radius: 8px; border: 1px solid var(--line); padding: .5em 1.1em;
+  background: var(--surface); cursor: pointer; }
+button.primary { background: var(--accent); border-color: var(--accent); color: var(--surface); }
+button.ghost { background: none; padding: .2em .7em; }
+button.small { font-size: .8em; margin-top: .7em; }
+button:disabled { opacity: .5; }
+.metrics { display: flex; flex-wrap: wrap; gap: .6em; margin: .6em 0; }
+.metric { background: var(--bg); border-radius: 8px; padding: .4em .7em; }
+.metric b { display: block; font-size: 1.05em; }
+.metric span { font-size: .75em; color: var(--muted); }
+.metric.pass b { color: var(--pass); }
+.metric.fail b { color: var(--fail); }
+.muted { color: var(--muted); font-size: .8em; }
+.note { color: var(--warn); font-size: .85em; margin: .25em 0; }
+.error { color: var(--fail); font-size: .85em; white-space: pre-wrap; }
+img.plot { width: 100%; height: auto; border: 1px solid var(--line);
+  border-radius: 6px; margin-top: .5em; }
+pre.table { background: var(--bg); padding: .5em; border-radius: 6px;
+  font-size: .75em; overflow-x: auto; }
+#boot { max-width: 720px; margin: 1em auto; }
+
+#busy {
+  position: fixed; inset: 0; background: rgba(242, 244, 245, .78);
+  background: color-mix(in srgb, var(--bg) 78%, transparent);
+  display: flex; flex-direction: column; align-items: center;
+  justify-content: center; gap: .8em; z-index: 20;
+}
+/* An author `display` beats the user agent's [hidden]{display:none}, so
+   without this rule the overlay stays invisible AND keeps swallowing every
+   tap — the app looks fine and responds to nothing. */
+#busy[hidden] { display: none; }
+.spinner {
+  width: 34px; height: 34px; border: 4px solid var(--line);
+  border-top-color: var(--accent); border-radius: 50%;
+  animation: spin .8s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .spinner { animation: none; } }
+
+/* ------------------------------------------------------- narrower */
+@media (max-width: 1180px) {
+  .bench { grid-template-columns: 250px minmax(0, 1fr); }
+  .bench-side { grid-column: 1 / -1; }
+  .cards { grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); }
+}
+/* phone: page list becomes a drawer; the workbench stacks metrics, plot,
+   then the controls as a bottom sheet that stays under the thumb */
+@media (max-width: 760px) {
+  button.icon { display: inline-block; }
+  #app { display: block; }
+  #nav { position: fixed; z-index: 15; left: 0; top: 0; bottom: 0; width: 210px;
+    padding-top: calc(3.2em + env(safe-area-inset-top)); transform: translateX(-100%);
+    transition: transform .2s; background: var(--surface); box-shadow: 0 0 24px rgba(0,0,0,.18); }
+  #nav.open { transform: none; }
+  main { padding: .55em; }
+  .bench { display: flex; flex-direction: column; gap: .6em; }
+  .bench-side { order: 1; } .bench-plots { order: 2; } .bench-knobs { order: 3; }
+  .cards { grid-template-columns: 1fr 1fr; }
+  .conv { display: none; }
+  .bench-knobs { position: sticky; bottom: 0; z-index: 4; max-height: 38vh; overflow: auto;
+    border-radius: 14px 14px 0 0; margin: 0 -.55em; padding-bottom: calc(.7em + env(safe-area-inset-bottom));
+    box-shadow: 0 -6px 18px rgba(0,0,0,.12); }
+  .sheet-handle { display: block; width: 100%; border: none; background: none; padding: .1em 0 .4em;
+    font-size: .8em; color: var(--muted); }
+  .sheet-handle::before { content: ""; display: block; width: 38px; height: 4px; border-radius: 2px;
+    background: var(--line); margin: 0 auto .3em; }
+  .bench-knobs.collapsed .knob-body { display: none; }
+  .grid2 { grid-template-columns: 1fr 1fr; }
+}

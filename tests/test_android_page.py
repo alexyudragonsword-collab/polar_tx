@@ -68,7 +68,7 @@ def test_the_harness_covers_every_run_button_the_page_defines():
     listed = set(json.loads(
         "[" + ",".join(f'"{m}"' for m in
                        __import__("re").findall(r'id: "(run-[a-z]+)"', js)) + "]"))
-    html = (ROOT / "android/app/src/main/assets/www/index.html").read_text(
+    html = (ROOT / "src/polartx/webui/www/index.html").read_text(
         encoding="utf-8")
     defined = set(__import__("re").findall(r'id="(run-[a-z]+)"', html))
     assert listed == defined, (

@@ -185,6 +185,14 @@ wheel 是 numpy 1.x。CI 的矩阵永远解析最新版，所以那条声明从�
 （numpy 1.24.4 / scipy 1.10.1 / matplotlib 3.7.5）跑全量。**声明了却不测的
 契约，等于没声明。**
 
+## 页面搬进 Python 包（2026-10-29）
+
+页面文件从 `android/app/src/main/assets/www/` 移到 `src/polartx/webui/www/`，Gradle 的
+assets 源目录指过去，APK 里的路径（`assets/www/…`）和 `MainActivity` 的 URL 都不变。
+原因是 GUI 改版定了"一个页面三个宿主"：桌面和浏览器由 `polartx-web` 提供同一份文件，
+所以文件必须随 Python 包安装（见 `cairn/gui-redesign.md`）。Android workflow 增加了两个
+APK 都必须含这四个页面文件的检查；`test_android_parity.py` 卡住 Gradle 的这一行。
+
 ## 口径差异（决定，不是缺口）
 
 | 手机上没有 | 为什么 |

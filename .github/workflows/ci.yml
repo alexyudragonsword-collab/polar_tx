@@ -109,6 +109,20 @@ jobs:
       - name: GUI tests (Qt + web + headless compute layer)
         run: pytest tests/test_gui_qt.py tests/test_gui_web.py tests/test_guiutil.py -q
 
+      # The one page every host shows (src/polartx/webui/www), in a real
+      # Chromium against the real bridge through the desktop host.  The
+      # test skips without a browser on a laptop; here that skip is a
+      # failure (POLARTX_REQUIRE_BROWSER), because a green run that tested
+      # nothing looks exactly like one that tested something.
+      - name: Chromium for the page tests
+        run: |
+          pip install playwright
+          python -m playwright install --with-deps chromium
+      - name: Page tests (real browser, real bridge)
+        env:
+          POLARTX_REQUIRE_BROWSER: "1"
+        run: pytest tests/test_webui.py tests/test_guispec.py
+
   # Linux job with iverilog so the RTL bit-true golden tests actually run
   test-rtl:
     runs-on: ubuntu-latest
@@ -224,6 +238,19 @@ jobs:
         run: |
           pip install build
           python -m build
+      # polartx-web serves the page from the installed package; a wheel
+      # without it installs cleanly and serves 404s
+      - name: The wheel carries the page
+        run: |
+          python - <<'PY'
+          import glob, sys, zipfile
+          names = zipfile.ZipFile(glob.glob("dist/*.whl")[0]).namelist()
+          need = [f"polartx/webui/www/{f}" for f in
+                  ("index.html", "app.js", "charts.js", "style.css")]
+          missing = [n for n in need if n not in names]
+          print("missing:", missing)
+          sys.exit(1 if missing else 0)
+          PY
       - uses: actions/upload-artifact@v4
         with:
           name: dist

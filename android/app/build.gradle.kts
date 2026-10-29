@@ -29,6 +29,17 @@ android {
     kotlinOptions {
         jvmTarget = "17"
     }
+    sourceSets {
+        getByName("main") {
+            // The page is one file set for every host: the desktop and the
+            // browser get it from the installed Python package (the local
+            // server in polartx.webhost serves src/polartx/webui/www), and
+            // this APK takes the very same files as its assets, so they
+            // load from file:///android_asset/www/.  Before 2026-10 the page
+            // lived only here and the desktop had two other front ends.
+            assets.setSrcDirs(listOf("../../src/polartx/webui"))
+        }
+    }
 }
 
 chaquopy {

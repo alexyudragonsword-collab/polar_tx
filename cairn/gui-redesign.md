@@ -5,7 +5,7 @@ summary: "GUI 改版：三端各写一份表单 + 批处理交互换成一份界
 tags: [polartx, gui, 前端, android, streamlit, pyside6]
 contains: [decision, lesson, pitfall, experience]
 created: "2026-10-28"
-updated: "2026-10-28（P1 界面规格层）"
+updated: "2026-10-29（P2 一个页面三个宿主）"
 related: [android-app.md]
 authoring_mode: ai_generated
 ---
@@ -80,6 +80,31 @@ matplotlib 渲染），计算仍在 `guiutil`。旋钮的默认值**不手填**�
 过桥时再四舍五入到 5 位有效数字：WiFi 160 一次运行不含 PNG 约 130 KB。`figure=False`
 跳过 matplotlib，给实时重算用。
 
+## P2：一个页面，三个宿主
+
+**决策：页面进 Python 包**。原来页面只在 `android/app/src/main/assets/www`，桌面拿不到。
+现在放在 `src/polartx/webui/www/`（package-data，wheel 与 sdist 都带）：手机由 Gradle
+`assets.setSrcDirs(listOf("../../src/polartx/webui"))` 打进 APK，桌面与浏览器由
+`polartx-web`（`webhost.py`，标准库 `ThreadingHTTPServer`，只绑 127.0.0.1，调用串行化——
+有几个报告仍用 pyplot 出 PNG，pyplot 不是线程安全的）提供。页面里没有注入的 `window.host`
+时自动走 `fetch("call")`，所以 `app.js` 不分宿主。
+
+**工作台**：控件全部由 `list_presets().specs` 生成（标签、单位、范围、默认值都来自 Python）；
+改参数 250 ms 防抖后重算，同时只有一个请求在途，回来时设置又变了就再跑一次（不排积压）；
+`png=False`，图由 `charts.js` 在 canvas 上画报告给的数据，读数取曲线上真实的采样点。
+其余四个标签（FIR、合路、选型、良率）暂留原表单与 PNG，P4 迁移。
+
+**验证**：`tests/test_webui.py` 起本地宿主、用真 Chromium 驱动真 bridge——skew 0 → 0.3 ns
+时 EVM 恶化 >10 dB 且 mask 由通过变失败；RF-DAC 只给 DAC 位数（12）不给 skew；LTE event
+引擎的越界告警出现在页面上；语言切换不丢控件；390 px 宽无横向滚动、抽屉导航与旧标签可用。
+CI 的 test-gui 装 Chromium 并设 `POLARTX_REQUIRE_BROWSER=1`，跳过即失败。jsdom harness
+改为按 `index.html` 的 `<script>` 顺序执行全部脚本（只跑 `app.js` 时 `Charts` 未定义）。
+break-check：生成的控件不触发重算 → harness 红；控件不用规格默认值 → 浏览器测试红。
+
+**经验：编译版 APK 读得到默认值**。`guispec` 靠 `inspect.signature` 读预设默认值，而编译版
+把 `presets` Cython 化。按 `android_wheel.py` 的同样参数（`-3 --no-docstrings`）本机编译
+`presets`、删掉 .py 后对比：62 个旋钮默认值与纯 Python 版完全一致（Cython 3 默认 binding）。
+
 ## 本地环境（pitfall）
 
 容器里 `python` 是 3.11（没装包），`pip` 绑在 `/usr/bin/python3`（3.13）。numpy 2.5.3
@@ -89,3 +114,6 @@ main 上也报存根语法错；CI 的 3.11 装的是 numpy 2.4.x，不受影响
 
 别给 pytest 加 `-q`：pyproject 已有 `addopts = "-q"`，叠成 `-qq` 就不打印计数行了
 （P1 里跑过一次"全绿却没数字"，pllsim 的 AGENTS 早有这条）。
+
+仓库根有个被 `.gitignore` 忽略的 `build/` 目录：在仓库根跑 `python -m build` 会把它当成
+同名包导入而失败（"No module named build.__main__"）。从别的目录跑并把仓库路径作参数。

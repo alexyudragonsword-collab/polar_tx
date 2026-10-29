@@ -14,6 +14,12 @@ WebView (app.js) --host.call(id, method, args)--> MainActivity (单线程 execut
                                                     （两个桌面 GUI 也调它）
 ```
 
+页面本身（`index.html` / `app.js` / `charts.js` / `style.css`）2026-10 起放在
+**Python 包里**：`src/polartx/webui/www/`。Gradle 用
+`assets.setSrcDirs(listOf("../../src/polartx/webui"))` 把它打成 APK 的 `assets/www/`，
+桌面与浏览器由 `polartx-web`（`polartx.webhost`，标准库本地服务）提供同一份文件——
+三个宿主，一个页面。Android workflow 会检查两个 APK 里都有这四个文件。
+
 Kotlin 只有约 90 行且不该再变：加功能 = 加一个 Python 函数 + 一段 render。
 手机因此是同一批数字的**第三个渲染器**，不是第四份实现——264 项测试照旧覆盖它。
 
