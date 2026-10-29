@@ -180,6 +180,13 @@ Windows 上关掉它；`test_webhost.py` 断言第二次绑定失败。Linux/mac
   `version`、一次默认预设的工作台运行（有限 EVM + 图数据）、桌面专属的 RTL 导出。两条 Windows
   workflow 用它测冻结后的 exe；CI test-gui 用它测 `python -m polartx.webhost`，脚本本身坏了每次
   推送就知道。本机对包实测：WiFi 160 默认 EVM −40.0 dB、2 个图面板、RTL 18 个文件。
+- **Windows 实测**（feat/gui-retire-old @ b527676，两条 workflow 各一次，均绿）：PyInstaller 版构建
+  1 min、冒烟 5 s；Nuitka 版冷缓存构建 45 min。两者冒烟数字相同：4 s 起服务，页面 + 3 个资源，
+  bridge（Python 3.11.9、numpy 2.4.6），WiFi 160 默认 EVM −40.0 dB、9 个指标、2 个图面板，RTL 18
+  个文件。产物 zip 68 MB（PyInstaller）/ 56 MB（Nuitka）。
+- **onefile 的孤儿进程**：冒烟结束时 kill 的是 onefile 的外壳进程，真正跑 Python 的子进程留了下来
+  （两条 workflow 的收尾都写着 "Terminate orphan process: polartx-gui"）。用户关窗时是子进程自己
+  退出、外壳随之退出，不受影响；只在"从外面强杀"时出现，runner 收尾会清掉。
 - exe 保留控制台：它是服务日志，也是落到标签页时唯一看得见的进程把手；关应用窗口时随进程消失。
 
 ## 本地环境（pitfall）
