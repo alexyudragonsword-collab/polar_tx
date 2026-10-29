@@ -2,6 +2,14 @@
 
 本文件按倒序记录实质性进展——最新的一条在这行下面。每条保持简短，只写摘要和指针；结论沉淀进 `cairn/<topic>.md`。
 
+## 2026-10-29 · GUI 改版 P3：基线、扫描、历史、拓扑对比
+
+- `run_sweep` / `run_compare` 只编排 `run_chain_report`，测试要求与逐点单跑逐项相等；桥方法 `sweep` / `compare`
+  与页面同次接线。基线 Δ、叠画、历史（localStorage）在页面里。
+- 扫描时指标键集会变（口径残差只在差距 >1 dB 才出现）→ 按并集取、缺点为 None。
+- 对比页控件与工作台撞 id，浏览器测试抓到；id 加前缀，并断言全页 id 唯一。
+- 测试 339 → 345。见 `cairn/gui-redesign.md` P3 节。
+
 ## 2026-10-29 · GUI 改版 P2：一个页面三个宿主，新工作台
 
 - 页面移入 `src/polartx/webui/www`；APK 经 Gradle assets 源目录取同一份，桌面/浏览器用 `polartx-web`

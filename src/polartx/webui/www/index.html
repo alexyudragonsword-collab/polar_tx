@@ -32,6 +32,7 @@
 <div id="app" hidden>
 <nav id="nav" aria-label="pages">
   <button data-tab="bench" class="active" data-zh="工作台" data-en="Workbench">工作台</button>
+  <button data-tab="compare" data-zh="拓扑对比" data-en="Topologies">拓扑对比</button>
   <button data-tab="fir" data-zh="FIR 陷波" data-en="FIR notch">FIR 陷波</button>
   <button data-tab="combiner" data-zh="合路" data-en="Doherty">合路</button>
   <button data-tab="selector" data-zh="选型" data-en="Selector">选型</button>
@@ -68,13 +69,45 @@
       <canvas id="bench-canvas"></canvas>
       <div id="bench-readout" class="readout"></div>
     </div>
-    <p id="bench-status" class="muted status"></p>
+    <div class="bench-tools">
+      <span id="bench-status" class="muted status"></span>
+      <select id="sweep-metric" aria-label="sweep metric" hidden></select>
+      <button id="bench-pin" class="small" data-zh="钉为基线" data-en="Pin as baseline">钉为基线</button>
+      <button id="bench-unpin" class="small ghost" hidden
+              data-zh="清除基线" data-en="Clear baseline">清除基线</button>
+    </div>
+    <div id="bench-history" class="history" aria-label="history"></div>
   </div>
   <div class="bench-side">
     <div id="bench-notes"></div>
     <div id="bench-cards" class="cards"></div>
     <div id="bench-conv" class="conv"></div>
   </div>
+</section>
+
+<!-- ---------------------------------------------------------- compare -->
+<section id="tab-compare" class="tab" hidden>
+  <section class="card cmp">
+    <h2 data-zh="三种拓扑同台：极坐标 / outphasing / RF-DAC"
+        data-en="Three topologies, one burst: polar / outphasing / RF-DAC">三种拓扑同台：极坐标 / outphasing / RF-DAC</h2>
+    <p class="muted"
+       data-zh="同一 WiFi 160 MHz burst、同一 seed。共享控件只送给接受它的拓扑：DTC 位数不送 RF-DAC，skew 只作用于极坐标。"
+       data-en="One WiFi 160 MHz burst, one seed. A shared control reaches only the topologies that take it: DTC bits never reach the RF-DAC, skew acts on polar only.">
+       同一 WiFi 160 MHz burst、同一 seed。共享控件只送给接受它的拓扑：DTC 位数不送 RF-DAC，skew 只作用于极坐标。</p>
+    <div class="row2">
+      <label class="field"><span data-zh="随机种子" data-en="Seed">随机种子</span>
+        <input id="cmp-seed" type="number" value="1" step="1" min="0">
+      </label>
+      <label class="check">
+        <input id="cmp-noise" type="checkbox" checked>
+        <span data-zh="随机噪声" data-en="random noise">随机噪声</span>
+      </label>
+    </div>
+    <div id="cmp-form"></div>
+    <button id="run-compare" class="primary" data-zh="运行" data-en="Run">运行</button>
+  </section>
+  <section class="card" id="cmp-out"></section>
+  <div class="chart" id="cmp-chart" hidden><canvas id="cmp-canvas"></canvas></div>
 </section>
 
 <!-- -------------------------------------------------------------- fir -->

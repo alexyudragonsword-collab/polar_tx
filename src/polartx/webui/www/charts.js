@@ -3,7 +3,10 @@
  * It draws exactly the arrays it is handed — the same arrays the desktop
  * PNG is drawn from — and computes nothing about the physics.  Styles:
  * "trace" and "line" (the measurement), "mask" (the limit, dashed),
- * "points" (a constellation), "ref" (a marker line).  Colours come from the
+ * "points" (a constellation), "pass" / "fail" (a sweep's mask verdicts),
+ * "ref" (a marker line).  ``series.color`` picks from a palette when one
+ * panel carries several traces; ``opts.base`` draws a pinned baseline's
+ * panel underneath in the baseline colour.  Colours come from the
  * page's CSS tokens, so the chart follows light and dark like the rest.
  */
 "use strict";
@@ -12,6 +15,12 @@
     getComputedStyle(document.documentElement).getPropertyValue(name).trim();
 
   /* 1-2-5 tick step for a span split into about n intervals */
+  const COLOUR = { trace: "--accent", line: "--accent", mask: "--fail",
+                   ref: "--muted", points: "--accent", pass: "--pass",
+                   fail: "--fail" };
+  /* several traces on one panel (a comparison): series.color indexes this */
+  const PALETTE = ["--accent", "--base", "--c3", "--c4"];
+
   function niceStep(span, n) {
     const raw = span / Math.max(1, n);
     const p = Math.pow(10, Math.floor(Math.log10(raw)));
@@ -94,25 +103,40 @@
     g.textAlign = "left"; g.textBaseline = "top";
     if (panel.ylabel) g.fillText(panel.ylabel, m.l + 4, m.t + 3);
 
-    // series, clipped to the plot area
+    // series, clipped to the plot area: a pinned baseline first, underneath
     g.save();
     g.beginPath(); g.rect(m.l, m.t, pw, ph); g.clip();
-    const colour = { trace: "--accent", line: "--accent", mask: "--fail",
-                     ref: "--muted", points: "--accent" };
-    for (const s of panel.series) {
+    const layers = [];
+    if (opts.base) {
+      for (const s of opts.base.series) {
+        if (s.style === "mask" || s.style === "ref") continue;
+        layers.push({ s, base: true });
+      }
+    }
+    for (const s of panel.series) layers.push({ s, base: false });
+    for (const { s, base } of layers) {
       const style = s.style || "line";
-      g.strokeStyle = g.fillStyle = css(colour[style] || "--accent");
-      if (style === "points") {
-        g.globalAlpha = 0.55;
-        const r = small ? 1.6 : 1.8;
+      const tok = base ? "--base"
+        : s.color !== undefined ? PALETTE[s.color % PALETTE.length]
+        : (COLOUR[style] || "--accent");
+      g.strokeStyle = g.fillStyle = css(tok);
+      if (style === "points" || style === "pass" || style === "fail") {
+        const big = style !== "points";
+        g.globalAlpha = big ? 1 : base ? 0.3 : 0.55;
+        const r = big ? 7 : small ? 1.6 : 1.8;
         for (let i = 0; i < s.x.length; i++) {
           if (s.x[i] === null || s.y[i] === null) continue;
-          g.fillRect(X(s.x[i]) - r / 2, Y(s.y[i]) - r / 2, r, r);
+          if (big) {
+            g.beginPath(); g.arc(X(s.x[i]), Y(s.y[i]), r / 2, 0, 2 * Math.PI); g.fill();
+          } else {
+            g.fillRect(X(s.x[i]) - r / 2, Y(s.y[i]) - r / 2, r, r);
+          }
         }
         g.globalAlpha = 1;
         continue;
       }
-      g.lineWidth = style === "mask" ? 1.2 : 1;
+      g.globalAlpha = base ? 0.8 : 1;
+      g.lineWidth = style === "mask" ? 1.2 : style === "line" && !base ? 1.4 : 1;
       g.setLineDash(style === "mask" ? [5, 3] : style === "ref" ? [2, 3] : []);
       g.beginPath();
       let pen = false;
@@ -123,6 +147,7 @@
       }
       g.stroke();
       g.setLineDash([]);
+      g.globalAlpha = 1;
     }
     if (opts.cursor) {                      // crosshair from the readout
       g.strokeStyle = css("--ink"); g.globalAlpha = 0.5;
@@ -132,6 +157,19 @@
       g.stroke(); g.globalAlpha = 1;
     }
     g.restore();
+    if (panel.legend) {                     // labelled traces, top right
+      const named = panel.series.filter(s => s.label && s.style !== "mask");
+      g.font = font; g.textAlign = "right"; g.textBaseline = "middle";
+      named.forEach((s, i) => {
+        const y = m.t + 12 + i * 15, x = m.l + pw - 8;
+        g.fillStyle = css("--ink");
+        g.fillText(s.label, x - 22, y);
+        g.strokeStyle = css(s.color !== undefined ? PALETTE[s.color % PALETTE.length]
+                                                  : "--accent");
+        g.lineWidth = 2;
+        g.beginPath(); g.moveTo(x - 18, y); g.lineTo(x, y); g.stroke();
+      });
+    }
     // what the readout needs to map a pointer back to data
     canvas._map = { m, pw, ph, x0, x1, y0, y1 };
   }
@@ -147,8 +185,7 @@
     const x = map.x0 + (px - map.m.l) / map.pw * (map.x1 - map.x0);
     const y = map.y1 - (py - map.m.t) / map.ph * (map.y1 - map.y0);
     if (x < map.x0 || x > map.x1 || y < map.y0 || y > map.y1) return null;
-    const curve = panel.series.find(s => s.style !== "points" && s.style !== "mask"
-                                         && s.style !== "ref");
+    const curve = panel.series.find(s => ["trace", "line"].includes(s.style || "line"));
     // a trajectory is not a function of x: read the pointer there
     if (!curve || panel.id === "iq") return { x, y };
     let lo = 0, hi = curve.x.length - 1;     // x is monotonic on these

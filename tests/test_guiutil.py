@@ -381,3 +381,62 @@ def test_no_page_does_its_own_calibration_physics():
                  root / "src" / "polartx" / "guiqt" / "pages.py"]:
         text = page.read_text(encoding="utf-8")
         assert "polartx.cal" not in text and "from ..cal" not in text, page
+
+
+# ------------------------------------------------- sweeps and comparisons
+def test_a_sweep_is_the_single_runs_point_for_point():
+    """A sweep is a convenience, never a second implementation: each point
+    must be exactly the report a user gets by setting that value by hand."""
+    import matplotlib.pyplot as plt
+
+    from polartx.guispec import overrides_from_ui
+    from polartx.guiutil import run_sweep
+    held = {"dtc_bits": 10}
+    sw = run_sweep("WiFi 160 MHz", "skew_ns", values=held,
+                   points=[0.0, 0.2], seed=3)
+    assert sw["x"] == [0.0, 0.2]
+    for i, v in enumerate(sw["x"]):
+        single = run_chain_report(
+            "WiFi 160 MHz", seed=3,
+            **overrides_from_ui("WiFi 160 MHz", {**held, "skew_ns": v}))
+        for k, vals in sw["metrics"].items():
+            assert vals[i] == single["metrics"].get(k), (k, v)
+        plt.close(single["fig"])
+    # the convention residual appears only once it matters: None, then a number
+    assert sw["metrics"]["EVM per-tone eq [dB]"][0] is None
+    assert sw["metrics"]["EVM per-tone eq [dB]"][1] is not None
+    assert set(sw["metric_info"]) == set(sw["metrics"])
+
+
+def test_sweep_points_follow_the_knob():
+    from polartx.guiutil import run_sweep, sweep_points
+    assert sweep_points("WiFi 160 MHz", "dtc_bits") == list(range(6, 15))
+    assert sweep_points("LTE 20 MHz", "mode") == ["response", "event"]
+    assert sweep_points("WiFi 160 MHz", "dpd") == [False, True]
+    pts = sweep_points("WiFi 160 MHz", "skew_ns")
+    assert len(pts) == 11 and pts[0] == -4.0 and pts[-1] == 4.0
+    with pytest.raises(ValueError):
+        run_sweep("WiFi 160 MHz (RF-DAC)", "skew_ns")
+
+
+def test_the_comparison_is_the_individual_runs_with_shared_controls():
+    """Same seed, same burst, shared controls; each topology takes only
+    the ids it offers — the DTC resolution does not reach the RF-DAC."""
+    import matplotlib.pyplot as plt
+
+    from polartx.guiutil import COMPARE_SET, run_compare
+    cmp = run_compare(values={"dtc_bits": 9, "skew_ns": 0.5}, seed=2)
+    assert cmp["names"] == list(COMPARE_SET)
+    for n in COMPARE_SET:
+        from polartx.guispec import overrides_from_ui
+        ov = overrides_from_ui(n, {"dtc_bits": 9, "skew_ns": 0.5})
+        single = run_chain_report(n, seed=2, **ov)
+        assert cmp["metrics"][n] == single["metrics"], n
+        plt.close(single["fig"])
+    assert "n_bits" not in overrides_from_ui("WiFi 160 MHz (RF-DAC)",
+                                             {"dtc_bits": 9})
+    # the skew reaches only the polar chain, and that is where it bites
+    m = cmp["metrics"]
+    assert m["WiFi 160 MHz"]["EVM [dB]"] > m["WiFi 160 MHz (RF-DAC)"]["EVM [dB]"] + 10
+    panel = cmp["plots"][0]
+    assert [s.get("color") for s in panel["series"][:3]] == [0, 1, 2]
