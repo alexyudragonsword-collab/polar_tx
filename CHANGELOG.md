@@ -10,6 +10,22 @@ release 分组。
 
 ## 未发布 / Unreleased
 
+### 在线两点增益校准的定点版 + 金向量（2026-11-05）
+
+- **`cal/dp_cal_fixed.py`**：`FixedSignSignLMS`——与 vendored `SignSignLMS` 同一更新律、同一引擎接口
+  （`.step(err, reg)`、可写 `.value`，直接挂 `ADPLLTwoPoint.dp_cal`），状态全是整数：相位误差 10 bit
+  （LSB 2⁻¹² UI）、回归量 12 bit（LSB 500 Hz）、两个去均值 EMA 为 `A += x − (A >>> 10)`（ema = 2⁻¹⁰，
+  浮点是 1e-3）、值寄存器 18 bit 无符号、LSB = 步长 2⁻¹⁶（浮点 mu = 2e-5），饱和不回绕，`sgn` 保留精确 0。
+  位宽都是 `DpCalFixedConfig` 配置；`golden_trace` 是整数码上的同一更新。只依赖 numpy，便于外部 vendor。
+- **为什么**：dsp_ip（bit-true DSP IP 库）要给这个校准环做 RTL，规矩是定点参考在消费方（本库）里、
+  RTL 逐位等于它；浮点版没有可对照的整数真值。vendor 文件、浮点算法与已有数字都没动。
+- **`export/dp_cal_vectors.py`**：跑 `test_dp_cal_online` 的同一 BLE 场景（event、5 % 增益误差、2000 bit、
+  种子 5/3），写逐参考周期的输入码 / 值码（104 004 行）、`dp_cal_dims.svh`、`dp_cal_meta.json`；两次导出逐字节相同。
+- 实测（同一场景）：定点尾段均值 0.99842、EVM 3.178 %；浮点 0.99887、3.076 %。调制开启后 14 919 个周期越过 1.0
+  （每周期至多 1 LSB 的下界是 3 277）。位宽扫描：e 4 bit 仍收敛（尾段 0.99675、EVM 3.69 %），回归量 5 bit、
+  ema 2⁻⁸、步长 2⁻¹⁵ 都过 `|tail−1| < 0.01`、EVM < 3.8 %。
+- 测试 342 → 351 个函数（新增 `tests/test_dp_cal_fixed.py`）。
+
 ### GUI 改版 P4b：Streamlit 与 Qt 前端退役，桌面改用应用窗口（2026-10-29）
 
 - **删除** `gui/`（Streamlit）、`polartx.guiqt`、两份 GUI 测试、两个打包入口、`gui` / `guiqt`

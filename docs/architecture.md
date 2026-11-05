@@ -60,6 +60,8 @@ src/polartx/
 ├── cal/              校准
 │   ├── skew.py       AM/PM 路径延迟失配：估计 + 修正
 │   ├── twopoint.py   两点调制直接路径增益标定（离线估计器；在线 LMS 在调制器里）
+│   ├── dp_cal_fixed.py  在线两点增益 sign-sign LMS 的定点版（逐位真值，可直接挂 `dp_cal`；
+│   │                 RTL 对照用 `golden_trace`；只依赖 numpy，可单独 vendor）
 │   ├── dtc_cal.py    开环 DTC 增益/INL 标定，从解调相位误差反推
 │   ├── polar_dpd.py  极坐标 DPD：幅度/相位双 LUT，每个数字极坐标 TX 都有的那一对
 │   └── memory_dpd.py 笛卡尔记忆 DPD（GMP），包住整条极坐标链
@@ -77,6 +79,7 @@ src/polartx/
 │                     StateConditionedSpline）；`synthetic_thermal_source` 是无硬件的合成源
 ├── montecarlo.py     良率分析（spec 化、进程池并行）
 ├── export/rtl.py     定点化 + Verilog/Verilog-AMS 导出 + 金向量
+├── export/dp_cal_vectors.py  定点两点增益 LMS 的金向量：BLE 场景逐参考周期的输入码与值码
 ├── selector.py       架构选择器：给定需求，ADPLL / DTC / outphasing / RF-DAC 四候选解析打分
 │                     （EVM 预算 + 各自效率律在截断瑞利分布上的平均；先达标再比效率）
 ├── presets.py        ★ 端到端预设（标准链路 + 文献对标）
