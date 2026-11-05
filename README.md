@@ -34,7 +34,7 @@ Waveform → [CFR] → polar split → 包络路径（量化/skew/DPA 幅度码�
 
 ```bash
 pip install -e .          # numpy / scipy / matplotlib
-pytest tests/             # 342 个测试函数（参数化后实收更多）：物理量断言 + 与 padpd 逐位回归
+pytest tests/             # 351 个测试函数（参数化后实收更多）：物理量断言 + 与 padpd 逐位回归
 python examples/ex01_ble_gfsk_adpll.py      # 图落在 examples/out/
 
 polartx-gui               # 工作台：本地服务 + Edge/Chrome 应用窗口，关窗即退出
@@ -79,7 +79,7 @@ print(res.evm().db, res.aclr())             # -39.6 dB, ACLR ~ -58 dBc
 - **AM/PM skew**（ex04）：160 MHz 下 0.5 ns skew 即把 EVM 从 −39.5 打到 −21.8 dB；互谱相位斜率估计精度 0.05 采样，校正后完全恢复——极坐标架构最尖锐的损伤，就是这条链的核心卖点。
 - **带宽扩展**（ex02）：80 MHz OFDM 极坐标分解后包络/相位路径 99% 占用带宽 2.1×/3.2×；幅度域 hole punching 的 EVM 代价闭式可算（测试断言到 0.01 dB）。
 - **π 跳变与直通 DAC 范围**（ex05，M2）：8DPSK 裸相位轨迹需要 fs/2=16 MHz 直通范围；2 MHz DAC 只削 1% 采样但环路"宿醉"使 DEVM 崩到 40%、ACP 恶化 ~20 dB（粗 mask 反而仍 PASS——**ACP 才是敏感指标**）；轨迹侧 2 MHz 斜率限制（矢量 hole punching）以 −32 dB 轨迹代价换回 DEVM 2.4%/零削波。OFDM polar 相反：LTE20 相位斜率 P99≈2×BW，直通 DAC 必须整体覆盖（test_lte_chain 固化）。
-- **polar DPD 与两点校准**（ex06，M2）：AM-AM/AM-PM 逆 LUT 使 LTE EVM −37.2→−53.3 dB、ACLR1 −44.5→−62.6 dBc；由链路观测量拟合的 LUT 与精确模型反演只差 0.5 dB。离线两点增益估计一发命中（注入 3%，估计 3.00%，EVM 恢复到噪声极限）。RX 频段噪声解析预算 −143 dBc/Hz@45 MHz 量级。
+- **polar DPD 与两点校准**（ex06，M2）：AM-AM/AM-PM 逆 LUT 使 LTE EVM −37.2→−53.3 dB、ACLR1 −44.5→−62.6 dBc；由链路观测量拟合的 LUT 与精确模型反演只差 0.5 dB。离线两点增益估计一发命中（注入 3%，估计 3.00%，EVM 恢复到噪声极限）。在线 sign-sign LMS 有定点版（`cal/dp_cal_fixed.py`，整数状态、每步 ±1 LSB=2⁻¹⁶）：BLE 5% 增益误差下尾段均值 0.9984、EVM 3.18%（浮点 0.9989、3.08%），金向量由 `python -m polartx.export.dp_cal_vectors` 导出供 RTL 逐位对照。RX 频段噪声解析预算 −143 dBc/Hz@45 MHz 量级。
 
 ## 包结构
 

@@ -2,6 +2,14 @@
 
 本文件按倒序记录实质性进展——最新的一条在这行下面。每条保持简短，只写摘要和指针；结论沉淀进 `cairn/<topic>.md`。
 
+## 2026-11-05 · 在线两点增益 LMS 定点版 + 金向量（给 dsp_ip 的 RTL 对照）
+
+- 新 `cal/dp_cal_fixed.py`（`FixedSignSignLMS`、`golden_trace`、`DpCalFixedConfig`）与 `export/dp_cal_vectors.py`；接口与浮点 `SignSignLMS` 相同，引擎侧零改动（`adpll.py` 只调 `.step` / `.value`）。
+- 同一 BLE 场景：定点尾段 0.99842 / EVM 3.178 %，浮点 0.99887 / 3.076 %；越过 1.0 用 14 919 周期（下界 3 277）。sign-sign 只看符号，e 量化到 4 bit 仍收敛（0.99675 / 3.69 %）。
+- 设计选择：步长取 2⁻¹⁶ 而非 2e-5（硬件里值寄存器每步 ±1 LSB），ema 取 2⁻¹⁰ 而非 1e-3（移位）；`.value` 赋值即复位两个累加器（浮点版不复位，但引擎每次 run 前都会赋初值，记录从复位开始才能逐位重放）。
+- 导出 104 004 周期、约 1.3 MB；两次导出逐字节相同。测试 342 → 351。
+- 下一步：dsp_ip `ip/dp_cal_lms` pin 本 PR 合并提交（RTL + lockstep），PR 由用户审阅合并。
+
 ## 2026-10-29 · GUI 改版 P4b：旧前端退役，桌面应用窗口
 
 - 删 Streamlit / Qt 前端、其测试、打包入口与 extra，以及 P0 为旧前端立的 `_HONOURS` 表；`polartx-gui` 改指 `webhost`。

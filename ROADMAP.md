@@ -170,7 +170,9 @@ floor"）里自己修了，写法是 `vars(np).get("trapezoid") or vars(np)["tra
 - 本仓在 `adpll.py` 上的扩展恰恰是每参考周期回调一个 Python 对象
   （`dp_cal.step(e_ui, mod_freq[n])`，在线两点增益校准），**装不进这种 kernel**。
   要跟进就得把 LMS 状态摊成浮点数组穿过 kernel 签名重写一遍——那是改物理路径，
-  得单独做、单独验证。
+  得单独做、单独验证。2026-11-05 起回调对象还多了一个定点版 `cal/dp_cal_fixed.py`
+  的 `FixedSignSignLMS`（整数状态 `[V, A_reg, A_err]`，`step_codes` 已是无数组操作的
+  纯标量更新）——kernel 化时两个都要穿过签名，定点版的逐位金向量（dsp_ip 已 pin）是现成的回归。
 - `frac.py` 是从上游 `cppll.py` 抽出的 37 行，新版 `cppll.py` 也大改了，要重抽。
 
 因此 pin 是**混合**的：39 个文件 @`931cfaf`，2 个 @`d7be4712`。CI 的 sibling

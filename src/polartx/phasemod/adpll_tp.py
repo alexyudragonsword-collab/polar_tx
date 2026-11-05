@@ -21,6 +21,8 @@ Two engines, cross-checked by tests:
 """
 from __future__ import annotations
 
+from typing import Any
+
 import numpy as np
 from scipy.signal import resample_poly
 
@@ -75,8 +77,10 @@ class ADPLLTwoPoint(PhaseModulator):
         self.mode = mode
         self.settle_cycles = settle_cycles
         self.dp_range_hz = dp_range_hz
-        self.dp_cal = None      # background two-point gain calibrator
-                                # (SignSignLMS), event mode only
+        # background two-point gain calibrator, event mode only: anything
+        # with .step(err, reg) and a writable .value -- SignSignLMS or the
+        # bit-true cal.dp_cal_fixed.FixedSignSignLMS
+        self.dp_cal: Any = None
         self._ana = None
 
     # ----------------------------------------------------------- helpers
