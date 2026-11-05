@@ -51,7 +51,11 @@ def test_dpd_set_is_the_quantized_lut(tmp_path):
     luts = quantize_dpd_luts(PolarDPD.from_dpa(DPA(DPAConfig(**DPA_KW))))
     emit_dpd_rtl(luts, str(tmp_path / "e"))
     for rom in ("dpd_amp.memh", "dpd_ph.memh"):     # the ROM images emit_dpd_rtl writes
-        assert filecmp.cmp(tmp_path / "v" / rom, tmp_path / "e" / rom, shallow=False)
+        # same lines; not the same bytes on Windows: emit_dpd_rtl writes in text mode
+        # (CRLF there), the export pins LF so its hashes agree on every OS
+        assert ((tmp_path / "v" / rom).read_text().splitlines()
+                == (tmp_path / "e" / rom).read_text().splitlines())
+        assert b"\r" not in (tmp_path / "v" / rom).read_bytes()
     addr = _ints(tmp_path / "v" / "addr.txt")
     n = 1 << meta["addr_bits"]
     assert np.array_equal(addr[:n], np.arange(n)) and addr.size == meta["n"] > n
