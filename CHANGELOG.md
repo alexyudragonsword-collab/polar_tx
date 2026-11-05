@@ -10,6 +10,21 @@ release 分组。
 
 ## 未发布 / Unreleased
 
+### 外部 RTL 对照用的金向量：DTC 抖动、DPD LUT、dp_cal 覆盖变体（2026-11-05）
+
+- **`export/rtl_vectors.py`**（新）：`python -m polartx.export.rtl_vectors {dtc_random,dtc_ramp,dpd_lut} OUTDIR`。
+  - 把 `export/rtl.py` 已用自带 testbench 校验的两个块写成逐行整数流 + `*_dims.svh` + `*_meta.json`，供 dsp_ip 按哈希 pin、逐样本对照。
+  - `dtc_random` 是 `emit_dtc_dither_rtl` 的同一串（种子 7，2048 字）。
+  - `dtc_ramp` 是常数频率字（0.0123456789 周/样本）驱动的相位累加器输出（4096 样本，含回绕）。
+  - `dpd_lut` 是 `run_rtl_export` 那个 DPA 的双 LUT ROM 镜像（与 `emit_dpd_rtl` 逐字节相同）、全地址扫一遍再接 WiFi-20 突发的 8 位包络地址流（共 8960）、查表结果，meta 带浮点 LUT。
+- **`export/dp_cal_vectors.py --variant`**：
+  - `ble_m5pct`（从 0.95 起）：尾段 0.99836 / EVM 3.28 %。
+  - `sat_top`（16 位值寄存器，上限 0.99998）：39 % 的周期顶在上限，尾段 0.99778 / 2.67 %。
+  - `narrow`（相位误差 4 位、回归量 5 位 / 32 kHz、ema 2⁻⁸）：尾段 0.99857 / 3.81 %。
+  - 默认集输出逐字节不变。
+- 为什么：dsp_ip 要把这两个块与 dp_cal 的更多角落做成 RTL lockstep，规矩是向量来自本库的导出。算法与已有数字不变。
+- 测试 351 → 357 个函数。
+
 ### 在线两点增益校准的定点版 + 金向量（2026-11-05）
 
 - **`cal/dp_cal_fixed.py`**：`FixedSignSignLMS`——与 vendored `SignSignLMS` 同一更新律、同一引擎接口

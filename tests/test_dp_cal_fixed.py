@@ -128,3 +128,31 @@ def test_config_rejects_nonsense():
         DpCalFixedConfig(reg_lsb_hz=0.0)
     with pytest.raises(ValueError):
         golden_trace([600], [0], 0)               # 600 does not fit 10 bits
+
+
+@pytest.mark.parametrize("variant", ["ble_m5pct", "sat_top", "narrow"])
+def test_vector_variants(tmp_path, variant):
+    """The named export variants (coverage for an RTL lockstep) are real runs: the
+    files replay through golden_trace, and the calibrator still converges.
+    Measured (tail / EVM): ble_m5pct 0.99836 / 3.28 %, sat_top 0.99778 / 2.67 %,
+    narrow 0.99857 / 3.81 %."""
+    from polartx.export.dp_cal_vectors import VARIANTS, write_variant
+
+    meta = write_variant(str(tmp_path), variant)
+    _, overrides = VARIANTS[variant]
+    cfg = DpCalFixedConfig(**overrides)
+    assert meta["config"] == cfg.to_dict()
+    e = np.loadtxt(tmp_path / "dp_cal_err.txt", dtype=np.int64)
+    r = np.loadtxt(tmp_path / "dp_cal_reg.txt", dtype=np.int64)
+    v = np.loadtxt(tmp_path / "dp_cal_value.txt", dtype=np.int64)
+    assert np.array_equal(golden_trace(e, r, meta["v_start"], cfg), v)
+    assert abs(meta["tail_mean"] - 1.0) < 0.01
+    assert meta["evm_pct"] < 4.0
+    if variant == "sat_top":
+        # the register really sits on its ceiling for a large part of the run
+        assert meta["v_start"] == cfg.v_max and v.max() == cfg.v_max
+        assert 0.1 < np.mean(v == cfg.v_max) < 0.9
+    if variant == "ble_m5pct":
+        # starts 5 % low and slews up by >= 90 % of the way to gain 1.0
+        start, one = meta["v_start"], 1 << cfg.v_frac
+        assert start < one and v[-1000:].mean() > start + 0.9 * (one - start)
