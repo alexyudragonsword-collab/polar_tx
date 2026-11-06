@@ -2,6 +2,12 @@
 
 本文件按倒序记录实质性进展——最新的一条在这行下面。每条保持简短，只写摘要和指针；结论沉淀进 `cairn/<topic>.md`。
 
+## 2026-11-05 · 外部 RTL 对照用金向量：DTC 抖动 / DPD LUT 流 + dp_cal 三个覆盖变体
+
+- 新 `export/rtl_vectors.py`：三套流（dtc_random 2048、dtc_ramp 4096、dpd_lut 8960），分别与 `efm1_int_golden`、`quantize_dpd_luts`、`emit_*` 的 golden / ROM 镜像逐值相同；两次导出逐字节相同。
+- `dp_cal_vectors --variant`：ble_m5pct 0.99836 / 3.28 %，sat_top 0.99778 / 2.67 %（39 % 周期饱和），narrow 0.99857 / 3.81 %；默认集不变。
+- 测试 351 → 357。下一步：dsp_ip 新增 `dtc_dither`、`polar_dpd_lut` 两个 IP，`dp_cal_lms` 加三组向量。
+
 ## 2026-11-05 · 在线两点增益 LMS 定点版 + 金向量（给 dsp_ip 的 RTL 对照）
 
 - 新 `cal/dp_cal_fixed.py`（`FixedSignSignLMS`、`golden_trace`、`DpCalFixedConfig`）与 `export/dp_cal_vectors.py`；接口与浮点 `SignSignLMS` 相同，引擎侧零改动（`adpll.py` 只调 `.step` / `.value`）。

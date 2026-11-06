@@ -9,7 +9,7 @@ code out.  One integer per line; ``dp_cal_dims.svh`` carries the widths;
 ``dp_cal_meta.json`` the scenario, the configuration and the measured
 tail mean / EVM of that run.
 
-    python -m polartx.export.dp_cal_vectors OUTDIR
+    python -m polartx.export.dp_cal_vectors OUTDIR [--variant ble_m5pct|sat_top|narrow]
 
 The streams are the engine's own calls, so ``golden_trace`` recomputed
 from the two input files must reproduce the value file exactly (the
@@ -32,19 +32,32 @@ WAVEFORM_SEED = 5
 NOISE_SEED = 3
 SCENARIO = {"preset": "ble_1m_adpll", "mode": "event", "dp_gain": DP_GAIN,
             "n_bits": N_BITS, "waveform_seed": WAVEFORM_SEED, "noise_seed": NOISE_SEED}
+# Named variants for coverage of the RTL (same BLE run, other start gain or widths):
+#   ble_m5pct  -- the gain starts 5 % low, so the register slews up instead of down;
+#   sat_top    -- a 16-bit value register (largest gain 0.99998): the 1.05 start
+#                 saturates and the update keeps pushing against V_MAX;
+#   narrow     -- 4-bit phase error, 5-bit / 32 kHz regressor, ema 2^-8.
+VARIANTS: dict[str, tuple[float, dict]] = {
+    "ble_5pct": (DP_GAIN, {}),
+    "ble_m5pct": (0.95, {}),
+    "sat_top": (DP_GAIN, {"v_bits": 16}),
+    "narrow": (DP_GAIN, {"e_bits": 4, "e_frac": 6, "reg_bits": 5,
+                         "reg_lsb_hz": 32_000.0, "k": 8}),
+}
 
 
 def run_scenario(cfg: DpCalFixedConfig = DpCalFixedConfig(), *,
-                 n_bits: int = N_BITS):
-    """(calibrator, PolarResult) for the pinned BLE scenario."""
+                 n_bits: int = N_BITS, dp_gain: float = DP_GAIN):
+    """(calibrator, PolarResult) for the pinned BLE scenario (``dp_gain``: the
+    direct-path gain the run starts from, i.e. 1 + the error to slew out)."""
     from ..phasemod import ADPLLTwoPoint
     from ..presets import ble_1m_adpll
 
-    p = ble_1m_adpll(mode="event", dp_gain=DP_GAIN)
+    p = ble_1m_adpll(mode="event", dp_gain=dp_gain)
     pm = p.tx.phasemod
     if not isinstance(pm, ADPLLTwoPoint):
         raise TypeError("ble_1m_adpll no longer builds an ADPLLTwoPoint")
-    cal = FixedSignSignLMS(init=DP_GAIN, cfg=cfg)
+    cal = FixedSignSignLMS(init=dp_gain, cfg=cfg)
     pm.dp_cal = cal
     wf = p.make_waveform(n_bits=n_bits, seed=WAVEFORM_SEED)
     res = p.tx.run(wf, noise=True, seed=NOISE_SEED)
@@ -52,9 +65,10 @@ def run_scenario(cfg: DpCalFixedConfig = DpCalFixedConfig(), *,
 
 
 def write_vectors(outdir: str, cfg: DpCalFixedConfig = DpCalFixedConfig(),
-                  *, n_bits: int = N_BITS) -> dict:
+                  *, n_bits: int = N_BITS, dp_gain: float = DP_GAIN,
+                  variant: str = "ble_5pct") -> dict:
     """Run the scenario and write the vector set; returns the meta dict."""
-    cal, res = run_scenario(cfg, n_bits=n_bits)
+    cal, res = run_scenario(cfg, n_bits=n_bits, dp_gain=dp_gain)
     os.makedirs(outdir, exist_ok=True)
     streams = {"dp_cal_err.txt": cal.e_codes, "dp_cal_reg.txt": cal.r_codes,
                "dp_cal_value.txt": cal.v_codes}
@@ -71,23 +85,33 @@ def write_vectors(outdir: str, cfg: DpCalFixedConfig = DpCalFixedConfig(),
                 f"localparam int V_START = {cal.v_start};\n"
                 f"localparam int N_VEC   = {n};\n")
     v = np.asarray(cal.v_codes, dtype=float) / (1 << cfg.v_frac)
-    meta = {"scenario": {**SCENARIO, "n_bits": n_bits}, "config": cfg.to_dict(),
+    meta = {"scenario": {**SCENARIO, "n_bits": n_bits, "dp_gain": dp_gain},
+            "config": cfg.to_dict(),
             "n": n, "v_start": cal.v_start,
             "tail_mean": float(v[-n // 10:].mean()),
             "evm_pct": float(res.evm()["evm_pct"]),
-            "command": "python -m polartx.export.dp_cal_vectors OUTDIR"}
+            "command": "python -m polartx.export.dp_cal_vectors OUTDIR"
+                       + ("" if variant == "ble_5pct" else f" --variant {variant}")}
     with open(os.path.join(outdir, "dp_cal_meta.json"), "w", newline="\n") as f:
         json.dump(meta, f, indent=1, sort_keys=True)
         f.write("\n")
     return meta
 
 
+def write_variant(outdir: str, variant: str, *, n_bits: int = N_BITS) -> dict:
+    """Write one of the named VARIANTS (``ble_5pct`` is the default set)."""
+    dp_gain, overrides = VARIANTS[variant]
+    return write_vectors(outdir, DpCalFixedConfig(**overrides), n_bits=n_bits,
+                         dp_gain=dp_gain, variant=variant)
+
+
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("outdir")
     ap.add_argument("--n-bits", type=int, default=N_BITS)
+    ap.add_argument("--variant", choices=list(VARIANTS), default="ble_5pct")
     args = ap.parse_args(argv)
-    meta = write_vectors(args.outdir, n_bits=args.n_bits)
+    meta = write_variant(args.outdir, args.variant, n_bits=args.n_bits)
     print(json.dumps({k: meta[k] for k in ("n", "v_start", "tail_mean", "evm_pct")}))
     return 0
 
