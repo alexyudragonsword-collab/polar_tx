@@ -81,3 +81,59 @@ def test_export_is_reproducible(tmp_path, name):
 def test_unknown_set_rejected(tmp_path):
     with pytest.raises(ValueError):
         write_set("nope", str(tmp_path))
+
+
+def test_cfr_phase_acc_thermo_sets_are_the_existing_goldens(tmp_path):
+    from polartx.export.rtl import (cfr_clip_golden, emit_cfr_clip_rtl, emit_phase_acc_rtl,
+                                    thermo_decode_golden)
+
+    m = write_set("cfr_clip", str(tmp_path / "c"))
+    env = _ints(tmp_path / "c" / "env.txt")
+    assert np.array_equal(_ints(tmp_path / "c" / "env_clip.txt"),
+                          cfr_clip_golden(env, m["threshold"]))
+    emit_cfr_clip_rtl(str(tmp_path / "ce"))
+    rows = np.loadtxt(tmp_path / "ce" / "golden_cfr.csv", delimiter=",", dtype=np.int64)
+    assert np.array_equal(rows[:, 0], env[:1024])           # emit's own stream comes first
+    assert 0.0 < m["clip_fraction"] < 0.5
+
+    write_set("phase_acc", str(tmp_path / "p"))
+    emit_phase_acc_rtl(str(tmp_path / "pe"), w=16, n_vec=2048)
+    rows = np.loadtxt(tmp_path / "pe" / "golden_phase_acc.csv", delimiter=",", dtype=np.int64)
+    finc, ph = _ints(tmp_path / "p" / "finc.txt"), _ints(tmp_path / "p" / "phase.txt")
+    assert np.array_equal(ph, phase_acc_golden(finc, 16))
+    assert np.array_equal(rows[:, 0], finc) and np.array_equal(rows[:, -1], ph)
+
+    m = write_set("thermo", str(tmp_path / "t"))
+    g = thermo_decode_golden(m["n_bits"], m["n_thermo"])
+    thermo = [int(v) for v in (tmp_path / "t" / "thermo.txt").read_text().split()]
+    assert thermo == g["thermo_int"] and max(thermo).bit_length() == m["n_seg"]
+
+
+def test_datapath_chain(tmp_path):
+    """The chain is the composition of the five block goldens, and it behaves: the
+    thermometer + binary cells add back up to the DPA code, the CFR clips some peaks, the
+    LUT sees most of its range, and EFM1 keeps the mean DTC code on the phase word."""
+    from polartx.export.rtl_vectors import CFR_T, datapath_golden
+
+    m = write_set("datapath", str(tmp_path))
+    env, finc = _ints(tmp_path / "env.txt"), _ints(tmp_path / "finc.txt")
+    amp_rom = np.array([int(v, 16) for v in (tmp_path / "dpd_amp.memh").read_text().split()])
+    ph_raw = np.array([int(v, 16) for v in (tmp_path / "dpd_ph.memh").read_text().split()])
+    ph_rom = np.where(ph_raw >= 1 << 13, ph_raw - (1 << 14), ph_raw)
+    g = datapath_golden(env, finc, amp_rom, ph_rom)
+    thermo = [int(v) for v in (tmp_path / "thermo.txt").read_text().split()]
+    assert thermo == g["thermo"]
+    assert np.array_equal(_ints(tmp_path / "bin.txt"), g["bin"])
+    assert np.array_equal(_ints(tmp_path / "dtc_code.txt"), g["dtc_code"])
+    # amplitude: popcount(thermo) segments of 2^n_bin plus the binary LSBs = the DPA code
+    n_bin = 10 - 7
+    rebuilt = np.array([bin(t).count("1") << n_bin for t in thermo]) + g["bin"]
+    assert np.array_equal(rebuilt, g["dpa_code"])
+    assert 0.0 < m["clip_fraction"] < 0.05 and g["env_clip"].max() == CFR_T
+    assert m["addr_used"] > 150
+    # phase: the dithered code tracks the corrected phase word on average
+    err = g["dtc_code"] - g["phase_w"] / 2 ** 8
+    err = (err + 1024) % 2048 - 1024
+    assert abs(err.mean()) < 0.01 and np.abs(err).max() < 1.0 + 1e-9
+    # the AM-PM correction is really applied (it moves the phase word where it is non-zero)
+    assert np.any(g["phase_w"] != g["acc"])

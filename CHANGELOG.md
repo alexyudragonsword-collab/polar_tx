@@ -10,6 +10,16 @@ release 分组。
 
 ## 未发布 / Unreleased
 
+### 整条数字极坐标链的金向量（2026-11-06）
+
+- **`export/rtl_vectors.py`** 加四组：`cfr_clip`（`emit_cfr_clip_rtl` 的随机流 + WiFi-20 包络，9728）、`phase_acc`（`emit_phase_acc_rtl` 的流，2048）、`thermo`（10 位 / 7 温度计段 DPA 的全部 1024 码）、`datapath`。
+- **`datapath_golden`**：`emit_datapath` 的各块第一次按样本串成一条，级间位宽在此写死，请审阅：
+  - 幅度路：CFR 削顶 → 取高 8 位做 LUT 地址 → 幅度码取高 10 位做 DPA 码 → 温度计 + 二进制。
+  - 相位路：相位累加（19 位）→ 减去 AM-PM 校正（`chain.py` 同号，14 位 π 缩放左移 5 位）→ EFM1 抖动（11.8）。
+  - WiFi-20 突发：8704 样本，削顶 0.84 %，LUT 用到 192 个地址，DTC 平均误差 < 0.01 LSB。
+- 为什么：dsp_ip 要把这五个块和整条链做 RTL lockstep，向量来自本库导出。算法与已有数字不变。
+- 测试 357 → 359 个函数。
+
 ### 外部 RTL 对照用的金向量：DTC 抖动、DPD LUT、dp_cal 覆盖变体（2026-11-05）
 
 - **`export/rtl_vectors.py`**（新）：`python -m polartx.export.rtl_vectors {dtc_random,dtc_ramp,dpd_lut} OUTDIR`。

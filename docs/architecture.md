@@ -80,7 +80,7 @@ src/polartx/
 ├── montecarlo.py     良率分析（spec 化、进程池并行）
 ├── export/rtl.py     定点化 + Verilog/Verilog-AMS 导出 + 金向量
 ├── export/dp_cal_vectors.py  定点两点增益 LMS 的金向量：BLE 场景逐参考周期的输入码与值码（默认 + 三个覆盖变体）
-├── export/rtl_vectors.py  DTC EFM1 抖动与 polar DPD LUT 的整数金向量流（逐行整数 + dims + meta），供外部 RTL 逐样本对照
+├── export/rtl_vectors.py  `emit_datapath` 各块（DTC EFM1、DPD LUT、CFR、相位累加、温度计码）与整条数字链（`datapath_golden`）的整数金向量流，供外部 RTL 逐样本对照
 ├── selector.py       架构选择器：给定需求，ADPLL / DTC / outphasing / RF-DAC 四候选解析打分
 │                     （EVM 预算 + 各自效率律在截断瑞利分布上的平均；先达标再比效率）
 ├── presets.py        ★ 端到端预设（标准链路 + 文献对标）
