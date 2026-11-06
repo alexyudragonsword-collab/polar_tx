@@ -2,6 +2,12 @@
 
 本文件按倒序记录实质性进展——最新的一条在这行下面。每条保持简短，只写摘要和指针；结论沉淀进 `cairn/<topic>.md`。
 
+## 2026-11-06 · 整条数字极坐标链的金向量（datapath_golden）
+
+- `rtl_vectors` 加 cfr_clip / phase_acc / thermo / datapath 四组；`datapath_golden` 把 `emit_datapath` 的五个块按样本串成一条，级间位宽（取高位、AM-PM 左移 5 位相减）是新写下的约定，待 PR 审阅。
+- WiFi-20 突发上：削顶 0.84 %，LUT 地址 192 个（CFR 门限 0.75 FS 所以高 1/4 地址不用），DTC 平均误差 < 0.01 LSB。
+- 测试 357 → 359。下一步：dsp_ip 新增 cfr_clip、dtc_phase_acc、dpa_thermo_decode 与 polar_datapath。
+
 ## 2026-11-05 · 外部 RTL 对照用金向量：DTC 抖动 / DPD LUT 流 + dp_cal 三个覆盖变体
 
 - 新 `export/rtl_vectors.py`：三套流（dtc_random 2048、dtc_ramp 4096、dpd_lut 8960），分别与 `efm1_int_golden`、`quantize_dpd_luts`、`emit_*` 的 golden / ROM 镜像逐值相同；两次导出逐字节相同。
