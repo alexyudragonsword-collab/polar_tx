@@ -1,4 +1,4 @@
-# Vendored from pll_simulator@931cfaf: src/pllsim/blocks/dtc.py
+# Vendored from pll_simulator@5564c64: src/pllsim/blocks/dtc.py
 # Adapted-copy policy: see src/polartx/vendor/__init__.py
 """Digital-to-time converter with gain error, INL and jitter.
 

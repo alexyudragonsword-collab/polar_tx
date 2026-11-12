@@ -1,4 +1,4 @@
-# Vendored from pll_simulator@931cfaf: src/pllsim/blocks/loopfilter.py
+# Vendored from pll_simulator@5564c64: src/pllsim/blocks/loopfilter.py
 # Adapted-copy policy: see src/polartx/vendor/__init__.py
 """Passive loop-filter state-space model with exact discrete-time updates.
 

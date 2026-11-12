@@ -1,4 +1,4 @@
-# Vendored from pll_simulator@931cfaf: src/pllsim/synth.py
+# Vendored from pll_simulator@5564c64: src/pllsim/synth.py
 # Adapted-copy policy: see src/polartx/vendor/__init__.py
 """Loop synthesis: component values from bandwidth/phase-margin targets.
 

@@ -1,4 +1,4 @@
-# Vendored from pll_simulator@931cfaf: src/pllsim/calibration/gain_cal.py
+# Vendored from pll_simulator@5564c64: src/pllsim/calibration/gain_cal.py
 # Adapted-copy policy: see src/polartx/vendor/__init__.py
 """DCO-gain and TDC-gain calibration.
 

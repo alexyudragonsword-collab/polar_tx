@@ -122,6 +122,27 @@ jobs:
           POLARTX_REQUIRE_BROWSER: "1"
         run: pytest tests/test_webui.py tests/test_guispec.py
 
+  # The vendored per-cycle kernels compiled by numba and run as plain
+  # Python must agree bit for bit -- with polartx's own extensions to the
+  # TDC kernel in use (the clipped direct point, and the dp_cal step passed
+  # in as a function).  No other job installs numba, so this is the only
+  # place the compiled path runs; the test skips without it and
+  # POLARTX_REQUIRE_NUMBA turns that skip into a failure.
+  test-jit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - name: Install
+        run: pip install -e .[test] numba
+      - name: Compiled vs interpreted kernels
+        env:
+          POLARTX_REQUIRE_NUMBA: "1"
+        run: pytest tests/test_kernels_jit.py
+
   # Linux job with iverilog so the RTL bit-true golden tests actually run
   test-rtl:
     runs-on: ubuntu-latest
@@ -148,20 +169,18 @@ jobs:
       - uses: actions/checkout@v4
         with:
           path: polar_tx
-      # fetch-depth: 0, and that is load-bearing.  The vendored pllsim files
-      # do NOT all sit on one commit: 39 are at 931cfaf, while arch/adpll.py
-      # and arch/frac.py stay at d7be4712 because polartx's per-cycle dp_cal
-      # hook does not fit upstream's jit kernels (ROADMAP C3).  A shallow
-      # checkout of one ref cannot resolve the other, and vendor_check would
-      # then SKIP exactly the two files that carry local changes -- a green
-      # job that checked nothing.  Full history makes both reachable, and
-      # --fail-on-skip below turns any remaining skip red.
+      # fetch-depth: 0.  Every vendored pllsim file sits on 5564c64 since the
+      # 2026-11-12 re-vendor (ROADMAP C5 done), so one ref would do today;
+      # the full history is kept because pins have been mixed before
+      # (39 files at 931cfaf with adpll/frac at d7be4712 until then) and a
+      # shallow checkout that cannot resolve a pin SKIPS that file -- a green
+      # job that checked nothing.  --fail-on-skip below turns any skip red.
       - name: Checkout pll_simulator (pinned)
         continue-on-error: true
         uses: actions/checkout@v4
         with:
           repository: alexyudragonsword-collab/pll_simulator
-          ref: 931cfaf48aaaf693eefa7088d41c608ee3450b97
+          ref: 5564c6430279036a78eea6829f4fecb13adac233
           fetch-depth: 0
           path: _siblings/pll_simulator
           # pll_simulator is a PRIVATE repository; the workflow's own

@@ -19,20 +19,32 @@ by sample (dsp_ip ``ip/dp_cal_lms``):
   ``2^-v_frac``: each step is exactly +-1 LSB (``mu = 2^-v_frac``,
   1.53e-5 by default) and saturates instead of wrapping.
 
-``FixedSignSignLMS`` has the float class's engine contract
-(``.step(err, reg)``, a writable ``.value``), so it drops into
-``ADPLLTwoPoint.dp_cal`` unchanged -- and the float class's limit: the
-centred regressor needs a zero-mean modulation, which a frequency ramp
-is not (see ``ADPLLTwoPoint.__init__``).  ``golden_trace`` is the same update
-on already-quantized integer codes -- the vector form that RTL is
-compared against.  Only numpy is imported here, so the file can be
-vendored on its own.
+``FixedSignSignLMS`` has the float class's object contract
+(``.step(err, reg)``, a writable ``.value``) and the engine's kernel
+contract (``kernel_view`` / ``kernel_done``: the update runs inside the
+ADPLL's per-cycle kernel as ``fixed_dp_step`` over a state vector), so it
+drops into ``ADPLLTwoPoint.dp_cal`` unchanged -- with the float class's
+limit: the centred regressor needs a zero-mean modulation, which a
+frequency ramp is not (see ``ADPLLTwoPoint.__init__``).  ``golden_trace``
+is the same update on already-quantized integer codes -- the vector form
+that RTL is compared against.  Every path (object, kernel, golden trace)
+goes through the same two scalar kernels, ``_quantize`` and ``_update``,
+so there is one update rule, not three.  Only numpy is required: inside
+polartx the kernels compile when the vendored jit finds numba, and copied
+out on its own the file falls back to plain Python, so it can still be
+vendored by itself.
 """
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass
 
 import numpy as np
+
+try:
+    from ..vendor.pllsim.core.jit import kernel
+except ImportError:          # vendored on its own: the plain-Python path
+    def kernel(fn):          # type: ignore[misc]
+        return fn
 
 
 @dataclass(frozen=True)
@@ -68,25 +80,54 @@ class DpCalFixedConfig:
         return asdict(self)
 
 
+@kernel
 def _sat(x: int, lo: int, hi: int) -> int:
-    return lo if x < lo else hi if x > hi else x
+    if x < lo:
+        return lo
+    if x > hi:
+        return hi
+    return x
 
 
+@kernel
 def _sgn(x: int) -> int:
-    return (x > 0) - (x < 0)
+    if x > 0:
+        return 1
+    if x < 0:
+        return -1
+    return 0
+
+
+@kernel
+def _quantize(x: float, mul: float, div: float, half: int) -> int:
+    """``round(x * mul / div)`` to nearest, ties to even (Python ``round``,
+    numpy ``rint``), saturated to a signed code of ``half`` = 2^(bits-1).
+    ``x * 1.0`` and ``y / 1.0`` are exact, so one function serves the
+    error (a multiply) and the regressor (a divide) bit for bit."""
+    return _sat(int(round(x * mul / div)), -half, half - 1)
+
+
+@kernel
+def _update(v: int, a_reg: int, a_err: int, e: int, r: int, k: int,
+            v_max: int) -> tuple[int, int, int]:
+    """One sign-sign step on integer codes; returns (V, A_reg, A_err)."""
+    a_reg += r - (a_reg >> k)              # >> on a signed int is arithmetic
+    dr = (r << k) - a_reg
+    a_err += e - (a_err >> k)
+    de = (e << k) - a_err
+    v = _sat(v + _sgn(de) * _sgn(dr), 0, v_max)
+    return v, a_reg, a_err
 
 
 def quantize_err(err: float, cfg: DpCalFixedConfig) -> int:
     """Phase error [UI] -> signed e_bits code (round to nearest, ties to
     even -- Python ``round``, same as numpy ``rint`` -- then saturate)."""
-    h = 1 << (cfg.e_bits - 1)
-    return _sat(int(round(err * (1 << cfg.e_frac))), -h, h - 1)
+    return int(_quantize(err, float(1 << cfg.e_frac), 1.0, 1 << (cfg.e_bits - 1)))
 
 
 def quantize_reg(reg: float, cfg: DpCalFixedConfig) -> int:
     """Regressor [Hz] -> signed reg_bits code."""
-    h = 1 << (cfg.reg_bits - 1)
-    return _sat(int(round(reg / cfg.reg_lsb_hz)), -h, h - 1)
+    return int(_quantize(reg, 1.0, float(cfg.reg_lsb_hz), 1 << (cfg.reg_bits - 1)))
 
 
 def value_code(value: float, cfg: DpCalFixedConfig) -> int:
@@ -97,13 +138,29 @@ def value_code(value: float, cfg: DpCalFixedConfig) -> int:
 def step_codes(state: list[int], e: int, r: int, cfg: DpCalFixedConfig) -> int:
     """One update on integer codes; ``state = [V, A_reg, A_err]`` is
     modified in place and the new ``V`` returned."""
-    k = cfg.k
-    state[1] += r - (state[1] >> k)        # >> on int is arithmetic
-    dr = (r << k) - state[1]
-    state[2] += e - (state[2] >> k)
-    de = (e << k) - state[2]
-    state[0] = _sat(state[0] + _sgn(de) * _sgn(dr), 0, cfg.v_max)
+    v, a_reg, a_err = _update(state[0], state[1], state[2], e, r, cfg.k,
+                              cfg.v_max)
+    state[:] = [int(v), int(a_reg), int(a_err)]
     return state[0]
+
+
+@kernel
+def fixed_dp_step(st: np.ndarray, pr: np.ndarray, err: float, reg: float,
+                  rec: np.ndarray, n: int) -> float:
+    """The calibrator as the ADPLL kernel's dp_cal step (see
+    ``FixedSignSignLMS.kernel_view`` for ``pr``).  Records the input codes
+    and the new value code of cycle ``n`` in ``rec[n]``."""
+    e = _quantize(err, pr[0], 1.0, int(pr[1]))
+    r = _quantize(reg, 1.0, pr[2], int(pr[3]))
+    v, a_reg, a_err = _update(int(st[0]), int(st[1]), int(st[2]), e, r,
+                              int(pr[4]), int(pr[5]))
+    st[0] = v
+    st[1] = a_reg
+    st[2] = a_err
+    rec[n, 0] = e
+    rec[n, 1] = r
+    rec[n, 2] = v
+    return v / pr[6]
 
 
 def golden_trace(e_codes, r_codes, v0: int,
@@ -174,3 +231,23 @@ class FixedSignSignLMS:
         self.r_codes.append(r)
         self.v_codes.append(v)
         return self.value
+
+    # ---- kernel view: the ADPLL runs the update inside its per-cycle loop
+    def kernel_view(self, n_cycles: int):
+        """(step, state, params, record) for the engine's kernel.  The
+        state is ``[V, A_reg, A_err]`` as float64 (integers far below
+        2^53, so exact); the record holds one (e, r, V) row per cycle."""
+        c = self.cfg
+        pr = np.array([float(1 << c.e_frac), float(1 << (c.e_bits - 1)),
+                       float(c.reg_lsb_hz), float(1 << (c.reg_bits - 1)),
+                       float(c.k), float(c.v_max), float(1 << c.v_frac)])
+        return (fixed_dp_step, np.array(self._st, dtype=float), pr,
+                np.empty((n_cycles, 3)))
+
+    def kernel_done(self, st: np.ndarray, rec: np.ndarray, n_steps: int) -> None:
+        """Take the state and the code streams back after a run."""
+        self._st = [int(st[0]), int(st[1]), int(st[2])]
+        codes = rec[:n_steps].astype(np.int64)
+        self.e_codes.extend(codes[:, 0].tolist())
+        self.r_codes.extend(codes[:, 1].tolist())
+        self.v_codes.extend(codes[:, 2].tolist())

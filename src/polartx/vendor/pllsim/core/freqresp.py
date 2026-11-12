@@ -1,4 +1,4 @@
-# Vendored from pll_simulator@931cfaf: src/pllsim/core/freqresp.py
+# Vendored from pll_simulator@5564c64: src/pllsim/core/freqresp.py
 # Adapted-copy policy: see src/polartx/vendor/__init__.py
 """Grid-evaluated frequency-response algebra for PLL loop analysis.
 

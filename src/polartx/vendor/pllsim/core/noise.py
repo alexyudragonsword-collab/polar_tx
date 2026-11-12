@@ -1,4 +1,4 @@
-# Vendored from pll_simulator@931cfaf: src/pllsim/core/noise.py
+# Vendored from pll_simulator@5564c64: src/pllsim/core/noise.py
 # Adapted-copy policy: see src/polartx/vendor/__init__.py
 """Noise source PSD models and output noise budgeting.
 

@@ -21,7 +21,9 @@ python tools/vendor_check.py        # vendor 漂移检查（CI 也跑这个）
 ```
 
 可选依赖：`iverilog`（RTL 金向量验证）、`playwright` + Chromium（页面在真浏览器里的
-测试，`tests/test_webui.py`）、Node 的 `jsdom`（页面脚本 harness）。
+测试，`tests/test_webui.py`）、Node 的 `jsdom`（页面脚本 harness）、`numba`（装了就把
+vendored 的逐周期内核编译掉，event 引擎约快 6 倍；与解释执行逐位一致由
+`tests/test_kernels_jit.py` 卡住，CI 的 `test-jit` job 装 numba 跑它）。
 缺失时相关测试**干净地 skip**——所以**本地带 skip 的全绿是正常的，CI 上带
 skip 就不正常**：那说明某个 job 的依赖没装上，等于那部分没被验证。
 
@@ -75,7 +77,7 @@ assert -36.0 < res.evm().db < -30.0     # ✓ 落在 Degani'24 的公布类别�
 文件头必须带出处：
 
 ```python
-# Vendored from pll_simulator@d7be4712: src/pllsim/arch/adpll.py
+# Vendored from pll_simulator@5564c64: src/pllsim/arch/adpll.py
 ```
 
 `tools/vendor_check.py` 把每个文件分成四类，CI 的 `vendor-drift` job 每次

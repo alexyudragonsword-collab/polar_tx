@@ -156,3 +156,38 @@ def test_vector_variants(tmp_path, variant):
         # starts 5 % low and slews up by >= 90 % of the way to gain 1.0
         start, one = meta["v_start"], 1 << cfg.v_frac
         assert start < one and v[-1000:].mean() > start + 0.9 * (one - start)
+
+
+def test_the_kernel_view_is_the_object_rule():
+    """The engine runs the calibrator inside its per-cycle kernel
+    (``fixed_dp_step`` over ``kernel_view``'s state and parameters); the
+    object API steps it from Python.  Both must give the same codes for
+    the same inputs -- including exact rounding ties, saturating errors and
+    regressors, and a value register run into its rail."""
+    from polartx.cal.dp_cal_fixed import fixed_dp_step
+
+    cfg = DpCalFixedConfig(v_bits=12, v_frac=10)
+    rng = np.random.default_rng(7)
+    n = 3000
+    err = rng.normal(0.0, 0.05, n)
+    err[::17] = (rng.integers(-40, 40, err[::17].size) + 0.5) / 2 ** cfg.e_frac
+    err[::29] = rng.choice([-1.0, 1.0], err[::29].size)       # saturates
+    reg = rng.normal(0.0, 4e5, n)
+    reg[::13] = (rng.integers(-40, 40, reg[::13].size) + 0.5) * cfg.reg_lsb_hz
+    reg[::31] = rng.choice([-5e6, 5e6], reg[::31].size)       # saturates
+    reg[: n // 2] = np.abs(reg[: n // 2]) * np.sign(err[: n // 2])  # drive V up
+
+    obj = FixedSignSignLMS(init=3.9, cfg=cfg)
+    vals_obj = [obj.step(e, r) for e, r in zip(err, reg)]
+
+    ker = FixedSignSignLMS(init=3.9, cfg=cfg)
+    step, st, pr, rec = ker.kernel_view(n)
+    vals_ker = [step(st, pr, float(e), float(r), rec, i)
+                for i, (e, r) in enumerate(zip(err, reg))]
+    ker.kernel_done(st, rec, n)
+
+    assert ker.e_codes == obj.e_codes and ker.r_codes == obj.r_codes
+    assert ker.v_codes == obj.v_codes and ker.code == obj.code
+    assert np.array_equal(vals_ker, vals_obj)
+    assert max(obj.v_codes) == cfg.v_max            # the rail was reached
+    assert step is fixed_dp_step

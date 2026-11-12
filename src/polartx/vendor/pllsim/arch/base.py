@@ -1,4 +1,4 @@
-# Vendored from pll_simulator@931cfaf: src/pllsim/arch/base.py
+# Vendored from pll_simulator@5564c64: src/pllsim/arch/base.py
 # Adapted-copy policy: see src/polartx/vendor/__init__.py
 """Common architecture contract."""
 from __future__ import annotations

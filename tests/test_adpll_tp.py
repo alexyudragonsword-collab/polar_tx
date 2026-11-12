@@ -126,6 +126,10 @@ def test_the_tdc_must_span_a_dco_period():
     short = dataclasses.replace(c, tdc=dataclasses.replace(c.tdc, n_bits=7))
     with pytest.raises(ValueError, match="saturates every cycle"):
         ADPLLTwoPoint(ADPLL(short))
+    # upstream's analyze() says the same for this fractional FCW; it did not
+    # reach polartx while adpll.py was pinned before it (ROADMAP C5)
+    notes = ADPLL(short).analyze().notes
+    assert any("TDC range is 0.25 of an output period" in n for n in notes)
 
 
 def test_event_engine_has_no_phase_advance_limit():

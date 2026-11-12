@@ -34,7 +34,7 @@ Waveform → [CFR] → polar split → 包络路径（量化/skew/DPA 幅度码�
 
 ```bash
 pip install -e .          # numpy / scipy / matplotlib
-pytest tests/             # 360 个测试函数（参数化后实收更多）：物理量断言 + 与 padpd 逐位回归
+pytest tests/             # 363 个测试函数（参数化后实收更多）：物理量断言 + 与 padpd 逐位回归
 python examples/ex01_ble_gfsk_adpll.py      # 图落在 examples/out/
 
 polartx-gui               # 工作台：本地服务 + Edge/Chrome 应用窗口，关窗即退出
@@ -43,7 +43,7 @@ polartx-gui --tab         # 改用默认浏览器的普通标签页（Ctrl+C 停
 ```
 
 **Android APK**：`android/` 用 Chaquopy 把真的 CPython + numpy/scipy/matplotlib 装进 APK，UI 是 WebView，计算全在本地，**零权限**。手动触发的 *Android APK* workflow 一次产出**两个** APK——解释版，以及把模块 Cython 编译成 `.so` 的编译版（上一次真机构建实测 42/101，
-见 [`docs/android.md`](docs/android.md)；vendored 子树此后推进过，分母已是 103，分子待重测）（`strings` 拿不到 docstring 了，但字面常量仍在——实测边界见 [`docs/android.md`](docs/android.md)）。两者由 `inspect_apk.py` 门禁证明确实不同。
+见 [`docs/android.md`](docs/android.md)；包里的模块此后有增有减——2026-11-12 按 `src/polartx` 下 .py 文件计是 115——分子待重测）（`strings` 拿不到 docstring 了，但字面常量仍在——实测边界见 [`docs/android.md`](docs/android.md)）。两者由 `inspect_apk.py` 门禁证明确实不同。
 
 **Windows 免安装 exe**：两条手动触发的 GitHub Actions 各打一个 onefile exe——`windows-exe`（PyInstaller：快、自解压）和 `windows-exe-nuitka`（Nuitka：MSVC 真编译、启动快、构建慢）。exe 就是 `polartx-gui`：起本地服务、用 Windows 自带的 Edge 开应用窗口，关窗即退出（控制台窗口保留，是服务日志）。上传前在 runner 上用 `packaging/smoke_webhost.py` 冒烟：页面及其资源、bridge、一次工作台运行、桌面专属的 RTL 导出，全部经冻结后的 exe。从 Actions → Run workflow 触发，下载 `polartx-gui[-nuitka]`。
 
@@ -114,7 +114,7 @@ src/polartx/
 ## 建模口径与已知边界
 
 - 波形保真度（F1–F4 升级后）：numerology 全部正确且逐位回归；**LTE 预设默认 SC-FDMA 真实上行**（PAPR 低 1.7 dB，平均效率 35.9→41.4%）；**EDGE 用数值提取的线性化 GMSK C0 脉冲**（提取 NMSE 自检，真实 GMSK 频谱裙，EVM 按规范对理想波形参考）；**BLE Δf2max 符号内最大值/99.9% 判据/漂移指标**齐备，调制指数容差窗有测试；OFDM 可选**导频 + 前导**与接收机式 EVM（`metrics.ofdm_rx.evm_rx`，确定性 CPE 完全恢复有证明；对快相噪已量化口径差 <1 dB）。**信道编码刻意排除**：TX 损伤链路上没有任何指标在比特映射之后测量。mask 仍为工程化模板。
-- `ADPLLTwoPoint` response 模式是线性化模型（无 TDC 回绕、dither×调制耦合）；杂散类结论以 event 模式与解析预测背书。event 模式逐参考周期（Python 循环 ~1–2 Mcycles/s），长帧验证用短段。
+- `ADPLLTwoPoint` response 模式是线性化模型（无 TDC 回绕、dither×调制耦合）；杂散类结论以 event 模式与解析预测背书。event 模式逐参考周期（解释执行约 0.3 Mcycles/s；装了 numba 时 vendored 内核编译，约 1.5 Mcycles/s，与解释执行逐位一致，CI `test-jit` 卡住），长帧验证用短段。
 - 幅度域 hole punching 钳制包络动态范围与包络带宽，但相位路径保留 π 翻转（DTC 按 mod 2π 处理）。相位轨迹平滑已实现（`phase_interp="linear"|"smooth"` + `phase_slew_max_hz`），结论是**固定斜率上限下 smoothstep 因窗口加宽 1.5× 反而输给线性插值**（轨迹 EVM 与 ACP 双输，测试固化），故默认 `linear`。
 - LO 相噪用"环内平坦"锁定近似（`lo_loop_bw`）。
 - **mask 口径**（`metrics/sem.py`）：内置模板全部标记 `source="stylized"`，`is_conformance=False`——**工程近似，不是认证条款**（本仓无法访问 3GPP/IEEE 原文，不臆造限值）。但测量口径已按仪器惯例实现：限值按 mask 声明的 **RBW 积分**（LTE/NR 1 MHz、BLE/WiFi 100 kHz）而非逐 FFT bin 比较，因此裁决不再随 `nfft` 漂移；并**分开报告带内/带外裕量**——带内相切会把总裕量恒钉在 0.00 dB（18.6 dB 余量与 4.9 dB 余量读数相同），`mask OOB margin [dB]` 才是随设计变化的数。要做合规预判：用 `MaskSpec(basis="dBm_in_rbw", source="<条款号>")` 填入真实表格即可，`is_conformance` 会自动转真。
