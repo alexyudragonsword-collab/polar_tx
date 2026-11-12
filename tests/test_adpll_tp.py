@@ -96,43 +96,74 @@ def test_kdco_error_acts_as_dp_gain_error():
     assert abs(e_k - e_g) < 0.5
 
 
-def test_event_mode_guards_its_validity_domain():
-    """The event engine closes its loop once per reference edge, so it can
-    only follow a trajectory advancing much less than one UI per cycle.
+def _phase_err_rms(r):
+    """RMS of phase_out - phase_cmd after removing static phase and
+    frequency offset (what a receiver's carrier recovery takes out)."""
+    e = r.phase_out - r.phase_cmd
+    k = np.arange(e.size)
+    a, b = np.polyfit(k, e, 1)
+    return float(np.std(e - (a * k + b)))
 
-    Measured agreement against the linearized response engine tracks that
-    metric directly: BLE 0.8-1.6% UI agrees to <1 dB and EDR 4.2% to ~5 dB,
-    but LTE-20 OFDM advances 29% of a UI per cycle (its phase slews to
-    +/-2x the channel bandwidth) and the two engines then disagree by ~22
-    dB. Returning that number silently would present a modelling limit as
-    a device result, so wide modulation must warn.
+
+def test_the_tdc_must_span_a_dco_period():
+    """The counter-assisted loop reads the fraction of a DCO cycle with the
+    TDC; a shorter range saturates and the loop is blind for the rest of
+    the cycle.  The LTE-20 preset shipped that way (1 ps x 7 bit = 127 ps
+    against 513 ps) and its event-engine EVM of -15 dB was read as an
+    engine limit for three months (ROADMAP B1).  Now it cannot be built."""
+    import dataclasses
+
+    import pytest
+
+    from polartx.phasemod.adpll_tp import ADPLLTwoPoint
+    from polartx.presets import lte20_adpll
+    from polartx.vendor.pllsim.arch.adpll import ADPLL
+
+    pll = lte20_adpll().tx.phasemod.pll
+    c = pll.cfg
+    span = ((1 << c.tdc.n_bits) - 1) * c.tdc.t_res
+    assert span >= 1.0 / c.fout
+    short = dataclasses.replace(c, tdc=dataclasses.replace(c.tdc, n_bits=7))
+    with pytest.raises(ValueError, match="saturates every cycle"):
+        ADPLLTwoPoint(ADPLL(short))
+
+
+def test_event_engine_has_no_phase_advance_limit():
+    """The event engine does not need the phase to advance by much less
+    than one UI per reference cycle: the counter takes whole DCO cycles and
+    the FCW path carries the modulation, so the TDC only sees the residual.
+
+    LTE-20 advances ~30% of a UI per cycle.  With the TDC spanning a period
+    its error is bounded by the one term the linear model lacks, the TDC's
+    normalization by the NOMINAL period, which misreads a fraction of a
+    cycle by at most df/f; so the output error cannot exceed
+    2*pi*rms(df)/f.  (With the old 7-bit TDC it was 8x over that bound.)
+    Where df/f is ~1e-4, BLE and EDR, nothing separates the engines.
     """
     import warnings
 
     from polartx.presets import bt_edr_adpll, lte20_adpll
 
-    # inside the domain: no warning, and the metric is small
-    with warnings.catch_warnings(record=True) as w:
-        warnings.simplefilter("always")
-        p = ble_1m_adpll(mode="event")
-        r = p.tx.run(p.make_waveform(n_bits=400, seed=5), noise=False, seed=1)
-        assert not [x for x in w if issubclass(x.category, RuntimeWarning)]
-    assert r.info["phasemod"]["ui_per_ref_cycle_p99"] < 0.05
-
-    # EDR's isolated pi-jumps are large but rare: P99 stays inside
-    with warnings.catch_warnings(record=True) as w:
-        warnings.simplefilter("always")
-        q = bt_edr_adpll("8dpsk", mode="event")
-        rq = q.tx.run(q.make_waveform(n_syms=300, seed=1), noise=False, seed=1)
-        assert not [x for x in w if issubclass(x.category, RuntimeWarning)]
-    assert rq.info["phasemod"]["ui_per_ref_cycle_p99"] < 0.10
-
-    # outside the domain: LTE-20 OFDM must warn
-    with warnings.catch_warnings(record=True) as w:
-        warnings.simplefilter("always")
+    with warnings.catch_warnings():
+        warnings.simplefilter("error", RuntimeWarning)
         t = lte20_adpll(mode="event", dpd=False)
-        rt = t.tx.run(t.make_waveform(n_symbols=4, seed=0), noise=False, seed=1)
-        msgs = [str(x.message) for x in w
-                if issubclass(x.category, RuntimeWarning)]
-    assert any("validity domain" in m for m in msgs), msgs
-    assert rt.info["phasemod"]["ui_per_ref_cycle_p99"] > 0.20
+        rt = t.tx.run(t.make_waveform(n_symbols=4, seed=0), noise=False,
+                      seed=1)
+    diag = rt.info["phasemod"]
+    assert diag["ui_per_ref_cycle_p99"] > 0.20          # far past the old rule
+    f_dev = np.diff(rt.phase_cmd) * rt.fs / (2 * np.pi)
+    ceiling = (2 * np.pi * np.sqrt(np.mean(f_dev ** 2))
+               / t.tx.phasemod.pll.cfg.fout)
+    assert _phase_err_rms(rt) < ceiling
+
+    for preset, wkw in ((ble_1m_adpll, dict(n_bits=400, seed=5)),
+                        (lambda **k: bt_edr_adpll("8dpsk", **k),
+                         dict(n_syms=300, seed=1))):
+        p = preset(mode="event")
+        wf = p.make_waveform(**wkw)
+        r_ev = p.tx.run(wf, noise=True, seed=3)
+        assert r_ev.info["phasemod"]["dco_dev_frac_p99"] < 1e-3
+        e_ev = _phase_err_rms(r_ev)
+        p.tx.phasemod.mode = "response"
+        e_rs = _phase_err_rms(p.tx.run(wf, noise=True, seed=3))
+        assert abs(20 * np.log10(e_ev / e_rs)) < 1.0

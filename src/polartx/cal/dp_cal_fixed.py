@@ -21,7 +21,9 @@ by sample (dsp_ip ``ip/dp_cal_lms``):
 
 ``FixedSignSignLMS`` has the float class's engine contract
 (``.step(err, reg)``, a writable ``.value``), so it drops into
-``ADPLLTwoPoint.dp_cal`` unchanged.  ``golden_trace`` is the same update
+``ADPLLTwoPoint.dp_cal`` unchanged -- and the float class's limit: the
+centred regressor needs a zero-mean modulation, which a frequency ramp
+is not (see ``ADPLLTwoPoint.__init__``).  ``golden_trace`` is the same update
 on already-quantized integer codes -- the vector form that RTL is
 compared against.  Only numpy is imported here, so the file can be
 vendored on its own.

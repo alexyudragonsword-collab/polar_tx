@@ -48,6 +48,18 @@ class TxPreset:
     make_waveform: Callable[..., Waveform]
 
 
+def _tdc_bits_for_period(t_res: float, fout: float) -> int:
+    """Flash-TDC bits for a range of at least one DCO period.
+
+    The counter-assisted ADPLL counts whole DCO cycles and reads only the
+    fraction with the TDC, so the TDC must span one period; a shorter
+    range saturates on every cycle whose fraction lands past it and the
+    loop loses phase information.  That is what B1 was: LTE-20 kept the
+    7-bit default at a 1 ps LSB, 127 ps against 513 ps."""
+    import math
+    return max(1, math.ceil(math.log2(1.0 / (fout * t_res) + 1.0)))
+
+
 def ble_adpll(rate: float = 1e6, *, mode: str = "response",
               dp_gain: float = 1.0, kdco_est_error: float = 0.0,
               loop_bw: float = 100e3, fref: float = 32e6,
@@ -137,7 +149,8 @@ def lte20_adpll(qam: int = 64, *, mode: str = "response",
 
     Baseband = fref = 122.88 MS/s (30.72 M grid x4, 1:1 with the event
     engine).  Cellular-class DCO (-121 dBc/Hz @ 1 MHz on 1.95 GHz, band-1
-    uplink), 1 ps TDC, ~1 MHz loop.  The envelope path runs a mildly
+    uplink), 1 ps TDC spanning a full DCO period (10 bits at 1.95 GHz),
+    ~1 MHz loop.  The envelope path runs a mildly
     compressive 10-bit DPA; dpd=True pre-links the exact PolarDPD LUTs
     (factory cal) - set False to see the raw DPA nonlinearity.
     AM/PM path skew matters here despite the narrow channel — the OFDM
@@ -157,7 +170,8 @@ def lte20_adpll(qam: int = 64, *, mode: str = "response",
                     pn_f1f3=300e3, pn_floor_dbchz=-155.0)
     pll = ADPLL(ADPLLConfig(
         fref=fref, fout=fout, osc=osc, dlf=DLFConfig(alpha=alpha, rho=rho),
-        mode="tdc", tdc=TDCConfig(t_res=1e-12),
+        mode="tdc",
+        tdc=TDCConfig(t_res=1e-12, n_bits=_tdc_bits_for_period(1e-12, fout)),
         int_band=(1e3, fref / 2)))
     pm = ADPLLTwoPoint(pll, dp_gain=dp_gain, mode=mode,
                        settle_cycles=settle_cycles, dp_range_hz=dp_range_hz)

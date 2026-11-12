@@ -5,7 +5,7 @@ summary: "Cairn 初始化前 polartx 已有知识的落点清单（inventory_onl
 tags: [polartx, cairn, 历史清单]
 contains: [reference, lesson, open_question]
 created: "2026-08-18"
-updated: "2026-08-18"
+updated: "2026-11-12（B1 真因更正两条）"
 related: []
 authoring_mode: ai_generated
 ---
@@ -41,6 +41,9 @@ Cairn 初始化时项目已有 40 次提交、238 项测试、18 个 examples，
    各自独立验证过一次。
 3. **引擎适用域要在运行时检测，不能只写在文档里**。event 引擎的
    ≪1 UI/参考周期条件；违反时告警 + 暴露 `ui_per_ref_cycle_p99`。
+   （**更正 2026-11-12**：原则仍对，例子错了——那个条件是从 TDC 量程只覆盖 1/4 个
+   DCO 周期的 LTE-20 预设归纳出来的，真正的前提是 TDC 覆盖一个周期，现在构造时
+   检查。见 `adpll-event-engine.md`。）
 4. **ILA/DPD 拟合要求被拟合对象是静态系统**。逐次归一化会让"PA"在迭代间变化，
    收益封顶在 ~4 dB；固定满量程后 EVM 从 −19.8 到 −68.8 dB。
 5. **SEM 是分辨带宽里的积分功率，不是 FFT bin 的高度**；且带内相切会把总裕量
@@ -57,7 +60,8 @@ Cairn 初始化时项目已有 40 次提交、238 项测试、18 个 examples，
   才发现 Arrow 序列化的坑。
 - **自己的假设错的概率不低于 vendor 的**：写 vendor 行为测试时三个假设错的是我。
 - **假说要证伪就明说**：LTE event 模式的"差一拍"假说被自己推翻，真因至今未定位
-  （见 `ROADMAP.md` B1）。
+  （见 `ROADMAP.md` B1）。（2026-11-12：真因已定位——LTE-20 预设的 TDC 量程只有
+  DCO 周期的 1/4；B1 已从 ROADMAP 删除，经过见 `adpll-event-engine.md`。）
 
 ## 开放问题
 

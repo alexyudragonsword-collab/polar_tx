@@ -146,11 +146,17 @@ def test_reports_state_their_conventions():
 
 
 def test_a_run_time_warning_reaches_the_report():
-    """Running LTE-20 on the event engine leaves its validity domain; the
-    chain warns, and that warning used to die inside the report layer."""
-    rep = run_chain_report("LTE 20 MHz", seed=1, mode="event")
-    assert any("validity domain" in m for m in rep["warnings"])
-    assert run_chain_report("LTE 20 MHz", seed=1)["warnings"] == []
+    """A warning the library raises while building or running used to die
+    inside the report layer.  The outphasing chain has no envelope path
+    and says so when handed a skew; that warning must reach the report.
+    (This test used LTE-20 on the event engine until ROADMAP B1 turned out
+    to be a TDC covering a quarter of a DCO period: that run is clean now,
+    and it is asserted clean below.)"""
+    rep = run_chain_report("WiFi 160 MHz (outphasing)", seed=1, n_units=2,
+                           figure=False, env_skew_s=1e-10)
+    assert any("ignored: env_skew_s" in m for m in rep["warnings"])
+    assert run_chain_report("LTE 20 MHz", seed=1, n_units=4, figure=False,
+                            mode="event")["warnings"] == []
 
 
 # ------------------------------------------------------------ the plots

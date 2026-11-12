@@ -46,24 +46,6 @@ AM-AM/AM-PM 才能说这套建模有普适性，而不是对着一个器件调�
 
 ## B. 已知模型缺口
 
-### B1. event 引擎覆盖不到 LTE 级带宽
-
-逐参考周期引擎只在每周期相位推进 ≪1 UI 时有效。实测：BLE 0.8%、EDR 4.2%
-可用，**LTE-20 是 29%，不可用**——目前的处理是运行时告警 +
-`ui_per_ref_cycle_p99`，然后该带宽只能用 `response`（线性化）引擎。
-
-后果是**该带宽下没有杂散/非线性耦合的真值来源**（`CLAUDE.md` 第 7 条：
-response 模式不能背书杂散结论）。
-
-我曾假设这是两点通路差一拍造成的，**自己证伪了**（两个方向移位都更糟），
-真实原因未定位。要修有两条路：
-
-- 多速率 event 引擎（DCO 侧过采样，参考侧仍逐周期）——工作量大，但这是唯一
-  能给 LTE 杂散结论背书的办法；
-- 或者接受现状，把"该带宽只有线性化引擎"写成永久边界。
-
-**先定位原因再决定走哪条**，别直接开始写多速率引擎。
-
 ### B2. 快记忆已从实测反演；慢状态流程已在合成源上走通，等一份真采集
 
 快记忆（GMP 级，几十个采样内）**已经从 OpenDPD 实测反演进链路**：
@@ -174,6 +156,15 @@ floor"）里自己修了，写法是 `vars(np).get("trapezoid") or vars(np)["tra
   的 `FixedSignSignLMS`（整数状态 `[V, A_reg, A_err]`，`step_codes` 已是无数组操作的
   纯标量更新）——kernel 化时两个都要穿过签名，定点版的逐位金向量（dsp_ip 已 pin）是现成的回归。
 - `frac.py` 是从上游 `cppll.py` 抽出的 37 行，新版 `cppll.py` 也大改了，要重抽。
+
+**拖着的代价是实测出来的**（2026-11-12）：上游 v0.9.1（`3bd73cb`，2026-08-10）的
+`analyze()` 会对 TDC 量程不足一个输出周期报 "TDC range is 0.25 of an output period:
+it saturates every cycle"——那正是原 B1（LTE-20 event 引擎 −15 dB）的真因，用上游
+main 对我们的 LTE-20 参数实测能报出来；钉在 `d7be4712`（07-23）让它藏了三个月。
+上游此后又合了 `analyze()` 的 TDC 抖动项与整数 N 死区提示（#77）、`simulate()` 里
+TDC 抖动跨边沿回绕而非截断（#78，main@`5564c64`）。本仓 ADPLL 预设都不设
+`tdc.jitter_rms_s`、FCW 都是小数，这两项跟进后不动任何数字。姊妹库 fmcw_radar
+经本仓用这份 `adpll.py`，已登记在等 C5（polar_tx#19），但不阻塞它。
 
 因此 pin 是**混合**的：39 个文件 @`931cfaf`，2 个 @`d7be4712`。CI 的 sibling
 checkout 因此必须 `fetch-depth: 0`（浅 checkout 解析不到另一个 commit，

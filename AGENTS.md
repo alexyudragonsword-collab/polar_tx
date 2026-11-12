@@ -56,7 +56,7 @@
 - **一份界面，三个宿主都要验**。计算住在 `guiutil.py`，前端契约在 `guispec.py`，界面只在 `webui/www/`；手机（经 `appbridge.py`）、桌面应用窗口与浏览器（经 `webhost.py`）显示同一份。bridge 方法与 `app.js` 双向对齐由 `tests/test_android_parity.py` 卡死；页面在 jsdom harness 与真 Chromium（`test_webui.py`）里都要跑。
 - **测量口径要显式声明**。EVM 均衡（`scalar` vs `per_tone`）由 `PolarResult.evm_equalize_default` 承载，保证画的星座图和打印的数字同口径；mask 的出处由 `MaskSpec.source` 承载。
 - **绝不臆造规范限值**。内置 mask 全是 `source="stylized"` 的工程模板；需要真表格就开口要，不要编看起来合理的数字。
-- **引擎有适用域**（`ADPLLTwoPoint` 的 `mode="event"` 只在每参考周期相位推进 ≪1 UI 时有效，越界告警并暴露 `ui_per_ref_cycle_p99`）；`response` 模式已线性化，**不能背书杂散结论**。指标输入不够时**抛异常**，不返回 NaN。
+- **引擎有适用域**（`ADPLLTwoPoint` 的 `mode="event"` 要求 TDC 量程覆盖一个 DCO 周期，构造时不满足即抛异常；**更正 2026-11-12**：原写的"每周期相位推进 ≪1 UI"是从量程只有 1/4 周期的 LTE-20 预设归纳错的，推进量不是限制，见 `cairn/adpll-event-engine.md`）；`response` 模式已线性化，**不能背书杂散结论**。指标输入不够时**抛异常**，不返回 NaN。
 - 只在 `claude/digital-polar-tx-dev-r0c338` 上开发提交；不主动推 `main`、不主动开 PR；提交信息写**为什么**。GitHub 走 `mcp__github__*`，没有 `gh`。
 
 ## 知识沉淀规则

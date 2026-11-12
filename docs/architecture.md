@@ -148,9 +148,13 @@ src/polartx/
 - **`mode="event"`**（慢，真值）：把频率轨迹重采样到 `fref` 网格，逐参考
   周期跑 vendored ADPLL 引擎。
 
-**event 引擎有适用域**：每参考周期的相位推进必须 ≪ 1 UI。实测
-BLE 0.8%、EDR 4.2% 没问题，LTE 29% 就不行。越界时会发 `RuntimeWarning`
-并在诊断里给 `ui_per_ref_cycle_p99`。凡是杂散类结论，一律以 event 模式或
+**event 引擎的前提**：TDC 量程至少覆盖一个 DCO 周期，构造时检查。每周期相位
+推进**不是**限制（计数器数整周期，两点调制的 FCW 通路让 TDC 只看到残差）：
+LTE-20 在 30% UI/周期下 EVM −44.5 dB，response 引擎 −53.3 dB；剩下的差是
+vendored TDC 按**标称**周期归一化、调制后 DCO 偏离 df/f 带来的读数误差，线性
+模型没有这一项。`ui_per_ref_cycle_p99` 与 `dco_dev_frac_p99` 留在诊断里作描述。
+（2026-11-12 前这里写的是"推进必须 ≪ 1 UI"，是从 TDC 量程不足的 LTE-20 预设
+归纳错的，见 `cairn/adpll-event-engine.md`。）凡是杂散类结论，一律以 event 模式或
 解析预测背书（并固化成测试）。
 
 ### 4.2 EVM 均衡口径

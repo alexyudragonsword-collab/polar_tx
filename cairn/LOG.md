@@ -2,6 +2,14 @@
 
 本文件按倒序记录实质性进展——最新的一条在这行下面。每条保持简短，只写摘要和指针；结论沉淀进 `cairn/<topic>.md`。
 
+## 2026-11-12 · B1 了结：LTE-20 预设的 TDC 只覆盖 1/4 个 DCO 周期
+
+- fmcw_radar 的反例（polar_tx#19，扫频推进 495 % 照样跟得住）触发重查；真因是 1 ps × 7 bit = 127 ps 对 513 ps，
+  "推进 ≪1 UI"规则是从这一个错配置归纳的。预设按 fout 算位数，构造时检查量程，删推进量告警。
+- LTE-20 event EVM −14.7 → −44.5 dB（response −53.3 不变）；余下 ~9 dB 是 TDC 按标称周期归一化，保留为物理。
+- 上游 v0.9.1 的 analyze() 本能报出这个错，C5 的旧 pin 让它没到我们手里。AGENTS / CONTRIBUTING / 架构文档已更正。
+- 测试 359 → 360。见 `cairn/adpll-event-engine.md`。
+
 ## 2026-11-06 · 整条数字极坐标链的金向量（datapath_golden）
 
 - `rtl_vectors` 加 cfr_clip / phase_acc / thermo / datapath 四组；`datapath_golden` 把 `emit_datapath` 的五个块按样本串成一条，级间位宽（取高位、AM-PM 左移 5 位相减）是新写下的约定，待 PR 审阅。
