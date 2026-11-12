@@ -62,7 +62,7 @@ function makeHost(win, calls) {
                 plots: [{ id: "spectrum", title: "s", series: [
                   { style: "trace", x: [0, 1], y: [0, -1] }] }],
                 conventions: [{ id: "mask", zh: "mask", en: "mask" }],
-                warnings: [] };
+                warnings: method === "chain" ? ["stub: a setting was ignored"] : [] };
       // the real bridge replies asynchronously, off the binder thread
       setTimeout(
         () => win.onHostReply(id, JSON.stringify({ ok: true, result })), 0);
@@ -147,6 +147,11 @@ async function main() {
   }
   if (!doc.querySelector("#bench-cards .mcard")) {
     failures.push("the workbench rendered no metric cards");
+  }
+  // a run-time warning from the library is shown, not dropped: no knob
+  // raises one in the real bridge any more, so the stub supplies it
+  if (!/a setting was ignored/.test(doc.getElementById("bench-notes").textContent)) {
+    failures.push("the workbench dropped the run's warning");
   }
 
   /* Every Run button must reach the bridge. */

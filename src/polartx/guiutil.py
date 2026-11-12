@@ -438,8 +438,8 @@ def run_chain_report(name: str, *, seed: int = 1, noise: bool = True,
     computes nothing of its own, so a panel cannot disagree with the
     metric printed beside it.
 
-    Warnings raised while building and running (an engine outside its
-    validity domain, a setting a topology ignores) are returned under
+    Warnings raised while building and running (a setting a topology
+    ignores, say) are returned under
     ``"warnings"`` so a front end can show them; the report layer is
     where they would otherwise vanish.
 

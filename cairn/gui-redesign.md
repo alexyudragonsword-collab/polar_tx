@@ -70,7 +70,9 @@ matplotlib 渲染），计算仍在 `guiutil`。旋钮的默认值**不手填**�
 它本身就是噪声源，噪声关掉就不存在。标志从 `shapes_only_noise` 改名为 `noise_only`，
 覆盖"噪声源本身"和"两点匹配时只整形噪声的环路"两种物理。
 
-**坑：报告层吞掉了引擎越界告警**。LTE-20 用 event 引擎会告警"越出适用域，结果会悲观得多
+**坑：报告层吞掉了引擎越界告警**。（2026-11-12 更正：这里举的 LTE-20 event 告警本身是错的——
+它来自 TDC 量程不足的预设，已删除，见 `adpll-event-engine.md`；告警通路的测试改用 outphasing
+忽略 skew 的告警。坑本身仍成立。）LTE-20 用 event 引擎会告警"越出适用域，结果会悲观得多
 （−15 dB vs response 的 −37 dB）"，但 `run_chain_report` 之上没有任何前端看得到告警。现在
 报告带 `"warnings"`，三端都显示；同时带 `"conventions"`（均衡口径、mask 来源、ADPLL 引擎），
 口径从此不只在星座图标题里。

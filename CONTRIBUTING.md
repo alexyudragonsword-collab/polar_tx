@@ -145,12 +145,20 @@ GUI 改版 P4b 退役（`cairn/gui-redesign.md`）：原先"每个前端都要�
 
 ## 6. 引擎有适用域，越界要出声 / Engines declare their validity domain
 
-`ADPLLTwoPoint` 的 `mode="event"` 逐参考周期仿真，只在**每参考周期的相位
-推进 ≪ 1 UI** 时有效（BLE 0.8%、EDR 4.2% 可以；LTE 29% 不行）。越界时
-它会发 `RuntimeWarning` 并在诊断里给出 `ui_per_ref_cycle_p99`。
+`ADPLLTwoPoint` 的 `mode="event"` 逐参考周期仿真，要求 **TDC 量程覆盖一个
+DCO 周期**（计数器数整周期，TDC 只读小数部分；量程不够就每周期饱和，环路对
+后半个周期是瞎的）。不满足时构造直接抛 `ValueError`，并告诉你要几位。
+
+> **更正（2026-11-12）**：这里原来写的是"每参考周期相位推进 ≪ 1 UI 才有效
+> （LTE 29% 不行）"，并为此发 `RuntimeWarning`。那条规则是从**一个**失败配置
+> 归纳出来的——LTE-20 预设的 TDC 是 1 ps × 7 bit = 127 ps，只覆盖 513 ps 周期的
+> 1/4。量程补够后 LTE-20（30% UI/周期）与 response 引擎在 EVM 上差 9 dB，且
+> 差的这部分是有物理来源的一项（TDC 按标称周期归一化）；姊妹库 fmcw_radar 的
+> 1 GHz 扫频在 495% 下也跟得住。经过见 `cairn/adpll-event-engine.md`。
 
 新增引擎/近似时照此办理：把适用域写进 docstring，并在运行时检测越界，
-而不是让使用者拿到一个安静的错误结果。
+而不是让使用者拿到一个安静的错误结果。**但适用域要从机理推出来，不要从一个
+失败的例子归纳**：上面那条错规则就是只看了"哪个预设坏了"，没问"为什么坏"。
 
 同理，指标函数在输入不够时要**抛异常**，不要返回 NaN——
 `metrics/dpsk.py` 就是因为这个改过。

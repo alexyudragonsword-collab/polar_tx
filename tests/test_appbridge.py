@@ -198,7 +198,7 @@ def test_chain_drops_a_knob_the_preset_does_not_honour():
     assert a["warnings"] == b["warnings"] == []
 
 
-def test_chain_takes_knob_ids_and_returns_drawable_data():
+def test_chain_takes_knob_ids_and_returns_drawable_data(monkeypatch):
     """What the redesigned page needs from one call: controls by knob id
     in display units, and back the numbers, the plot data they were drawn
     from, the conventions, the warnings and a description of each metric.
@@ -224,9 +224,15 @@ def test_chain_takes_knob_ids_and_returns_drawable_data():
                 values={"skew_ns": 1.0, "dtc_bits": 6}, png=False)
     base = _ok("chain", preset="WiFi 160 MHz (RF-DAC)", png=False)
     assert clean["metrics"] == base["metrics"]
-    # a run-time warning arrives with the result
-    ev = _ok("chain", preset="LTE 20 MHz", values={"mode": "event"}, png=False)
-    assert any("validity domain" in w for w in ev["warnings"])
+    # a warning the library raises arrives with the result.  No knob can
+    # raise one any more (the spec offers only settings a preset honours,
+    # and LTE-20's event-engine warning was the TDC bug of ROADMAP B1), so
+    # hand the outphasing chain the skew it ignores past the knob table
+    import polartx.guispec as guispec
+    monkeypatch.setattr(guispec, "overrides_from_ui",
+                        lambda preset, values: {"env_skew_s": 1e-10})
+    ev = _ok("chain", preset="WiFi 160 MHz (outphasing)", png=False)
+    assert any("ignored: env_skew_s" in w for w in ev["warnings"])
 
 
 def test_sweep_and_compare_cross_the_bridge():

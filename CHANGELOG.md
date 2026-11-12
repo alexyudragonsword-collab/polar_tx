@@ -10,6 +10,23 @@ release 分组。
 
 ## 未发布 / Unreleased
 
+### B1 了结：event 引擎没有"相位推进"限制，坏的是 LTE-20 预设的 TDC（2026-11-12）
+
+- **真因**：LTE-20 预设的 TDC 是 1 ps × 默认 7 bit = 127 ps，只覆盖 1.95 GHz DCO 周期
+  （513 ps）的 1/4，小数相位过了 0.25 UI 就饱和——连不调制的锁定都是坏的（0.109 rad）。
+  2026-08-10 据此写下的"event 引擎只在每周期推进 ≪1 UI 时有效"是从这一个失败配置
+  归纳错的。触发重查的是 fmcw_radar 的反例（polar_tx#19：1 GHz 扫频推进 495 % 照样跟得住）。
+- **修正**：预设按 `fout` 算 TDC 位数（LTE-20 → 10 bit）；`ADPLLTwoPoint` 构造时检查 TDC 量程
+  ≥ 一个 DCO 周期，否则抛 `ValueError`；删掉按推进量发的 `RuntimeWarning`，
+  `ui_per_ref_cycle_p99` 留作描述，新增 `dco_dev_frac_p99`。
+- **数字**：LTE-20 event 引擎 EVM −14.7 → −44.5 dB，ACLR −24.0 → −60.1 dBc，mask FAIL → PASS；
+  response 引擎（默认）逐项不变（−53.3 dB）。剩下约 9 dB 是 TDC 按标称周期归一化在 ±2 %
+  调频下的读数误差——真实芯片也有、线性模型没有的一项，保留并写明。BLE/EDR 两引擎一致到 0.1 dB。
+- `dp_cal` 的说明补上：在线校准要求零均值调制，频率斜坡不适用（fmcw_radar 报告）。
+- 三个 GUI 测试原拿 LTE event 告警当"运行时告警到达页面"的样本，改用 outphasing 忽略 skew
+  的告警；页面渲染告警交给 jsdom harness。ROADMAP B1 删除，C5 补上代价与等待方。
+- 测试 359 → 360 个函数。
+
 ### 整条数字极坐标链的金向量（2026-11-06）
 
 - **`export/rtl_vectors.py`** 加四组：`cfr_clip`（`emit_cfr_clip_rtl` 的随机流 + WiFi-20 包络，9728）、`phase_acc`（`emit_phase_acc_rtl` 的流，2048）、`thermo`（10 位 / 7 温度计段 DPA 的全部 1024 码）、`datapath`。

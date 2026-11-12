@@ -3,7 +3,7 @@
 The desktop and browser host (polartx.webhost) serves the same files the
 APK bundles, so this exercises what every host shows: boot, the workbench
 recomputing on a control change, controls generated from the specs, the
-run-time warning path, the language toggle, the phone layout and one of
+engine convention, the language toggle, the phone layout and one of
 the older run-button tabs.  Assertions are on physics and wiring, not on
 pixels or snapshot numbers.
 
@@ -155,8 +155,9 @@ def test_workbench_recomputes_when_a_control_moves(browser, server):
 
 def test_controls_follow_the_preset_spec(browser, server):
     """The form is generated from guispec: the RF-DAC offers its own DAC
-    resolution at its own default (12) and no skew; the LTE event engine
-    surfaces its validity-domain warning on the page."""
+    resolution at its own default (12) and no skew; switching LTE-20 to the
+    event engine changes the stated engine and raises no warning.  (How a
+    warning renders is the jsdom harness's job: no knob raises one now.)"""
     page = _open(browser, server, viewport={"width": 1366, "height": 860})
     page.select_option("#bench-preset", "WiFi 160 MHz (RF-DAC)")
     page.wait_for_selector("#knob-dac_bits")
@@ -167,15 +168,20 @@ def test_controls_follow_the_preset_spec(browser, server):
     page.select_option("#bench-preset", "LTE 20 MHz")
     page.wait_for_selector("#knob-mode")
     _settle(page)
+    # the engine choice reaches the library and comes back as a stated
+    # convention; LTE-20 on the event engine runs clean (ROADMAP B1)
     page.select_option("#knob-mode", "event")
     page.wait_for_timeout(300)
     _settle(page)
-    page.wait_for_selector("#bench-notes .note", timeout=60_000)
-    assert "validity domain" in page.inner_text("#bench-notes")
+    page.wait_for_function(
+        "document.querySelector('#bench-conv').innerText.includes('event')",
+        timeout=60_000)
+    assert page.inner_text("#bench-notes").strip() == ""
     page.click("#bench-reset")
     page.wait_for_timeout(300)
     _settle(page)
     assert page.input_value("#knob-mode") == "response"
+    assert "response" in page.inner_text("#bench-conv")
     assert page.inner_text("#bench-notes").strip() == ""
     page.close()
 
