@@ -177,11 +177,12 @@ CPE **两种口径都不去除**；这些预设里 CPE 只有 0.01–0.6°（LO 
 commit 与路径，`tools/vendor_check.py` + CI 的 `vendor-drift` job 每次 push
 校验漂移。改 vendored 文件的规矩见 `CONTRIBUTING.md` §3。
 
-**pin 是按文件记的，而且现在是混合的**：`pllsim` 子树 39 个文件在上游
-`931cfaf`，`arch/adpll.py` 与 `arch/frac.py` 仍在 `d7be4712`（原因见
-`ROADMAP.md` C5：上游把逐周期循环搬进了 jit kernel，本仓的 `dp_cal` 钩子每周期
-回调 Python 对象，装不进去）——这两条在 manifest 里带 `pin_frozen` 原因，
-校验器报 *frozen* 而不是 *stale*，`--strict` 因此能过而又不丢信息。`padpd` 子树
+**pin 是按文件记的**：`pllsim` 子树 2026-11-12 起全部在上游 `5564c64`。此前
+`arch/adpll.py` 与 `arch/frac.py` 停在 `d7be4712`（上游把逐周期循环搬进了 jit kernel，
+本仓的 `dp_cal` 钩子每周期回调 Python 对象，装不进去）；现在 `dp_cal` 是内核里的一个
+步进函数加状态向量，和上游自己的 TDC 周期 / Kdco 校准器同一种做法，`pin_frozen`
+随之撤掉（经过见 `cairn/adpll-event-engine.md`）。校验器仍支持 `pin_frozen`，供今后
+有意停住的 pin 用。`padpd` 子树
 在 `44cbcb3`，2026-10-03 起在 PA_DPD 的 `main` 上（`main` 从 `3aa1c24` 快进过来，
 并成为默认分支）；同日 `pa/thermal.py` 与 `gain_modulation.py` 两个文件单独推进到
 `08b9725`（上游修了 `ThermalReferencePA` 每 128 采样重启 FIR 的 bug，见

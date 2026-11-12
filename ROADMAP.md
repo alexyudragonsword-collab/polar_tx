@@ -137,52 +137,13 @@ floor"）里自己修了，写法是 `vars(np).get("trapezoid") or vars(np)["tra
 所以没有东西可推回。后半句"恢复 verbatim"已随下面的子树推进完成：`jitter.py`
 不再有本地改动，manifest 条目从 3 条降到 2 条。
 
-### C5. vendored `adpll.py` / `frac.py` 仍钉在 `d7be4712`
-
-2026-09-13 把 `vendor/pllsim/` 的其余 39 个文件推进到上游 `931cfaf`（八个月的
-演进，+2684/−516，19 个文件有实质变化；另新增上游依赖的 `core/jit.py` 与
-`core/boundaries.py`）。**16 个 preset + 3 个带损伤配置的报告逐值比对完全一致**，
-套件 272 passed 不变。
-
-这两个文件没有跟上，原因是结构性的、不是没排上：
-
-- 上游把逐周期循环搬进了 `@kernel` 装饰的函数（`core/jit.py`：装了 numba 就编译，
-  没装就纯 Python 跑，两条路径要求**逐位一致**，并明令 per-cycle 路径里不许有
-  numpy 数组操作）。
-- 本仓在 `adpll.py` 上的扩展恰恰是每参考周期回调一个 Python 对象
-  （`dp_cal.step(e_ui, mod_freq[n])`，在线两点增益校准），**装不进这种 kernel**。
-  要跟进就得把 LMS 状态摊成浮点数组穿过 kernel 签名重写一遍——那是改物理路径，
-  得单独做、单独验证。2026-11-05 起回调对象还多了一个定点版 `cal/dp_cal_fixed.py`
-  的 `FixedSignSignLMS`（整数状态 `[V, A_reg, A_err]`，`step_codes` 已是无数组操作的
-  纯标量更新）——kernel 化时两个都要穿过签名，定点版的逐位金向量（dsp_ip 已 pin）是现成的回归。
-- `frac.py` 是从上游 `cppll.py` 抽出的 37 行，新版 `cppll.py` 也大改了，要重抽。
-
-**拖着的代价是实测出来的**（2026-11-12）：上游 v0.9.1（`3bd73cb`，2026-08-10）的
-`analyze()` 会对 TDC 量程不足一个输出周期报 "TDC range is 0.25 of an output period:
-it saturates every cycle"——那正是原 B1（LTE-20 event 引擎 −15 dB）的真因，用上游
-main 对我们的 LTE-20 参数实测能报出来；钉在 `d7be4712`（07-23）让它藏了三个月。
-上游此后又合了 `analyze()` 的 TDC 抖动项与整数 N 死区提示（#77）、`simulate()` 里
-TDC 抖动跨边沿回绕而非截断（#78，main@`5564c64`）。本仓 ADPLL 预设都不设
-`tdc.jitter_rms_s`、FCW 都是小数，这两项跟进后不动任何数字。姊妹库 fmcw_radar
-经本仓用这份 `adpll.py`，已登记在等 C5（polar_tx#19），但不阻塞它。
-
-因此 pin 是**混合**的：39 个文件 @`931cfaf`，2 个 @`d7be4712`。CI 的 sibling
-checkout 因此必须 `fetch-depth: 0`（浅 checkout 解析不到另一个 commit，
-`vendor_check` 会把这两个文件**跳过**——正好跳过唯一两个有本地改动的文件），
-并且现在传 `--fail-on-skip`：跳过即失败，不再当作通过。
-
 ### C6. Android 编译集需要重测
 
 `docs/android.md` 的 **42 / 101 个模块编译** 是 2026-08-25 那次真机构建的实测值。
-vendored 子树推进后包里是 103 个模块，**分子没有重测**——编译集是由"删掉 `.py`
+此后包里的模块有增有减（2026-09-13 是 103；2026-11-12 按 `src/polartx` 下 .py 文件计
+是 115），**分子没有重测**——编译集是由"删掉 `.py`
 后套件仍过"证明出来的，不是算出来的。下次手动跑 *Android APK* workflow 时顺带
 重新记一次。历史记录（CHANGELOG、`cairn/`）里的 42/101 是当时的实测，不要改。
-
-### C4. `mode="event"` 的性能
-
-Python 逐周期循环 ~1–2 Mcycles/s。这是**故意的**（`CLAUDE.md`：真正需要逐周期
-状态的地方才用 Python 循环），但如果 event 模式的使用频率上来了，
-向量化/numba 化值得重新评估。
 
 ---
 

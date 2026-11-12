@@ -26,3 +26,19 @@ def test_without_cal_evm_stays_degraded():
     wf = p.make_waveform(n_bits=2000, seed=5)
     r = p.tx.run(wf, noise=True, seed=3)
     assert r.evm()["evm_pct"] > 5.0
+
+
+def test_a_calibrator_must_run_inside_the_kernel():
+    """The calibrator is stepped inside the ADPLL's per-cycle kernel, so an
+    object that can only be called back from Python (``.step``/``.value``
+    and nothing else) is refused by name rather than silently skipped."""
+    import pytest
+
+    class CallbackOnly:
+        value = 1.0
+
+        def step(self, err, reg):
+            return self.value
+
+    with pytest.raises(TypeError, match="kernel_view"):
+        _run(CallbackOnly())

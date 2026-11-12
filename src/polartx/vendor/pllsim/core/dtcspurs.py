@@ -1,4 +1,4 @@
-# Vendored from pll_simulator@931cfaf: src/pllsim/core/dtcspurs.py
+# Vendored from pll_simulator@5564c64: src/pllsim/core/dtcspurs.py
 # Adapted-copy policy: see src/polartx/vendor/__init__.py
 """Deterministic fractional-spur prediction from the DTC code path.
 

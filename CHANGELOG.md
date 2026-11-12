@@ -10,6 +10,27 @@ release 分组。
 
 ## 未发布 / Unreleased
 
+### C5 了结：vendored `adpll.py` 进上游内核，pllsim 子树单一 pin 到 `5564c64`（2026-11-12）
+
+- **为什么拖了三个月**：上游把逐周期循环搬进了 numba `@kernel`，本仓的在线两点增益校准
+  （`dp_cal`）每周期回调一个 Python 对象，装不进去，`adpll.py` / `frac.py` 只好停在 `d7be4712`。
+  代价是实测出来的：上游 v0.9.1 起 `analyze()` 能报出 B1 那个 TDC 量程错误，我们拿不到。
+- **怎么装进去**：照上游 TDC 周期 / Kdco 校准器的样子，`dp_cal` 变成"步进内核 + 状态向量"，
+  步进函数作为参数传进 TDC 内核。浮点 `SignSignLMS` 由 `lms_dp_step` 适配；定点
+  `FixedSignSignLMS` 提供 `kernel_view` / `kernel_done`，对象接口、内核、`golden_trace`
+  共用同一对标量内核（`_quantize`、`_update`），仍可单独被 vendor 走（没有 jit 时退回纯 Python）。
+  只有 `.step/.value` 的旧式校准器会被按名拒绝。
+- **跟进的上游内容**：TDC 量程不足的 `analyze()` 提示、TDC 抖动项与整数 N 死区提示（#77）、
+  TDC 抖动跨边沿回绕（#78）、新增 `core/tdcspurs.py`；`frac.py` 只剩 FracConfig。本仓预设
+  不设 TDC 抖动、FCW 都是小数，这些不动任何数字。量程检查改用上游 `code_span`。
+- **验证**：5 个 ADPLL 预设 × 两种引擎 × 开关噪声、`analyze()` 噪声预算、浮点校准轨迹、
+  定点金向量码流——38/38 与改前逐位相同（README 的 0.9984 / 3.18 % 不动，dsp_ip 手上那份
+  向量仍对得上）。装 numba 后编译与解释 38/38 逐位相同；新增 CI `test-jit`。
+- **速度**（BLE event，104k 周期，`simulate()` 含后处理）：旧循环 0.41 s，新内核解释 0.36 s，
+  numba 0.07 s。文档里"Python 循环 ~1–2 Mcycles/s"与实测不符（解释约 0.3），一并更正；
+  ROADMAP C4（"numba 化值得重新评估"）随之了结。
+- 测试 360 → 363 个函数（定点对象/内核同一规则、回调式校准器被拒、编译与解释一致）。
+
 ### B1 了结：event 引擎没有"相位推进"限制，坏的是 LTE-20 预设的 TDC（2026-11-12）
 
 - **真因**：LTE-20 预设的 TDC 是 1 ps × 默认 7 bit = 127 ps，只覆盖 1.95 GHz DCO 周期

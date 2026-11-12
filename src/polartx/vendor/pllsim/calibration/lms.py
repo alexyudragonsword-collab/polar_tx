@@ -1,4 +1,4 @@
-# Vendored from pll_simulator@931cfaf: src/pllsim/calibration/lms.py
+# Vendored from pll_simulator@5564c64: src/pllsim/calibration/lms.py
 # Adapted-copy policy: see src/polartx/vendor/__init__.py
 """LMS-family calibrators.
 

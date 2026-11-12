@@ -1,4 +1,4 @@
-# Vendored from pll_simulator@931cfaf: src/pllsim/core/engine.py
+# Vendored from pll_simulator@5564c64: src/pllsim/core/engine.py
 # Adapted-copy policy: see src/polartx/vendor/__init__.py
 """Reference-edge-driven simulation engine.
 

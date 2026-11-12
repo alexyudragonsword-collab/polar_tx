@@ -1,4 +1,4 @@
-# Vendored from pll_simulator@931cfaf: src/pllsim/core/jitter.py
+# Vendored from pll_simulator@5564c64: src/pllsim/core/jitter.py
 # Adapted-copy policy: see src/polartx/vendor/__init__.py
 """Integrated phase noise and RMS jitter.
 

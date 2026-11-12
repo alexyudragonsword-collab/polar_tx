@@ -1,4 +1,4 @@
-# Vendored from pll_simulator@931cfaf: src/pllsim/core/results.py
+# Vendored from pll_simulator@5564c64: src/pllsim/core/results.py
 # Adapted-copy policy: see src/polartx/vendor/__init__.py
 """Structured results consumed by plotting and reports."""
 from __future__ import annotations

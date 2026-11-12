@@ -11,21 +11,19 @@
     },
     "pllsim/arch/adpll.py": {
       "repo": "pll_simulator",
-      "sha": "d7be4712",
+      "sha": "5564c64",
       "upstream_path": "src/pllsim/arch/adpll.py",
       "mode": "extended",
-      "body_sha256": "4ed39ba34da17d36f05e3ff7b154890106e74c49eb85de34417fceb346464e53",
-      "reason": "two-point range-limited direct-modulation DAC (mod_freq_dp) plus an optional online dp_cal hook (SignSignLMS) that replaces mod_dp_gain per cycle and records cal_traces['dp_gain']",
-      "pin_frozen": "upstream moved the per-reference-cycle loop into a numba @kernel (core/jit.py) that cannot call back into the Python dp_cal object every cycle; re-vendoring waits on a kernel-side hook (ROADMAP C5)"
+      "body_sha256": "97f1cedf468506bce9d3d95413d9a2cdcf53fc659a3e23bdd7b17ef71db20e50",
+      "reason": "two polartx extensions to the TDC kernel: mod_freq_dp, a separate (range-limited direct-DAC) trajectory for the direct point; and an online dp_cal hook -- a step kernel over a state vector (kernel_view/kernel_done; calibration.lms calibrators adapted by lms_dp_step) whose value replaces mod_dp_gain per cycle, trace in cal_traces['dp_gain'].  Defaults reproduce upstream bit for bit"
     },
     "pllsim/arch/frac.py": {
       "repo": "pll_simulator",
-      "sha": "d7be4712",
+      "sha": "5564c64",
       "upstream_path": "src/pllsim/arch/cppll.py",
       "mode": "extracted",
-      "body_sha256": "472b11c7ef01b11ecd7ebd91a1444fad56f33f475f69ecaf8266c0abdcdd43fc",
-      "reason": "FracConfig + frac_spur_offsets extracted from cppll.py so the vendored ADPLL does not drag in the analog charge-pump PLL blocks",
-      "pin_frozen": "upstream moved the per-reference-cycle loop into a numba @kernel (core/jit.py) that cannot call back into the Python dp_cal object every cycle; re-vendoring waits on a kernel-side hook (ROADMAP C5)"
+      "body_sha256": "dfeaa20764c671543e931d0c9d9fdd6295e03664c2810babc14c22d2952a0596",
+      "reason": "FracConfig extracted from cppll.py so the vendored ADPLL does not drag in the analog charge-pump PLL blocks (frac_spur_offsets now lives upstream in core/dtcspurs.py, vendored verbatim)"
     }
   }
 }

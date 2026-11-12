@@ -5,7 +5,7 @@ summary: "polartx 的静态检查闸门（ruff + mypy）为什么这样划范围
 tags: [polartx, 工程纪律, ruff, mypy, 重构, vendor]
 contains: [decision, lesson, experience, open_question]
 created: "2026-09-12"
-updated: "2026-10-29（GUI extras 随旧前端删除的更正）"
+updated: "2026-11-12（C5：adpll.py 进内核、pllsim 单一 pin）"
 related: []
 authoring_mode: ai_generated
 ---
@@ -116,6 +116,20 @@ authoring_mode: ai_generated
 与纯 Python 两条路径必须逐位一致；而本仓在 `adpll.py` 上的扩展每参考周期回调一个
 Python 对象（`dp_cal.step`）做在线两点增益校准。要跟进等于把 LMS 状态摊成浮点
 数组穿过 kernel 签名重写，是改物理路径，得单独做单独验。记在 ROADMAP C5。
+
+**2026-11-12 推动了（C5 了结）**，做法和验证方式记在这里，下次照用：
+
+- **照上游自己的样子改，而不是另起炉灶。** 上游内核里的 TDC 周期校准、Kdco 校准都是
+  "状态向量 + 步进内核"，`calibration.lms` 的 `SignSignLMS` 也早有 `state()/params()/
+  load_state()` 内核视图。`dp_cal` 照抄：步进函数作为参数传进 TDC 内核（numba 把它
+  当一等函数类型化），浮点 LMS 由 `lms_dp_step` 适配，定点版自己提供
+  `kernel_view/kernel_done`。本地扩展仍只有两处（`mod_freq_dp` 与这个钩子），
+  manifest 撤掉 `pin_frozen`，整棵 `pllsim` 子树单一 pin 到 `5564c64`。
+- **证据是逐位指纹，不是套件变绿**：5 个 ADPLL 预设 × 两种引擎 × 开关噪声、
+  `analyze()` 噪声预算、浮点校准轨迹、定点金向量码流，38/38 与改前逐位相同。另在
+  装了 numba 的环境里编译与解释两条路径 38/38 逐位相同，并为此加了 CI `test-jit`。
+- **跨环境会差，那不是这次改的**：numpy 2.3 与 2.5 之间 event 结果的哈希不同（改前
+  就如此），所以"逐位相同"只在同一环境里比；定点码流跨环境也一致。
 
 ## 待办
 

@@ -1,4 +1,4 @@
-# Vendored from pll_simulator@931cfaf: src/pllsim/core/deltasigma.py
+# Vendored from pll_simulator@5564c64: src/pllsim/core/deltasigma.py
 # Adapted-copy policy: see src/polartx/vendor/__init__.py
 """Delta-sigma modulators for fractional-N division and DCO dithering.
 

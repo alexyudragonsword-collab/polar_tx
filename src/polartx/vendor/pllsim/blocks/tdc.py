@@ -1,4 +1,4 @@
-# Vendored from pll_simulator@931cfaf: src/pllsim/blocks/tdc.py
+# Vendored from pll_simulator@5564c64: src/pllsim/blocks/tdc.py
 # Adapted-copy policy: see src/polartx/vendor/__init__.py
 """Time-to-digital converter models: flash TDC and bang-bang PD.
 

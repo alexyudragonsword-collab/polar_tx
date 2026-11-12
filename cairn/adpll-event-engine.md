@@ -5,7 +5,7 @@ summary: "ADPLL 两点调制的 event（逐参考周期）引擎：B1 的真因�
 tags: [polartx, adpll, event 引擎, tdc, 两点调制, vendor, fmcw_radar]
 contains: [decision, pitfall, lesson, experience]
 created: "2026-11-12"
-updated: "2026-11-12"
+updated: "2026-11-12（C5 了结）"
 related: [history-inventory.md, static-gates-and-refactor.md]
 authoring_mode: ai_generated
 ---
@@ -84,3 +84,15 @@ LTE 调制让 DCO 偏离 ±2 %（`dco_dev_frac_p99` ≈ 0.018），小数相位�
 fmcw_radar 经本仓的 vendored `adpll.py` 用这套环路，登记在等 C5（上游 #77 TDC 抖动项与
 死区提示、#78 抖动回绕），不阻塞：它自己在剖面里补了同一抖动项，只在分项缺 `tdc_jitter`
 时补。本仓 ADPLL 预设不设 `tdc.jitter_rms_s`、FCW 都是小数，跟进后不动任何数。
+
+## C5 了结：引擎换成上游的内核（2026-11-12，decision）
+
+`adpll.py` 从 `d7be4712` 推到上游 `5564c64`，整棵 `pllsim` 子树单一 pin。`dp_cal` 不再
+是每周期回调的 Python 对象，而是 TDC 内核里的一个步进函数加状态向量（上游 TDC 周期 /
+Kdco 校准器的同一种做法）；旧式只有 `.step/.value` 的对象会被按名拒绝。量程检查改用
+上游的 `core/tdcspurs.code_span`，上游 `analyze()` 的"TDC range is 0.25 of an output
+period"提示现在也到手了（测试里断言）。
+
+本仓所有 ADPLL 路径与改前逐位一致（38/38 项指纹），所以上面所有数字不动；numba 下编译
+与解释也逐位一致（CI `test-jit`）。速度（BLE event，104k 周期，`simulate()` 含后处理）：
+旧循环 0.41 s，新内核解释执行 0.36 s，numba 0.07 s。

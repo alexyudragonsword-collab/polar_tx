@@ -15,7 +15,9 @@ Two engines, cross-checked by tests:
   modulation coupling.
 - mode="event" (validation/noise truth): resamples the frequency
   trajectory onto the fref grid and runs the vendored cycle-accurate
-  ADPLL.simulate(mod_freq=...) engine.  Python-loop cost ~1-2 Mcycles/s;
+  ADPLL.simulate(mod_freq=...) engine: ~0.3 Mcycles/s interpreted, ~1.5
+  with numba installed (the vendored kernel compiles, bit-identical --
+  tests/test_kernels_jit.py; measured 2026-11-12 incl. post-processing);
   the comparison floor scales as 1/(fref/BW) samples — use >= 8 samples
   per symbol and validate on short segments (pllsim ex17 convention).
 """
@@ -28,6 +30,7 @@ from scipy.signal import resample_poly
 
 from ..vendor.pllsim.arch.adpll import ADPLL
 from ..vendor.pllsim.core.colored import synth_from_psd
+from ..vendor.pllsim.core.tdcspurs import code_span
 from .base import PhaseModResult, PhaseModulator
 
 TWOPI = 2.0 * np.pi
@@ -43,19 +46,21 @@ def _check_tdc_span(pll: ADPLL) -> None:
     0.11 rad rms parked in CW (0.0013 rad once covered) and -15 dB EVM on
     the event engine, which was taken for an engine limit (ROADMAP B1).
     Checked for both engines, because the response engine's noise budget
-    describes a TDC that works."""
+    describes a TDC that works.  Upstream's ``analyze()`` notes the same
+    condition (``code_span``) for a fractional FCW; this refuses it for
+    any FCW, since an integer-N loop parks on one fraction that may lie
+    past the range just as well."""
     c = pll.cfg
     if c.mode != "tdc":
         return
-    t = c.tdc
-    span = ((1 << int(t.n_bits)) - 1) * t.t_res * (1.0 + t.gain_error)
-    tdco = 1.0 / c.fout
-    if span < tdco:
-        need = int(np.ceil(np.log2(tdco / t.t_res + 1.0)))
+    span = code_span(c.tdc, c.fout)          # one period / TDC range
+    if span > 1.0:
+        tdco = 1.0 / c.fout
+        need = int(np.ceil(np.log2(tdco / c.tdc.t_res + 1.0)))
         raise ValueError(
-            f"TDC range {span * 1e12:.0f} ps covers {span / tdco:.2f} of the "
-            f"{tdco * 1e12:.0f} ps DCO period: it saturates every cycle. "
-            f"With t_res={t.t_res * 1e12:g} ps use n_bits >= {need}.")
+            f"TDC range covers {1.0 / span:.2f} of the {tdco * 1e12:.0f} ps "
+            f"DCO period: it saturates every cycle. With "
+            f"t_res={c.tdc.t_res * 1e12:g} ps use n_bits >= {need}.")
 
 
 class ADPLLTwoPoint(PhaseModulator):

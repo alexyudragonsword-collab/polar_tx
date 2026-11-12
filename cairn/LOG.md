@@ -2,6 +2,14 @@
 
 本文件按倒序记录实质性进展——最新的一条在这行下面。每条保持简短，只写摘要和指针；结论沉淀进 `cairn/<topic>.md`。
 
+## 2026-11-12 · C5 了结：adpll.py 进上游内核，pllsim 单一 pin 5564c64
+
+- `dp_cal` 改成 TDC 内核里的步进函数 + 状态向量（照上游 TDC/Kdco 校准器），浮点 LMS 用 `lms_dp_step` 适配，
+  定点版提供 `kernel_view/kernel_done`；manifest 撤掉 `pin_frozen`，新增 `core/tdcspurs.py`。
+- 38/38 项指纹与改前逐位相同（含定点金向量码流）；numba 编译与解释 38/38 相同，新增 CI `test-jit`。
+- 解释 0.36 s / numba 0.07 s（旧循环 0.41 s）；"~1–2 Mcycles/s"更正为实测；C4 一并了结。测试 360 → 363。
+- 见 `cairn/adpll-event-engine.md` C5 节、`cairn/static-gates-and-refactor.md`。
+
 ## 2026-11-12 · B1 了结：LTE-20 预设的 TDC 只覆盖 1/4 个 DCO 周期
 
 - fmcw_radar 的反例（polar_tx#19，扫频推进 495 % 照样跟得住）触发重查；真因是 1 ps × 7 bit = 127 ps 对 513 ps，
