@@ -16,7 +16,7 @@
 | [`ROADMAP.md`](ROADMAP.md) | 想知道**还差什么** | 只写未完成项：被外部阻塞的、已知模型缺口、明确不做的 |
 | [`docs/android.md`](docs/android.md) | 要**改 Android 版** | 可行性闸门、版本集、编译版实测买到了什么、刻意不做的功能 |
 | [`AGENTS.md`](AGENTS.md) | 用 AI agent 开发 | 仓库级规则与导航（Project Cairn 入口）。`CLAUDE.md` 只有一行 `@AGENTS.md`，Codex 直接读 `AGENTS.md` |
-| `examples/ex01`–`ex21` | 想看**可执行的例子** | 21 个成套脚本，CI 每次 push 全部跑一遍 |
+| `examples/ex01`–`ex22` | 想看**可执行的例子** | 22 个成套脚本，CI 每次 push 全部跑一遍 |
 
 ```
 Waveform → [CFR] → polar split → 包络路径（量化/skew/DPA 幅度码）─┐
@@ -34,7 +34,7 @@ Waveform → [CFR] → polar split → 包络路径（量化/skew/DPA 幅度码�
 
 ```bash
 pip install -e .          # numpy / scipy / matplotlib
-pytest tests/             # 363 个测试函数（参数化后实收更多）：物理量断言 + 与 padpd 逐位回归
+pytest tests/             # 374 个测试函数（参数化后实收更多）：物理量断言 + 与 padpd 逐位回归
 python examples/ex01_ble_gfsk_adpll.py      # 图落在 examples/out/
 
 polartx-gui               # 工作台：本地服务 + Edge/Chrome 应用窗口，关窗即退出
@@ -71,6 +71,8 @@ print(res.evm().db, res.aclr())             # -39.6 dB, ACLR ~ -58 dBc
 | LTE 20 MHz 64/256-QAM（M2） | ADPLL 两点 @122.88 MHz + 压缩性 DPA + polar DPD | **−53.3 dB**（无 DPD −37.2） | ACLR1 −62.6 dBc，SEM PASS |
 | 5G NR FR1 100 MHz 256-QAM（M3） | 开环 DTC @3.5 GHz，30 kHz SCS，491.52 MS/s | **−37.1 dB**（−29 达标） | ACLR1 −61.4 dBc，OBUE PASS |
 | 5G NR FR2 200 MHz 64-QAM（M3） | 开环 DTC @28 GHz，120 kHz SCS，983.04 MS/s，毫米波 LO 受限 | **−27.6 dB**（−22 达标） | ACLR1 −47.5 dBc，OBUE PASS |
+
+> **宽带行（WiFi / NR）是在 DTC / DPA 的更新时刻读的**：预设的硬件时钟是 4×（WiFi 4·BW，NR 4·FFT·SCS），默认网格与它相同，于是保持（ZOH）的 sinc 下垂与镜像不在网格上。ex22 把网格细化到 16×/32×、时钟不动：ACLR1 在这里**偏保守** 0.3–1.0 dB、mask 带外裕量（±fs/2 内）偏保守 0.5–2.9 dB，per-tone EVM 已收敛，scalar EVM 少算下垂（偏乐观至多 2.6 dB，4096-QAM）；表里的 PASS 只覆盖网格的 ±fs/2（WiFi ±2·BW），而更新时钟首镜像（约 −17 dBc，未滤波）落在时钟频率上——WiFi 在模板之内（模板到 5·BW），NR 在模板末点之外、按 `MaskSpec.at` 末值延平的约定照样计入——细网格上 WiFi/NR 模板因此全部 FAIL（超限 22–26 dB）。报告的 conventions 会写明这一条（`polartx.grid`）。详见 [`cairn/wideband-grid.md`](cairn/wideband-grid.md)。
 
 关键设计数据（examples 复现）：
 
@@ -113,6 +115,7 @@ src/polartx/
 
 ## 建模口径与已知边界
 
+- **仿真网格 ≠ 更新时钟**（polar_tx#22）：宽带预设的 `oversampling` 是网格，`update_oversampling`（默认 4）是 DTC / DPA 的更新时钟（`ChainConfig.f_clock`）。网格细于时钟时，整条数字链（CFR、极坐标分解、DPD、量化与 dither、DPA 编码）仍在时钟上跑，输出零阶保持到网格上，抖动按每次更新、LO 相噪在网格上——提高 `oversampling` 只换网格，不换芯片。默认两者相同（与分开之前逐位一致）。`update_oversampling=None` 回到旧行为（时钟随网格，提高 os 等于把 DTC/DPA 换快）。outphasing 与 RF-DAC 预设时钟仍随网格（分开只对极坐标链建模）。
 - 波形保真度（F1–F4 升级后）：numerology 全部正确且逐位回归；**LTE 预设默认 SC-FDMA 真实上行**（PAPR 低 1.7 dB，平均效率 35.9→41.4%）；**EDGE 用数值提取的线性化 GMSK C0 脉冲**（提取 NMSE 自检，真实 GMSK 频谱裙，EVM 按规范对理想波形参考）；**BLE Δf2max 符号内最大值/99.9% 判据/漂移指标**齐备，调制指数容差窗有测试；OFDM 可选**导频 + 前导**与接收机式 EVM（`metrics.ofdm_rx.evm_rx`，确定性 CPE 完全恢复有证明；对快相噪已量化口径差 <1 dB）。**信道编码刻意排除**：TX 损伤链路上没有任何指标在比特映射之后测量。mask 仍为工程化模板。
 - `ADPLLTwoPoint` response 模式是线性化模型（无 TDC 回绕、dither×调制耦合）；杂散类结论以 event 模式与解析预测背书。event 模式逐参考周期（解释执行约 0.3 Mcycles/s；装了 numba 时 vendored 内核编译，约 1.5 Mcycles/s，与解释执行逐位一致，CI `test-jit` 卡住），长帧验证用短段。
 - 幅度域 hole punching 钳制包络动态范围与包络带宽，但相位路径保留 π 翻转（DTC 按 mod 2π 处理）。相位轨迹平滑已实现（`phase_interp="linear"|"smooth"` + `phase_slew_max_hz`），结论是**固定斜率上限下 smoothstep 因窗口加宽 1.5× 反而输给线性插值**（轨迹 EVM 与 ACP 双输，测试固化），故默认 `linear`。
@@ -169,6 +172,7 @@ src/polartx/
 | `ex19_outphasing_vs_polar.py` | **Outphasing（LINC/Chireix）vs 极坐标同台**（`polartx.outphasing`，兄弟类包住同一条 WiFi 160 MHz 链跑两路恒包络分支）：同波形同 CFR 同 DTC 同 DPA 同 seed 的一张表——EVM −39.8 vs −40.0 dB（两路分支共用一个 LO 后两者同被 LO 限住；阶段 1 两路独立抽 LO 相噪时是 −37.1）、ACLR −53 vs −58 dBc、平均效率 Chireix 40% / isolated 10% vs 极坐标 43%、θ>80° 占比 21%；分支谱比信道宽得多；各自最敏感的旋钮（极坐标 AM/PM skew 对 outphasing 逐位无效；outphasing 的分支相位失配 1° 与闭式预算差 0.35 dB） |
 | `ex20_three_topologies.py` | **极坐标 vs outphasing vs 笛卡尔（RF-DAC）三架构同台**（`polartx.cartesian` + `polartx.rfdac`：I/Q 两组电流单元阵列直接画星座，无包络路径、无相位路径，与 DPA 共用同一套单元失配模型、同一个 LO 相噪）：一条命令一张表——EVM −40.0 / −39.8 / **−40.0** dB（三者同被同一个 LO 限住）、ACLR −58 / −53 / −60 dBc、平均效率 **43% / 40% / 28%**（RF-DAC 付 \|I\|+\|Q\| 交 I²+Q²，6 dB 回退 42.5% vs SCPA 50.9%），再加各自最敏感旋钮的 **1 dB 容忍度**：极坐标 AM/PM skew 0.03 ns、outphasing 分支相位 0.51°、RF-DAC I/Q 相位 0.62°；全库效率律 vs 回退一张图；RF-DAC 的 I/Q 失配 EVM 贴着 −IRR 闭式（0.1 dB/1° → IRR 39.6 dB）；`env_skew_s` 传给 RF-DAC 链会**告警而不是静默无效** |
 | `ex21_slow_memory.py` | **慢状态（热）记忆从"完整源"实测容器反演**（`polartx.measured.dpa_from_complete_source`，无硬件：合成源来自 vendored 自加热虚拟 DUT `ThermalReferencePA`，写盘再读回）：`step` 组离线辨识 τ **5.14 / 29.64 µs**（真值 5 / 30）；`burst` 组上残差阶梯 静态 LUT −12.1 / +无记忆 −18.8 / +仅快记忆 SplineGMP −23.7 / **+慢状态 −37.0 dB**（慢状态独占 13.3 dB），而在预热的平稳主采集上慢状态反而差 0.44 dB（快记忆 −41.9）——不可观就不该变好；入链（DPA + 状态记忆，冷启动）对实测 burst −37.2 dB；τ 用错的代价（×10 慢时反而差 9.7 dB）。虚拟 DUT 冻结热状态时与连续调用逐采样一致（PA_DPD 08b9725 修掉了此前钉住所有数字的 −35 dB 分块 FIR 重启地板） |
+| `ex22_grid_convergence.py` | **宽带链的网格收敛**（polar_tx#22 / array_tx E1）：容差先写死（与 os 16 比 ACLR 0.3 dB、EVM 0.1 dB），FR2 400 MHz（默认 DPA 与 issue 里的 Rapp PA）、WiFi 320 MHz 1024/4096-QAM，DPD 开/关 × 噪声开/关，两种读法——时钟随网格（T：每档都是更快的芯片，永不收敛）与时钟钉在 4×（P：只换网格，os 16 收敛）；P 下 ACLR1 os 4 偏保守 0.3–1.0 dB、ACLR2 1.8–2.4 dB、±fs/2 内 mask 裕量 0.5–2.9 dB，per-tone EVM 已收敛，scalar EVM 被下垂拉低至多 2.6 dB，全幅模板在 4·BW 的更新时钟镜像上 FAIL（os 4 看不到）；outphasing / RF-DAC 各一点（手工保持）；库内路径与手工保持噪声关时逐位一致 |
 
 ## 许可 / License
 

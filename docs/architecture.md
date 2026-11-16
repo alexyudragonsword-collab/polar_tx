@@ -74,6 +74,8 @@ src/polartx/
 │   ├── ofdm_rx.py    接收机式 OFDM EVM：preamble 信道估计 + pilot CPE 跟踪
 │   └── rxband.py     双工偏置处的 RX 频段噪声——FDD polar TX 的经典预算
 ├── analysis/responses.py  解析对照：环路响应、量化噪底、ZOH sinc 与镜像、噪声预算
+├── grid.py           仿真网格 vs DTC/DPA 更新时钟：一次运行的网格够不够细（报告 conventions 的 grid 条，
+│                     与 array_tx `disclaimer_for` 同口径）与收敛判定 `grid_verdict`（ex22）
 ├── measured.py       实测数据通路 → 测量定标的 DPA 模型 + 残差记忆：OpenDPD 采集给快记忆
 │                     （GMP-510），"完整源" npz 的 step / burst 组给慢状态（τ 辨识 +
 │                     StateConditionedSpline）；`synthetic_thermal_source` 是无硬件的合成源
@@ -220,6 +222,9 @@ sibling checkout 因此钉 `08b9725`，`44cbcb3` 是它的祖先，靠 `fetch-de
 ## 7. 已知边界
 
 - `mode="response"` 是线性化模型；杂散结论不以它为准。
+- 宽带链默认网格 = DTC/DPA 更新时钟（4×）：输出在更新时刻读，保持的下垂与镜像不在网格上。
+  `ChainConfig.f_clock` / 预设 `update_oversampling` 把两者分开，提高 `oversampling` 只换网格
+  （ex22、`cairn/wideband-grid.md`）；outphasing / RF-DAC 尚未分开。
 - 各制式 mask/SEM 是**工程化模板**（`source="stylized"`），不是认证限值；
   `MaskSpec.is_conformance` 为此存在。
 - 远端噪底（如 −160 dBc/Hz @ 80 MHz）超出可行记录长度的 Welch 分辨能力，

@@ -43,7 +43,7 @@ from dataclasses import dataclass, field, fields
 
 import numpy as np
 
-from .chain import ChainConfig
+from .chain import ChainConfig, clock_hold
 from .rfdac import RFDAC
 from .vendor.padpd.cfr import cfr_clip_filter
 from .vendor.padpd.metrics import aclr, check_mask, evm_of_signal, psd
@@ -158,6 +158,11 @@ class CartesianTX:
         deterministic and always apply.
         """
         c = self.cfg
+        if c.f_clock is not None and clock_hold(wf.fs, c.f_clock) > 1:
+            raise NotImplementedError(
+                "the RF-DAC on a grid finer than its update clock is not "
+                "modeled; run it with the clock on the grid, "
+                "cairn/wideband-grid.md")
         info: dict = {"ignored": list(self.ignored)}
         x = wf.x
         if c.cfr_papr_db is not None:
