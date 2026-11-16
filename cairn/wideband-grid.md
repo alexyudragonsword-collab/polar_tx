@@ -1,11 +1,11 @@
 ---
 type: project_topic
 status: active
-summary: "宽带链的 oversampling 曾同时是仿真网格和 DTC/DPA 更新时钟；分开之后（时钟钉在 4×、只细化网格），os 4 上 ACLR1 偏保守 0.3–1.0 dB、可见带模板裕量偏保守 0.5–2.9 dB、scalar EVM 少算保持下垂（偏乐观至多 2.6 dB）、per-tone EVM 已收敛；全幅模板 os 4 看不到更新时钟镜像（细网格上超限 22–26 dB）。默认网格暂不动，报告写免责"
+summary: "宽带链的 oversampling 曾同时是仿真网格和 DTC/DPA 更新时钟；分开之后（时钟钉在 4×、只细化网格），os 4 上 ACLR1 偏保守 0.3–1.0 dB、可见带模板裕量偏保守 0.5–2.9 dB、scalar EVM 少算保持下垂（偏乐观至多 2.6 dB）、per-tone EVM 已收敛；全幅模板 os 4 看不到更新时钟镜像（细网格上超限 22–26 dB）。默认网格确认不动（2026-11-16），报告写免责"
 tags: [polartx, 宽带, 采样网格, 更新时钟, zoh, aclr, mask, evm, array_tx]
 contains: [decision, pitfall, lesson, experience]
 created: "2026-11-16"
-updated: "2026-11-16"
+updated: "2026-11-16（默认网格确认不动）"
 related: [adpll-event-engine.md, history-inventory.md]
 authoring_mode: ai_generated
 ---
@@ -44,8 +44,9 @@ ACLR1 os 32 − os 16 仍差 3.4 dB）。本库对硬件时钟本来就有立场
 - **默认网格没有提高**（用户的 (c) 要求"把需要的预设的默认 oversampling 调大、文档数字重跑"）。原因：
   提到 16 后 WiFi / NR 的模板判定会因为更新时钟镜像**全部** FAIL（超限 22–26 dB），而镜像是否该在
   ——预设有没有重建滤波、真实芯片的 DPA 时钟是多少——是硬件建模问题，不是网格问题；
-  另外全幅模板上的镜像电平到 os 32 才在 0.3 dB 内（离散保持 → 连续 sinc，O(1/m²)）。**未经确认，待用户拍板**；
-  在此之前文档数字不动、报告挂免责。
+  另外全幅模板上的镜像电平到 os 32 才在 0.3 dB 内（离散保持 → 连续 sinc，O(1/m²)）。
+  **2026-11-16 用户确认：默认网格先不动**（PR #23 合入后）。文档数字不动、报告挂免责；镜像该不该建模
+  （重建滤波 / 芯片 DPA 时钟）仍是开放问题，见 ROADMAP B7。
 
 ## 容差（全量运行前写进 ex22）
 
