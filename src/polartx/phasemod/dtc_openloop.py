@@ -13,6 +13,8 @@ in UI — pllsim DTC conventions), random DTC jitter, LO phase noise
 baseband grid (ZOH -> modulation images at multiples of f_update).
 Deterministic imperfections (quantization/INL/gain) are always applied;
 noise=False gates only the random terms, matching the pllsim engines.
+``noise_phase`` hands the random terms over separately, for a chain that
+holds this modulator's output onto a grid finer than its clock.
 """
 from __future__ import annotations
 
@@ -55,7 +57,11 @@ class DTCPMConfig:
     f_update
         Phase update clock when slower than the baseband grid.  ZOH puts
         modulation images at multiples of f_update with sinc rolloff —
-        an aliasing budget, not an impairment to calibrate away.
+        an aliasing budget, not an impairment to calibrate away.  This
+        holds a phase computed on the grid (its dither and jitter run at
+        the grid rate); for the DTC and DPA sharing one clock below the
+        simulation grid -- the whole digital chain at the clock, noise
+        where it physically acts -- use ``ChainConfig.f_clock``.
     lo_pn / lo_loop_bw
         The fixed LO is PLL-locked, so its Leeson PSD is flattened below
         the loop bandwidth.  This is why CPE is negligible in these
@@ -180,26 +186,90 @@ class DTCPhaseModulator(PhaseModulator):
         diag = {"mode": "dtc_openloop", "code": code,
                 "lsb_rad": c.lsb_rad}
         if noise:
-            # Drawn even at jitter_rms_s == 0 (a zero-scale draw consumes the
-            # same stream positions): the LO sample below comes off the same
-            # generator when lo_pn_seed is None, and switching the jitter off
-            # must not hand the LO a different realization.  At sigma > 0
-            # this is the same draw as before, bit for bit.
-            out = out + rng.normal(0.0, TWOPI * c.fout * c.jitter_rms_s,
-                                   out.size)
-            if c.lo_pn is not None:
-                src = c.lo_pn.leeson("lo")
-                # locked-LO approximation: inside the PLL loop BW the
-                # oscillator's f^-2/f^-3 slopes are flattened
-                if c.lo_pn_seed is None:
-                    lo_rng = rng                 # one modulator, one LO
-                else:
-                    # a stream of its own, keyed off the LO seed with a
-                    # tag so it never coincides with a run's jitter stream
-                    lo_rng = np.random.default_rng([int(c.lo_pn_seed), 1])
-                pn = synth_from_psd(
-                    lambda f: src.psd(np.maximum(f, c.lo_loop_bw)),
-                    fs_bb, out.size, lo_rng)
+            jit, pn = self._draw_noise(rng, out.size, fs_bb, seed, 1)
+            out = out + jit
+            if pn is not None:
                 out = out + pn
                 diag["lo_pn"] = True
         return PhaseModResult(phase_out=out, diagnostics=diag)
+
+    def noise_phase(self, n: int, fs_bb: float, seed: int = 0, m: int = 1
+                    ) -> tuple[np.ndarray, np.ndarray | None]:
+        """The random phase terms of ``modulate(noise=True)`` for an output
+        held ``m`` grid samples per update (``PolarTX`` on a grid finer than
+        its update clock): ``(jitter, lo_pn)``.
+
+        ``jitter`` has one draw per update (``n`` of them): edge jitter
+        belongs to an edge, so it is held with the code it times.
+        ``lo_pn`` is on the ``n * m`` grid (or None without an LO model):
+        the LO is continuous, not held.  Its content below the update
+        rate's Nyquist is the update-rate sample itself -- the same draws
+        ``modulate`` makes, carried over bin for bin -- and only what
+        lies above it is drawn fresh, so changing the grid adds the
+        noise the coarser grid could not hold without re-rolling the
+        noise it could.  At ``m == 1`` this is ``modulate``'s noise
+        exactly."""
+        if m < 1:
+            raise ValueError("m must be >= 1")
+        return self._draw_noise(np.random.default_rng(seed), n, fs_bb,
+                                seed, m)
+
+    def _draw_noise(self, rng, n, fs_bb, seed, m):
+        c = self.cfg
+        # Drawn even at jitter_rms_s == 0 (a zero-scale draw consumes the
+        # same stream positions): the LO sample below comes off the same
+        # generator when lo_pn_seed is None, and switching the jitter off
+        # must not hand the LO a different realization.  At sigma > 0
+        # this is the same draw as before, bit for bit.
+        jit = rng.normal(0.0, TWOPI * c.fout * c.jitter_rms_s, n)
+        if c.lo_pn is None:
+            return jit, None
+        src = c.lo_pn.leeson("lo")
+
+        # locked-LO approximation: inside the PLL loop BW the
+        # oscillator's f^-2/f^-3 slopes are flattened
+        def lo_psd(f):
+            return src.psd(np.maximum(f, c.lo_loop_bw))
+
+        if c.lo_pn_seed is None:
+            lo_rng = rng                 # one modulator, one LO
+            key = seed
+        else:
+            # a stream of its own, keyed off the LO seed with a
+            # tag so it never coincides with a run's jitter stream
+            lo_rng = np.random.default_rng([int(c.lo_pn_seed), 1])
+            key = c.lo_pn_seed
+        pn = synth_from_psd(lo_psd, fs_bb, n, lo_rng)
+        if m > 1:
+            # the band above the update rate's Nyquist: a stream tagged 2,
+            # keyed like the LO's own, so shared-LO branches share it too
+            pn = _extend_band(pn, m, lo_psd, fs_bb,
+                              np.random.default_rng([int(key), 2]))
+        return jit, pn
+
+
+def _extend_band(x: np.ndarray, m: int, psd_func, fs: float,
+                 rng: np.random.Generator) -> np.ndarray:
+    """``x`` (``n`` samples at ``fs``, from ``synth_from_psd``) on an
+    ``m``-fold grid: its spectrum carried over bin for bin below ``fs/2``
+    and the band from ``fs/2`` to ``m*fs/2`` drawn from ``psd_func`` with
+    ``synth_from_psd``'s scaling.  Same bin spacing, so the bins carried
+    over are the same frequencies; ``m`` restores irfft's 1/n."""
+    n = x.size
+    big = n * m
+    xs = np.fft.rfft(x)
+    ys = np.zeros(big // 2 + 1, dtype=complex)
+    ys[:xs.size] = xs * m
+    if n % 2 == 0:
+        # the coarse Nyquist bin was one real bin; on the fine grid it is
+        # an interior bin, which irfft counts twice
+        ys[n // 2] *= 0.5
+    k0 = xs.size
+    f = np.arange(k0, ys.size) * (fs / n)
+    amp = np.sqrt(np.maximum(np.asarray(psd_func(f), dtype=float), 0.0)
+                  * (fs * m) * big / 2.0)
+    ys[k0:] = amp * (rng.standard_normal(f.size)
+                     + 1j * rng.standard_normal(f.size)) / np.sqrt(2.0)
+    if big % 2 == 0:
+        ys[-1] = np.real(ys[-1]) * np.sqrt(2.0)
+    return np.fft.irfft(ys, n=big)

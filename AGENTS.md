@@ -57,7 +57,8 @@
 - **测量口径要显式声明**。EVM 均衡（`scalar` vs `per_tone`）由 `PolarResult.evm_equalize_default` 承载，保证画的星座图和打印的数字同口径；mask 的出处由 `MaskSpec.source` 承载。
 - **绝不臆造规范限值**。内置 mask 全是 `source="stylized"` 的工程模板；需要真表格就开口要，不要编看起来合理的数字。
 - **引擎有适用域**（`ADPLLTwoPoint` 的 `mode="event"` 要求 TDC 量程覆盖一个 DCO 周期，构造时不满足即抛异常；**更正 2026-11-12**：原写的"每周期相位推进 ≪1 UI"是从量程只有 1/4 周期的 LTE-20 预设归纳错的，推进量不是限制，见 `cairn/adpll-event-engine.md`）；`response` 模式已线性化，**不能背书杂散结论**。指标输入不够时**抛异常**，不返回 NaN。
-- 只在 `claude/digital-polar-tx-dev-r0c338` 上开发提交；不主动推 `main`、不主动开 PR；提交信息写**为什么**。GitHub 走 `mcp__github__*`，没有 `gh`。
+- **宽带链的 `oversampling` 是网格，硬件时钟是 `update_oversampling`**（`ChainConfig.f_clock`，默认 4×）：提高网格只加保持的下垂与镜像，不换芯片；默认网格 = 时钟，读的是更新时刻（`polartx.grid` 在报告里写明，见 `cairn/wideband-grid.md`）。
+- 在 `feat/*` 分支上开发，开 PR 合 `main`（`main` 是默认分支；**更正 2026-11-16**：原写的"只在 `claude/digital-polar-tx-dev-r0c338` 上提交、不开 PR"已过时，那个分支与 `main` 同一提交）；提交信息写**为什么**。GitHub 走 `mcp__github__*`，没有 `gh`。
 
 ## 知识沉淀规则
 

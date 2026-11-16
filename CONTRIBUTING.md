@@ -180,10 +180,10 @@ DCO 周期**（计数器数整周期，TDC 只读小数部分；量程不够就�
 
 ## 7. 提交 / Commits
 
-- 开发分支：`claude/digital-polar-tx-dev-r0c338`。**不要在没被要求的情况下
-  推 `main`**——每次都要单独问；**不要主动开 PR**，除非明确要求。
-- 提交前：`pytest tests/ -q` 全绿；碰过 examples 就把碰过的跑一遍
-  （CI 的 `examples` job 会跑全部 18 个）。
+- 开发分支：`feat/*`，开 PR 合 `main`（默认分支）；**不要直接推 `main`**。
+  （2026-11-16 起；此前的 `claude/digital-polar-tx-dev-r0c338` 与 `main` 同一提交，已不再使用。）
+- 提交前：`pytest tests/` 全绿（addopts 已有 `-q`）；碰过 examples 就把碰过的跑一遍
+  （CI 的 `examples` job 会跑全部）。
 - 提交信息写**为什么**，不写**改了哪些文件**（diff 已经说了后者）。
 - 新物理效应/新指标 = 新测试。CI 的 `test` 矩阵覆盖多平台多 Python 版本。
 - GitHub 操作走 `mcp__github__*` MCP 工具；这个环境里**没有 `gh` CLI**。

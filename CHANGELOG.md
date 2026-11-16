@@ -10,6 +10,34 @@ release 分组。
 
 ## 未发布 / Unreleased
 
+### E1（polar_tx#22）：仿真网格与 DTC/DPA 更新时钟分开（2026-11-16）
+
+- **为什么**：array_tx 报 FR2 400 MHz 在 os 4 上 ACLR2 读高 4.7 dB。查下来，本库的 `oversampling` 同时是仿真网格和
+  DTC / DPA 的更新时钟（`f_update`、`f_dpa` 默认等于 `fs_bb`），所以 os 4 → 16 量的是"4× 时钟的芯片"对"16× 时钟的芯片"，
+  不是网格收敛——这种读法到 os 32 也不收敛（理想 DPA ACLR1 os 32 − os 16 仍差 3.4 dB）。
+- **做了什么**：预设的硬件时钟定为 4×（架构选择器的 `osr = 4` 本来就是这个立场）；`ChainConfig.f_clock` 与预设的
+  `update_oversampling`（默认 4）把时钟和网格分开——网格细于时钟时整条数字链在时钟上跑，输出零阶保持到网格，
+  抖动按次更新、LO 相噪在网格上且时钟 Nyquist 以下与时钟速率那份逐 bin 相同（`DTCPhaseModulator.noise_phase`）。
+  报告的 conventions 新增 grid 条（`polartx.grid`，口径同 array_tx `disclaimer_for`）。`PolarResult.aclr()` 与报告的
+  PSD 按保持倍数放大 FFT（固定 4096 点时细网格把信道边缘抹进邻道，WiFi 80 MHz 读差 4 dB）。
+  `nr_dtc().make_waveform` 现在把 `oversampling` 传给 `nr_waveform`。新增 ex22、`tests/test_grid.py`。
+- **默认数字一个不动**：默认网格 = 时钟，走原路径。宽带指纹 124/124（18 个预设 × DPD × 噪声、18 个 GUI 报告、FIR 预设）
+  与 b007e60 相同，RTL / dp_cal 导出 43 个文件逐字节相同。
+- **会动的是显式传了 `oversampling` 的调用**（array_tx 的扫描），因为同一个参数现在只换网格。issue 的复现
+  （`nr_dtc(bw=400e6)`，无 DPD，噪声关），改前 → 改后：
+
+  | DPA | 量 | os 4 | os 8 | os 16 |
+  |---|---|---|---|---|
+  | 理想 | ACLR1 [dBc] | −64.54 → −64.54 | −70.19 → −65.03 | −74.37 → −65.14 |
+  | 理想 | ACLR2 [dBc] | −61.81 → −61.81 | −67.61 → −63.79 | −73.24 → −64.18 |
+  | Rapp p2，AM-PM 8° | ACLR1 [dBc] | −37.29 → −37.29 | −37.60 → −37.54 | −37.55 → −37.56 |
+  | Rapp p2，AM-PM 8° | ACLR2 [dBc] | −60.14 → −60.14 | −63.30 → −61.89 | −64.66 → −62.19 |
+
+  原因全部归到网格：改前的 os 8/16 是更快的芯片，改后是同一颗芯片在更细的网格上；`update_oversampling=None`
+  逐位复现改前的数。outphasing / RF-DAC 预设与 FIR 预设的时钟仍随网格。
+- **没做的**：默认网格没提（见 ROADMAP B7——提到 16 会让 WiFi / NR 模板全部因更新时钟镜像 FAIL，待定）。
+  盘点表与收敛表在 `cairn/wideband-grid.md`。
+
 ### C5 了结：vendored `adpll.py` 进上游内核，pllsim 子树单一 pin 到 `5564c64`（2026-11-12）
 
 - **为什么拖了三个月**：上游把逐周期循环搬进了 numba `@kernel`，本仓的在线两点增益校准

@@ -203,7 +203,8 @@ def lte20_adpll(qam: int = 64, *, mode: str = "response",
 
 def wifi_dtc(bw: float = 160e6, qam: int = 1024, *, n_bits: int = 11,
              range_ui: float = 1.0, fout: float = 5.9e9,
-             oversampling: int = 4, dither: bool = True,
+             oversampling: int = 4, update_oversampling: int | None = 4,
+             dither: bool = True,
              jitter_rms_s: float = 50e-15, lo_pn: OscConfig | None = None,
              lo_loop_bw: float = 400e3, inl_poly: tuple = (),
              inl_sin: tuple = (),
@@ -213,7 +214,21 @@ def wifi_dtc(bw: float = 160e6, qam: int = 1024, *, n_bits: int = 11,
     """WiFi 6/7 wideband polar TX: open-loop DTC phase modulator + DPA.
 
     Baseband at bw x oversampling (up to 1.28 GS/s at 320 MHz); the DTC
-    covers one carrier UI with n_bits resolution.  Defaults: 11-bit
+    covers one carrier UI with n_bits resolution.
+
+    Two rates, and they are different things.  ``update_oversampling``
+    is the hardware: the DTC and DPA update at bw x update_oversampling
+    (4: 1.28 GHz at 320 MHz), which sets the quantization-noise density
+    and where the hold's images fall.  ``oversampling`` is the simulation
+    grid the output is read on; above the clock it only adds the hold's
+    droop and images (``ChainConfig.f_clock``), so raising it is a
+    convergence study, not a different chip.  At the defaults the two
+    coincide and the output is read at the update instants -- ACLR1 there
+    reads 0.4-1.0 dB pessimistic and the mask sees only +-2 BW, while
+    per-tone EVM is converged (examples/ex22, cairn/wideband-grid.md).
+    ``update_oversampling=None`` ties the clock to the grid, the
+    behaviour before the two were separated (raising oversampling then
+    clocks the DTC and DPA faster).  Defaults: 11-bit
     dithered DTC, 50 fs jitter, WiFi-class fixed LO (-108 dBc/Hz @ 1 MHz
     on 5.9 GHz), CFR to 8.5 dB PAPR, 2% envelope hole punching, 10-bit
     DPA with mild Rapp compression.  dpd=True pre-links the exact
@@ -235,17 +250,80 @@ def wifi_dtc(bw: float = 160e6, qam: int = 1024, *, n_bits: int = 11,
     if dpd:
         from .cal.polar_dpd import PolarDPD
         dpd_ = PolarDPD.from_dpa(dpa_)
-    tx = PolarTX(ChainConfig(cfr_papr_db=cfr_papr_db, env_floor=env_floor,
-                             env_skew_s=env_skew_s), pm, dpa_, dpd=dpd_)
+    _check_clock(oversampling, update_oversampling)
+    tx = PolarTX(ChainConfig(
+        cfr_papr_db=cfr_papr_db, env_floor=env_floor, env_skew_s=env_skew_s,
+        f_clock=(None if update_oversampling is None
+                 else bw * update_oversampling)), pm, dpa_, dpd=dpd_)
     fs_bb = bw * oversampling
 
     def make_waveform(n_symbols: int = 8, seed: int = 0) -> Waveform:
         """802.11 OFDM burst at this preset's bandwidth and constellation."""
         from .waveforms.ofdm import wifi_waveform
-        return wifi_waveform(bw, qam, n_symbols=n_symbols,
-                             oversampling=oversampling, seed=seed)
+        return burst_on_grid(
+            lambda os_: wifi_waveform(bw, qam, n_symbols=n_symbols,
+                                      oversampling=os_, seed=seed),
+            oversampling, update_oversampling)
 
     return TxPreset(tx=tx, fs_bb=fs_bb, make_waveform=make_waveform)
+
+
+def _check_clock(oversampling: int, update_oversampling: int | None) -> None:
+    if update_oversampling is None:
+        return
+    if update_oversampling < 1 or oversampling % update_oversampling:
+        raise ValueError(
+            f"update_oversampling ({update_oversampling}) must divide "
+            f"oversampling ({oversampling}): the grid holds a whole number "
+            "of samples per update")
+
+
+def burst_on_grid(gen: Callable[[int], Waveform], oversampling: int,
+                   update_oversampling: int | None) -> Waveform:
+    """The burst on the simulation grid, from ``gen(oversampling) ->
+    Waveform``.  When the grid is finer than the
+    update clock it is the update-rate burst, band-limited-interpolated
+    onto the grid (the reference and metadata are the grid's own), so the
+    digital chain -- which reads every m-th sample -- sees exactly the
+    update-rate samples at any grid: the burst generator itself is not
+    decimation-consistent (``x16[::4]`` and ``x4`` differ by up to 0.7 %),
+    and a convergence study must not compare two different inputs."""
+    from dataclasses import replace
+    if update_oversampling is None or update_oversampling == oversampling:
+        return gen(oversampling)
+    m = oversampling // update_oversampling
+    wf_u = gen(update_oversampling)
+    wf_g = gen(oversampling)
+    if wf_g.n != m * wf_u.n:
+        raise ValueError("the burst generator does not scale its length "
+                         "with the oversampling")
+    x = _interp(wf_u.x, m)
+    # the interpolation passes through the update-rate samples only to FFT
+    # rounding (~1e-15), and the dithered quantizer's running sum can flip
+    # a code on that: put the exact samples back
+    x[::m] = wf_u.x
+    return replace(wf_g, x=x)
+
+
+def _interp(x, m: int):
+    """Periodic band-limited interpolation by m (zero-padded spectrum): the
+    result passes through every input sample at indices 0, m, 2m, ..."""
+    import numpy as np
+    n = x.size
+    xs = np.fft.fft(x)
+    big = np.zeros(n * m, dtype=complex)
+    h = n // 2
+    big[:h] = xs[:h]
+    neg = n - h - 1
+    if neg:
+        big[-neg:] = xs[h + 1:]
+    if n % 2 == 0:
+        # split the Nyquist bin between +fs/2 and -fs/2
+        big[h] = 0.5 * xs[h]
+        big[-h] = 0.5 * xs[h]
+    else:
+        big[h] = xs[h]
+    return np.fft.ifft(big) * m
 
 
 # ------------------------------------------------------------ benchmarks
@@ -390,7 +468,10 @@ def bench_wifi7_mlo_fir_borokhovich26(bw: float = 40e6, *,
                     # chain to ~-35 dB, 5 dB below this paper's published
                     # class.  9 dB lands at -40.6 dB vs the published -40.7.
                     jitter_rms_s=8e-15, lo_pn=lo, cfr_papr_db=9.0,
-                    dpd=True, dpa=dpa, oversampling=osr)
+                    dpd=True, dpa=dpa, oversampling=osr,
+                    # osr is this chain's hardware rate (the FIR delay is
+                    # in update samples), not a finer grid
+                    update_oversampling=None)
     fir_tx = FIRDualTapTX(base.tx, notch_offset_hz=notch_offset_hz)
 
     # 16 symbols, not 4: the EVM here is CFR-clipping-limited, and clipping
@@ -444,7 +525,13 @@ def wifi_outphasing(bw: float = 160e6, qam: int = 1024, *,
     Envelope-path knobs passed here (``env_skew_s``, ``env_floor``) reach
     the polar reference chain only — outphasing has no envelope path, see
     ``outphasing`` module docstring.
+
+    The update clock follows the grid here (``update_oversampling=None``):
+    the clock / grid separation is modeled for the polar chain only, so
+    raising ``oversampling`` on this preset still clocks the branches
+    faster (cairn/wideband-grid.md).
     """
+    kw.setdefault("update_oversampling", None)
     base = wifi_dtc(bw=bw, qam=qam, **kw)
     if combiner is None:
         combiner = OutphasingCombiner(mode="chireix")
@@ -493,8 +580,10 @@ def wifi_rfdac(bw: float = 160e6, qam: int = 1024, *, n_bits: int = 12,
     ``ChainConfig`` (``cfr_papr_db``) plus ``env_skew_s`` — so a skew
     someone passes here is warned about by ``CartesianTX`` rather than
     silently dropped, while the polar preset's own envelope defaults
-    (hole punching) are not carried across.
+    (hole punching) are not carried across.  The DAC clock follows the
+    grid (``update_oversampling=None``), as in ``wifi_outphasing``.
     """
+    kw.setdefault("update_oversampling", None)
     base = wifi_dtc(bw=bw, qam=qam, **kw)
     c = base.tx.cfg
     if rfdac is None:
@@ -535,6 +624,7 @@ def nr_dtc(bw: float = 100e6, *, scs: float | None = None,
            qam: int | None = None, fout: float | None = None,
            lo_pn: OscConfig | None = None,
            n_bits: int = 11, oversampling: int = 4,
+           update_oversampling: int | None = 4,
            jitter_rms_s: float = 50e-15,
            cfr_papr_db: float | None = 8.5, env_floor: float = 0.02,
            env_skew_s: float = 0.0, dpa: DPAConfig | None = None,
@@ -549,7 +639,11 @@ def nr_dtc(bw: float = 100e6, *, scs: float | None = None,
     The commonly swept knobs are named explicitly (so the signature is
     self-documenting and completes in an editor); ``**kw`` remains an
     escape hatch onto the rest of wifi_dtc's parameters.  Defaults here
-    mirror wifi_dtc's — test_preset_forwarding pins that."""
+    mirror wifi_dtc's — test_preset_forwarding pins that.
+
+    ``oversampling`` / ``update_oversampling`` are in units of the FFT
+    grid (fft x scs): the simulation grid and the DTC / DPA update clock,
+    separate as in wifi_dtc (FR2 400 MHz: 1.966 GHz clock)."""
     fr2 = bw > 100e6
     scs = scs or (120e3 if fr2 else 30e3)
     qam = qam or (64 if fr2 else 256)
@@ -558,16 +652,6 @@ def nr_dtc(bw: float = 100e6, *, scs: float | None = None,
         lo_pn = OscConfig(f0=fout, gain=1.0, pn_dbchz=-100.0,
                           pn_foffset=1e6, pn_f1f3=300e3,
                           pn_floor_dbchz=-140.0)
-    p = wifi_dtc(bw=bw, qam=qam, fout=fout, lo_pn=lo_pn, n_bits=n_bits,
-                 oversampling=oversampling, jitter_rms_s=jitter_rms_s,
-                 cfr_papr_db=cfr_papr_db, env_floor=env_floor,
-                 env_skew_s=env_skew_s, dpa=dpa, dpd=dpd, **kw)
-
-    def make_waveform(n_symbols: int = 8, seed: int = 0) -> Waveform:
-        """5G NR burst at this preset's SCS, bandwidth and constellation."""
-        from .waveforms.ofdm import nr_waveform
-        return nr_waveform(bw, scs, qam, n_symbols=n_symbols, seed=seed)
-
     # The NR waveform runs on the FFT grid (fft * scs * oversampling), not on
     # bw * oversampling like the WiFi plan: 100 MHz @ 30 kHz is 491.52 MS/s,
     # not 400.  Report the rate the waveform actually has, and fail here --
@@ -575,5 +659,24 @@ def nr_dtc(bw: float = 100e6, *, scs: float | None = None,
     from .waveforms.ofdm import NR_NUMEROLOGY
     if (bw, scs) not in NR_NUMEROLOGY:
         raise ValueError(f"nr_dtc: (bw, scs) must be one of {sorted(NR_NUMEROLOGY)}")
-    fs_bb = NR_NUMEROLOGY[(bw, scs)][0] * scs * oversampling
+    fft_rate = NR_NUMEROLOGY[(bw, scs)][0] * scs
+    p = wifi_dtc(bw=bw, qam=qam, fout=fout, lo_pn=lo_pn, n_bits=n_bits,
+                 oversampling=oversampling, update_oversampling=None,
+                 jitter_rms_s=jitter_rms_s,
+                 cfr_papr_db=cfr_papr_db, env_floor=env_floor,
+                 env_skew_s=env_skew_s, dpa=dpa, dpd=dpd, **kw)
+    # the clock is on the FFT grid, not on bw: set it here, not in wifi_dtc
+    _check_clock(oversampling, update_oversampling)
+    if update_oversampling is not None:
+        p.tx.cfg.f_clock = fft_rate * update_oversampling
+
+    def make_waveform(n_symbols: int = 8, seed: int = 0) -> Waveform:
+        """5G NR burst at this preset's SCS, bandwidth and constellation."""
+        from .waveforms.ofdm import nr_waveform
+        return burst_on_grid(
+            lambda os_: nr_waveform(bw, scs, qam, n_symbols=n_symbols,
+                                    oversampling=os_, seed=seed),
+            oversampling, update_oversampling)
+
+    fs_bb = fft_rate * oversampling
     return TxPreset(tx=p.tx, fs_bb=fs_bb, make_waveform=make_waveform)

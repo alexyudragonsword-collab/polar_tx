@@ -7,7 +7,7 @@ and wideband (open-loop DTC) transmitters.
 """
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 
 import numpy as np
 
@@ -55,6 +55,18 @@ class ChainConfig:
     env_floor
         Hole-punch clamp as a fraction of rms.  Bounds the envelope's
         dynamic range and its bandwidth, at a computable EVM cost.
+    f_clock
+        The DTC / DPA update clock, when the waveform's grid is finer than
+        it (an integer multiple).  The whole digital chain -- CFR, polar
+        split, DPD, quantization and dither, DPA encode -- then runs at
+        ``f_clock`` on every ``fs/f_clock``-th input sample, and its
+        output is zero-order held onto the grid with the random phase
+        terms added there (``DTCPhaseModulator.noise_phase``).  That is
+        the only thing a finer grid adds: the hold's sinc droop and its
+        images at multiples of ``f_clock``, which a grid equal to the
+        clock folds onto the signal and cannot show.  ``None`` = the grid
+        is the clock (one sample per update), the historical behaviour.
+        See ``cairn/wideband-grid.md``.
     cfr_papr_db
         Crest-factor-reduction target.  None disables it.  On a high-order
         QAM chain the clipping residual can BE the EVM floor (identical
@@ -86,6 +98,8 @@ class ChainConfig:
                                    # first amplitude image moves to
                                    # interleave * f_dpa (comb-filtered)
     supply: SupplyConfig | None = None   # DPA supply pushing AM->PM
+    f_clock: float | None = None   # DTC/DPA update clock below the grid;
+                                   # None = the grid is the clock
 
 
 @dataclass
@@ -113,6 +127,10 @@ class PolarResult:
     y: np.ndarray                  # chain output, complex baseband @ fs
     fs: float
     wf: Waveform
+    # The taps below are at the update clock: on the waveform's grid when
+    # the grid is the clock, every ``info["clock_hold"]``-th grid sample
+    # when ``ChainConfig.f_clock`` is below it (and then ``phase_out``
+    # carries no random terms -- they are added on the grid).
     env_cmd: np.ndarray            # normalized envelope command [0,1]
     env_code: np.ndarray           # DPA amplitude codes
     phase_cmd: np.ndarray          # commanded phase [rad]
@@ -138,9 +156,19 @@ class PolarResult:
         from .metrics.ble_metrics import phase_evm
         return phase_evm(self.y, self.wf)
 
+    @property
+    def grid_hold(self) -> int:
+        """Grid samples per update (1 when the grid is the clock)."""
+        return int(self.info.get("clock_hold", 1))
+
     def aclr(self):
-        """Adjacent-channel leakage vs this waveform's channel bandwidth."""
-        return aclr(self.y, self.fs, self.wf.bw)
+        """Adjacent-channel leakage vs this waveform's channel bandwidth.
+
+        The FFT grows with ``grid_hold`` so the resolution bandwidth is the
+        update-rate grid's: the adjacent band starts at the channel edge,
+        and at a fixed 4096 points a 4x finer grid smears that edge into it
+        (WiFi 80 MHz read 4 dB worse on a 16x grid for that reason alone)."""
+        return aclr(self.y, self.fs, self.wf.bw, nfft=4096 * self.grid_hold)
 
     def psd(self, nfft: int = 4096):
         """Welch PSD ``(f, p_db)`` of the chain output."""
@@ -234,6 +262,18 @@ class PolarTX:
         """
         c = self.cfg
         info: dict = {}
+        wf_grid = wf
+        per_update = 1
+        if c.f_clock is not None:
+            per_update = clock_hold(wf.fs, c.f_clock)
+        if per_update > 1:
+            if noise and not hasattr(self.phasemod, "noise_phase"):
+                raise ValueError(
+                    "a grid finer than f_clock needs a phase modulator "
+                    "that hands over its random terms (noise_phase); "
+                    f"{type(self.phasemod).__name__} does not")
+            # the digital chain sees the samples at the update instants
+            wf = replace(wf, x=wf.x[::per_update], fs=wf.fs / per_update)
         x = wf.x
         if c.cfr_papr_db is not None:
             x = cfr_clip_filter(x, c.cfr_papr_db, wf.fs, wf.bw)
@@ -274,7 +314,8 @@ class PolarTX:
             code = codes[0]
 
         # phase path
-        pm = self.phasemod.modulate(phase, wf.fs, noise=noise, seed=seed)
+        pm = self.phasemod.modulate(phase, wf.fs, noise=noise and per_update == 1,
+                                    seed=seed)
         info["phasemod"] = pm.diagnostics
         phase_tx = pm.phase_out
 
@@ -295,6 +336,54 @@ class PolarTX:
         if self.memory is not None:
             y = self.memory(y)
             info["memory"] = True
-        return PolarResult(y=y, fs=wf.fs, wf=wf, env_cmd=env_cmd,
+        if per_update > 1:
+            y = self._onto_grid(y, per_update, wf.fs, noise, seed)
+            info["clock_hold"] = per_update
+            info["f_clock"] = wf.fs
+        return PolarResult(y=y, fs=wf_grid.fs, wf=wf_grid, env_cmd=env_cmd,
                            env_code=code, phase_cmd=phase,
                            phase_out=pm.phase_out, info=info)
+
+    def _onto_grid(self, y: np.ndarray, hold: int, f_clock: float,
+                   noise: bool, seed: int) -> np.ndarray:
+        """The update-rate output held ``hold`` grid samples per update,
+        with the random phase terms where they physically act: edge jitter
+        on each update, before the hold; the LO on the grid, after it.
+
+        The hold is centred -- advanced by its own group delay, (hold-1)/2
+        grid samples -- so the output stays sample-aligned with the
+        waveform, as a receiver's timing recovery would align it; the
+        droop and the images stay in."""
+        jit = pn = None
+        if noise:
+            # not on the PhaseModulator protocol: only a modulator whose
+            # noise is a separable phase (the DTC) has it, and run() has
+            # already refused the others
+            noise_phase = getattr(self.phasemod, "noise_phase")
+            jit, pn = noise_phase(y.size, f_clock, seed, m=hold)
+        u = y if jit is None else y * np.exp(1j * jit)
+        out = advance(np.repeat(u, hold), (hold - 1) / 2.0)
+        if pn is not None:
+            out = out * np.exp(1j * pn)
+        return out
+
+
+def clock_hold(fs: float, f_clock: float) -> int:
+    """Grid samples per update, ``fs / f_clock``, which must be a whole
+    number >= 1 (a clock above the grid has nothing to hold)."""
+    if not f_clock > 0:
+        raise ValueError("f_clock must be > 0")
+    ratio = fs / f_clock
+    hold = int(round(ratio))
+    if hold < 1 or abs(ratio - hold) > 1e-9:
+        raise ValueError(f"fs/f_clock must be a whole number >= 1, got {ratio:g}")
+    return hold
+
+
+def advance(y: np.ndarray, d: float) -> np.ndarray:
+    """``y`` advanced by ``d`` samples (fractional: a linear phase across
+    the FFT, so circular over the burst)."""
+    if d == 0:
+        return y
+    f = np.fft.fftfreq(y.size)
+    return np.fft.ifft(np.fft.fft(y) * np.exp(2j * np.pi * f * d))

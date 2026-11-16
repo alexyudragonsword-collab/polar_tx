@@ -156,8 +156,10 @@ def test_every_envelope_and_phase_field_is_warned_about():
     default — a new ChainConfig field cannot be silently absorbed."""
     from dataclasses import fields
     names = {f.name for f in fields(ChainConfig)}
-    # the two fields this chain READS: the CFR target and the pinned full scale
-    assert names == set(IGNORED_CHAIN_FIELDS) | {"cfr_papr_db", "fs_scale_fixed"}
+    # the fields this chain READS: the CFR target, the pinned full scale,
+    # and the update clock (to refuse a grid finer than it: test_grid)
+    assert names == set(IGNORED_CHAIN_FIELDS) | {"cfr_papr_db", "fs_scale_fixed",
+                                                 "f_clock"}
     assert ignored_chain_settings(ChainConfig()) == []
     assert ignored_chain_settings(ChainConfig(cfr_papr_db=6.0)) == []
     assert ignored_chain_settings(ChainConfig(env_floor=0.1, interleave=2)) == [

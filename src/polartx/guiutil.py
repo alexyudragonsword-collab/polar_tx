@@ -158,7 +158,9 @@ def _spectrum_metrics(res, wf) -> tuple[np.ndarray, np.ndarray, np.ndarray, dict
     from .metrics.masks import default_mask, default_mask_spec
     from .metrics.sem import check_sem
 
-    f, pdb = res.psd(nfft=8192)
+    # the same resolution bandwidth on any grid (PolarResult.aclr does the
+    # same): a chain held onto a finer grid gets a proportionally longer FFT
+    f, pdb = res.psd(nfft=8192 * int(getattr(res, "grid_hold", 1)))
     ok, _margin, mask_db = check_mask(f, pdb, default_mask(wf))
     metrics = {"mask": "PASS" if ok else "FAIL"}
     # The plain margin is pinned at 0.00 dB whenever the signal passes (the
@@ -402,6 +404,12 @@ def _conventions(tx, wf, eq: str) -> list[dict]:
         else f"mask：{src}"), "en": (
         "mask: stylized engineering template, not a conformance clause"
         if src == "stylized" else f"mask: {src}")})
+    # whether the grid the spectrum was read on can show the hold's droop
+    # and images (polar_tx#22; the same call array_tx's reports make)
+    from .grid import grid_disclaimer
+    g = grid_disclaimer(tx, wf.fs)
+    if g is not None:
+        out.append({"id": g["id"], "zh": g["zh"], "en": g["en"]})
     out.append({"id": "efficiency",
                 "zh": "效率：效率律在本 burst 码流上的调制平均（模型律，非实测）",
                 "en": "efficiency: the efficiency law averaged over this "
