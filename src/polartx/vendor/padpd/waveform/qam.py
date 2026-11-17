@@ -1,4 +1,4 @@
-# Vendored from PA_DPD@44cbcb3: src/padpd/waveform/qam.py
+# Vendored from PA_DPD@a9220d6: src/padpd/waveform/qam.py
 # Adapted-copy policy: see src/polartx/vendor/__init__.py
 """Gray-coded square QAM mapping/demapping.
 

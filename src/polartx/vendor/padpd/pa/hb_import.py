@@ -1,4 +1,4 @@
-# Vendored from PA_DPD@44cbcb3: src/padpd/pa/hb_import.py
+# Vendored from PA_DPD@a9220d6: src/padpd/pa/hb_import.py
 # Adapted-copy policy: see src/polartx/vendor/__init__.py
 """Import harmonic-balance / S-parameter simulation results as a PA model.
 

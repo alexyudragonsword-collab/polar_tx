@@ -1,4 +1,4 @@
-# Vendored from PA_DPD@44cbcb3: src/padpd/metrics/spectrum.py
+# Vendored from PA_DPD@a9220d6: src/padpd/metrics/spectrum.py
 # Adapted-copy policy: see src/polartx/vendor/__init__.py
 """Power spectral density and simplified 802.11-style spectral mask check."""
 

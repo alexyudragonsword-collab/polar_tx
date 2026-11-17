@@ -1,4 +1,4 @@
-# Vendored from PA_DPD@44cbcb3: src/padpd/metrics/ccdf.py
+# Vendored from PA_DPD@a9220d6: src/padpd/metrics/ccdf.py
 # Adapted-copy policy: see src/polartx/vendor/__init__.py
 """CCDF of the instantaneous power (peak-to-average statistics).
 

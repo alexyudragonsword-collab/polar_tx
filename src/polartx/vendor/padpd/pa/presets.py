@@ -1,4 +1,4 @@
-# Extracted from PA_DPD@44cbcb3: src/padpd/pa/presets.py (gmp_opendpd_510 / mp_opendpd_500 only; ddr_volterra_default dropped — DDRVolterraModel is not vendored)
+# Extracted from PA_DPD@a9220d6: src/padpd/pa/presets.py (gmp_opendpd_510 / mp_opendpd_500 only; ddr_volterra_default dropped — DDRVolterraModel is not vendored)
 # Adapted-copy policy: see src/polartx/vendor/__init__.py
 """Model configurations matching OpenDPD's published classical baselines.
 

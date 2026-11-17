@@ -1,4 +1,4 @@
-# Vendored from PA_DPD@08b9725: src/padpd/gain_modulation.py
+# Vendored from PA_DPD@a9220d6: src/padpd/gain_modulation.py
 # Adapted-copy policy: see src/polartx/vendor/__init__.py
 """Power-gain-modulation identification: measure tau, don't guess it.
 

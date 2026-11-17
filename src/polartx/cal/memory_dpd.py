@@ -25,8 +25,8 @@ def _chain_as_pa(tx, wf: Waveform, *, noise: bool, seed: int):
     handed to the vendored ILA as if it were one black-box PA.  This only
     works if the chain is a STATIC system across runs, which is why
     ``ChainConfig.fs_scale_fixed`` must be set: per-run normalization
-    makes the "PA" change between iterations and caps the fit's benefit at
-    a few dB (test-pinned).
+    makes the "PA" change between iterations and caps the fit's benefit
+    (14.7 dB against 48.5 dB with the full scale pinned; test-pinned).
     """
 
     def pa(x: np.ndarray) -> np.ndarray:
@@ -40,7 +40,16 @@ def fit_chain_ila(tx, wf: Waveform, *, model_factory=None,
                   n_iterations: int = 2, noise: bool = False,
                   seed: int = 0, fit_kwargs: dict | None = None
                   ) -> ILAPredistorter:
-    """ILA fit of a Cartesian predistorter against the whole chain."""
+    """ILA fit of a Cartesian predistorter against the whole chain.
+
+    ``n_iterations`` is an upper bound: the vendored ILA measures every
+    predistorter on the chain and keeps the latest one that is not more
+    than 1 dB worse than the best so far (PA_DPD d5750c2 / 70d6cc3), so a
+    diverging pass is dropped instead of shipped.  ``dpd.history`` and
+    ``dpd.best_iteration`` say which pass was kept.  On the measured
+    DPA_160MHz chain the second pass diverges; the fixed two-pass loop
+    this used to run kept it (EVM -36.5, ACLR -38.0 -> -33.8 dBc) where
+    the first pass gives -40.4 and -39.1."""
     dpd = ILAPredistorter(model_factory=model_factory,
                           n_iterations=n_iterations,
                           fit_kwargs=fit_kwargs or {"regularization": 1e-9})

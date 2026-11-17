@@ -144,7 +144,9 @@ for lab, dpd_, mem_ in (("static DPA, no DPD", None, None),
     rows[lab] = (r.evm().db, aclr(r.y, r.fs, wf4.bw)["upper_dbc"])
 txm = PolarTX(cfg, IdealPhaseModulator(), dpa, memory=model)
 # the predistorter gets the residual's own structure (GMP-510); the
-# default ILA model is smaller and recovers ~3 dB less here
+# default ILA model is smaller and recovers ~5 dB less here.  Both stop at
+# their first pass: the second diverges and the vendored ILA keeps the
+# best pass (PA_DPD d5750c2 / 70d6cc3)
 ila = fit_chain_ila(txm, wf4, model_factory=gmp_opendpd_510)
 r = run_with_ila(txm, wf4, ila, noise=False)
 rows["DPA + memory + whole-chain ILA"] = (r.evm().db, aclr(r.y, r.fs, wf4.bw)["upper_dbc"])

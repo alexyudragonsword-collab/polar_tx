@@ -1,4 +1,4 @@
-# Vendored from PA_DPD@44cbcb3: src/padpd/deploy/fixed_point.py
+# Vendored from PA_DPD@a9220d6: src/padpd/deploy/fixed_point.py
 # Adapted-copy policy: see src/polartx/vendor/__init__.py
 """Fixed-point (bit-true) evaluation of linear-in-parameters models.
 
@@ -15,6 +15,16 @@ Complex values share one format across I and Q (as in real IQ datapaths).
 This is a behavioral bit-true model of the arithmetic, not a full RTL
 timing/resource model; the accumulator is treated as full precision
 (wide enough not to overflow), which matches well-designed DPD hardware.
+
+Correction (2026-11-04, PA_DPD#2, from the dsp_ip RTL bring-up): "bit-true"
+above overstates it. The quantizers are exact, but ``basis_matrix`` forms
+``x |x|^k`` in float64 (at 16 bits the exact product needs ~80 bits, float64
+keeps 53), the accumulate is a float64 matmul and the output is not
+quantized, so no integer datapath reproduces ``__call__`` sample for sample.
+It is a float emulation of the quantization loss. The scale exponents are
+also block-adaptive: picked from the peak of whatever block is passed in, so
+they are not known causally. ``scale_exponents`` reports them so an export
+can carry them (``scripts/export_deploy.py``).
 """
 
 from __future__ import annotations
@@ -56,8 +66,10 @@ class FixedPointPolyModel:
 
     ``model`` must expose ``basis_matrix(x)`` and a fitted ``coeffs``
     (MP / GMP / DDR-Volterra all do). Coefficients are quantized once at
-    construction; the input, each basis column, and the output are
-    quantized per call. Basis columns are quantized independently (each
+    construction; the input and each basis column are quantized per call;
+    the output is the float64 accumulate, not quantized (an earlier version
+    of this docstring said it was; see the module note). Basis columns are
+    quantized independently (each
     tap has its own datapath format), which is what real hardware does
     and is essential because ``|x|^0`` and ``|x|^k`` differ by orders of
     magnitude.
@@ -79,6 +91,28 @@ class FixedPointPolyModel:
         for c in range(phi.shape[1]):
             phiq[:, c] = quantize_symmetric(phi[:, c], self.sig_bits)
         return phiq @ self.wq  # full-precision accumulate
+
+    def scale_exponents(self, x: np.ndarray) -> dict:
+        """The power-of-two exponents ``__call__(x)`` uses on this block:
+        ``in_scale_exp`` for the input (value = code * 2**e) and one
+        ``col_scale_exp`` per basis column, from the same peaks and the same
+        ``_pow2_step`` rule; ``acc_lsb_exp`` is the finest accumulator LSB
+        (coefficient exponent + smallest column exponent)."""
+        x = np.asarray(x, dtype=complex)
+        peak = max(np.abs(x.real).max(), np.abs(x.imag).max())
+        e_in = int(np.log2(_pow2_step(peak, self.sig_bits)))
+        phi = self.model.basis_matrix(quantize_symmetric(x, self.sig_bits))
+        e_col = []
+        for c in range(phi.shape[1]):
+            col = phi[:, c]
+            pk = max(np.abs(col.real).max(), np.abs(col.imag).max())
+            e_col.append(int(np.log2(_pow2_step(pk, self.sig_bits))))
+        wpk = max(np.abs(self.model.coeffs.real).max(),
+                  np.abs(self.model.coeffs.imag).max())
+        e_w = int(np.log2(_pow2_step(wpk, self.w_bits)))
+        return {"sig_bits": self.sig_bits, "n_samples": int(x.size),
+                "in_scale_exp": e_in, "col_scale_exp": e_col,
+                "acc_lsb_exp": e_w + min(e_col)}
 
     @property
     def n_coeffs(self) -> int:

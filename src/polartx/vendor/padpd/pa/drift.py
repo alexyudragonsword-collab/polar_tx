@@ -1,4 +1,4 @@
-# Vendored from PA_DPD@44cbcb3: src/padpd/pa/drift.py
+# Vendored from PA_DPD@a9220d6: src/padpd/pa/drift.py
 # Adapted-copy policy: see src/polartx/vendor/__init__.py
 """Time-varying PA for DPD tracking studies.
 
@@ -24,7 +24,12 @@ from .saleh import SalehPA
 
 class DriftingReferencePA:
     def __init__(self, drive0: float = 0.13, drive_span: float = 0.03,
-                 beta_a_span: float = 0.25, alpha_p_span: float = 0.8):
+                 beta_a_span: float = 0.25, alpha_p_span: float = 0.8,
+                 fs: float | None = None, fir_fs: float | None = None):
+        # fs / fir_fs: where the matching-network FIR taps sit in time,
+        # passed through to ReferencePA (see its docstring)
+        self.fs = fs
+        self.fir_fs = fir_fs
         self.drive0 = drive0
         self.drive_span = drive_span
         self.beta_a_span = beta_a_span
@@ -45,7 +50,7 @@ class DriftingReferencePA:
                         * (1 + self.alpha_p_span * s),
                         beta_p=self._base.beta_p)
         return ReferencePA(drive=self.drive0 + self.drive_span * s,
-                           saleh=saleh)
+                           saleh=saleh, fs=self.fs, fir_fs=self.fir_fs)
 
     def __call__(self, x: np.ndarray) -> np.ndarray:
         return self.pa()(x)

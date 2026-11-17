@@ -5,14 +5,12 @@ polartx is self-contained: the phase-path engine comes from
 at commit 5564c64 since 2026-11-12; ``arch/adpll.py`` and ``arch/frac.py``
 had been held at d7be4712 until the dp_cal hook moved into the kernel) and
 the waveform/metrics/PA infrastructure from
-``alexyudragonsword-collab/PA_DPD`` (package ``padpd``, commit 44cbcb3,
-on PA_DPD's ``main`` since 2026-10-03, when main was fast-forwarded from
-3aa1c24 and made the default branch.  When vendored the commit sat only on
-feature branches whose names changed twice, which is why CI fetches the
-pin by full SHA rather than by branch; ``pa/thermal.py`` and
-``gain_modulation.py`` are at 08b9725, also on ``main``, which fixed
-ThermalReferencePA restarting its FIRs every 128-sample block — the other
-files are byte-identical between the two commits and keep the older pin).
+``alexyudragonsword-collab/PA_DPD`` (package ``padpd``, every file at
+commit a9220d6 on PA_DPD's ``main`` since 2026-11-17; until then most files
+were at 44cbcb3 and ``pa/thermal.py`` / ``gain_modulation.py`` at 08b9725,
+the ThermalReferencePA FIR-restart fix.  CI fetches the pin by full SHA
+rather than by branch: 44cbcb3 once sat only on feature branches whose
+names changed twice).
 Each file carries a header naming its origin.  Copies are verbatim except:
 
 - ``pllsim/arch/frac.py``: FracConfig extracted from cppll.py;
