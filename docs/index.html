@@ -352,11 +352,13 @@
 <div class="callout">
   <span class="en"><b>The fs_scale_fixed lesson.</b> The chain normalized its envelope full-scale to each run's peak.
   Predistortion expands peaks, so the "PA" changed between ILA iterations — a non-static plant — and ILA's gain capped
-  at ~4 dB. Fixing the full scale (<code>ChainConfig.fs_scale_fixed</code>) restored the textbook convergence. The
+  at ~15 dB (it read ~4 dB while the ILA kept a diverged second pass; it now keeps its best pass), against ~48 dB with
+  the full scale fixed (<code>ChainConfig.fs_scale_fixed</code>), which restored the textbook convergence. The
   failure mode is locked in a test so it cannot silently return.</span>
   <span class="zh"><b>fs_scale_fixed 教训。</b>链路原本按每次运行的包络峰值归一化满量程。预失真会扩张峰值，于是
-  "PA" 在 ILA 迭代之间变了——被辨识对象非静态——ILA 收益封顶在 ~4 dB。固定满量程
-  （<code>ChainConfig.fs_scale_fixed</code>）后恢复教科书式收敛。该失效模式已被测试锁定，不会悄悄回归。</span>
+  "PA" 在 ILA 迭代之间变了——被辨识对象非静态——ILA 收益封顶在 ~15 dB（ILA 保留发散的第二轮时读作 ~4 dB；
+  现在保留最好的一轮），而固定满量程（<code>ChainConfig.fs_scale_fixed</code>）后是 ~48 dB，恢复教科书式收敛。
+  该失效模式已被测试锁定，不会悄悄回归。</span>
 </div>
 <figure>
   <img src="img/ex08_m4_dpd_mc_rtl.png" alt="ex08">

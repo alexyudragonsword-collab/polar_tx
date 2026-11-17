@@ -1,4 +1,4 @@
-# Vendored from PA_DPD@44cbcb3: src/padpd/pa/base.py
+# Vendored from PA_DPD@a9220d6: src/padpd/pa/base.py
 # Adapted-copy policy: see src/polartx/vendor/__init__.py
 """Common interface for PA behavioral models.
 

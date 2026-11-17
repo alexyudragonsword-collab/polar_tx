@@ -1,4 +1,4 @@
-# Vendored from PA_DPD@08b9725: src/padpd/pa/thermal.py
+# Vendored from PA_DPD@a9220d6: src/padpd/pa/thermal.py
 # Adapted-copy policy: see src/polartx/vendor/__init__.py
 """Self-heating virtual DUT: dissipated power drives the drift state.
 
@@ -87,17 +87,20 @@ class ThermalReferencePA:
                  beta_a_span: float = 0.4, alpha_p_span: float = 1.2,
                  taus_s: tuple = (5e-6, 3e-5), weights: tuple = (0.6, 0.4),
                  heat_gain: float = 0.7, fs: float = 320e6,
-                 block: int = 128):
+                 block: int = 128, fir_fs: float | None = None):
         if len(taus_s) != len(weights):
             raise ValueError("one weight per thermal time constant")
         if min(taus_s) <= 0 or min(weights) < 0:
             raise ValueError("taus must be > 0 and weights >= 0")
         if block < 1:
             raise ValueError("block must be >= 1")
-        self._drift = DriftingReferencePA(drive0=drive0,
-                                          drive_span=drive_span,
-                                          beta_a_span=beta_a_span,
-                                          alpha_p_span=alpha_p_span)
+        # fs was always the thermal network's clock; with fir_fs it also
+        # places the matching-network FIR taps in time. Without fir_fs the
+        # taps stay one sample apart, as before.
+        self._drift = DriftingReferencePA(
+            drive0=drive0, drive_span=drive_span, beta_a_span=beta_a_span,
+            alpha_p_span=alpha_p_span,
+            fs=fs if fir_fs is not None else None, fir_fs=fir_fs)
         self.taus_s = tuple(float(t) for t in taus_s)
         self.weights = tuple(float(w) for w in weights)
         self.heat_gain = float(heat_gain)

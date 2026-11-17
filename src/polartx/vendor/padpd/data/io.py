@@ -1,4 +1,4 @@
-# Vendored from PA_DPD@44cbcb3: src/padpd/data/io.py
+# Vendored from PA_DPD@a9220d6: src/padpd/data/io.py
 # Adapted-copy policy: see src/polartx/vendor/__init__.py
 """Loaders for external PA data sources.
 

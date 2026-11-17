@@ -1,5 +1,7 @@
 # Reduced from padpd/pa/__init__.py: registry limited to the vendored models
 # (no DDR-Volterra, reference/drifting/thermal PAs, I/Q front-end models).
+# CascadePA (upstream pa/cascade.py, PA_DPD#4) is not vendored: nothing in
+# polartx chains PA models, and no vendored file imports it.
 import ast
 
 import numpy as np

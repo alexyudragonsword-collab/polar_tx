@@ -1,4 +1,4 @@
-# Vendored from PA_DPD@44cbcb3: src/padpd/data/complete.py
+# Vendored from PA_DPD@a9220d6: src/padpd/data/complete.py
 # Adapted-copy policy: see src/polartx/vendor/__init__.py
 """Complete measured-source container: one file, every capture the
 platform can consume.

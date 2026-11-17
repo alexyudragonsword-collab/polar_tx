@@ -2,6 +2,15 @@
 
 本文件按倒序记录实质性进展——最新的一条在这行下面。每条保持简短，只写摘要和指针；结论沉淀进 `cairn/<topic>.md`。
 
+## 2026-11-17 · padpd 重新 pin 到 a9220d6（numbers-move：只有整链 ILA）
+
+- 27 个 padpd 文件统一 pin a9220d6（原 44cbcb3 + 两个 08b9725）；presets 重抽取正文不变；CascadePA 不拷（无人引用）。
+- 指纹：宽带 124/124、GUI 报告、导出 43/43 逐位相同；热 PA / B2 / MP / GMP / 定点逐位相同；21/22 示例输出相同。
+- 动的只有 ILA 保留最好一轮（PA_DPD d5750c2 / 70d6cc3）：ex09 整链 ILA −36.50 → −40.37 dB、ACLR −33.8 → −39.1；
+  默认结构 13.0 → 15.6 dB；非静态链 4.0 → 14.7 dB。**更正**"ILA 拿频谱换 EVM"——是发散的第二轮（GMP-510 下）。
+- OpenDPD 数据这轮在环境里，ex09 与 7 个原本 skip 的测试都跑了。
+- 见 CHANGELOG 本条、`cairn/measured-memory.md` 更正段、`tests/test_memory_dpd.py`。
+
 ## 2026-11-16 · E1 合入与回报；默认网格确认不动
 
 - PR #23 合入 main（0e7b7ac），CI 26/26 绿；#22 已回报结论、收敛表与 array_tx 重新 pin 的注意点（留给 array_tx 验收后关）。

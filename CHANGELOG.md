@@ -10,6 +10,38 @@ release 分组。
 
 ## 未发布 / Unreleased
 
+### 重新 pin vendored padpd：44cbcb3 / 08b9725 → a9220d6（PA_DPD main，2026-11-17）· numbers-move
+
+- **为什么**：padpd 的 pin 混在两个提交上（多数 44cbcb3，`pa/thermal.py` 与 `gain_modulation.py` 在 08b9725），
+  上游此后改了被拷文件里的 8 个：PA_DPD#4 的按时间定义的 PA 记忆、带抽头间隔的 MP / GMP（02ca433 及
+  4eb908a / b9bb6a6 / a9220d6 的说明修正），ILA 保留最好的一轮（d5750c2、70d6cc3 的 1 dB 容差、995e315），
+  `deploy/fixed_point.py` 给整数 RTL 用的指数（9d9c4b6，PA_DPD#2），`thermal.py` 的 `fir_fs` 透传。
+  现在 50 个 vendored 文件里 padpd 的 27 个统一在 a9220d6；`pa/presets.py` 按新版重新抽取（上游唯一的
+  改动在被丢弃的 `ddr_volterra_default` 里，抽取件正文不变）；`CascadePA`（新的 `pa/cascade.py`）没有被任何
+  vendored 文件引用，不拷，理由写在 `vendor/padpd/pa/__init__.py`。CI 的 vendor-drift 按全 SHA 取 a9220d6。
+- **没动的（指纹逐位不变）**：宽带 124/124（18 个预设 × DPD × 噪声、18 个 GUI 报告、FIR 预设）；
+  RTL / dp-cal 导出 43/43 逐字节相同——`fixed_point.py` 只加了方法，本库导出不用它，dsp_ip 的向量不动；
+  参考 / 漂移 / 热 PA、B2 慢状态流程（`synthetic_thermal_source` → `dpa_from_complete_source`，含
+  τ 辨识与残差 NMSE）、MP / GMP 拟合、定点模型全部逐位相同（PA_DPD#4 的 `fs` / `fir_fs` / `tap_spacing`
+  默认值即旧行为）；22 个示例里 21 个输出逐字相同（ex08、ex12、ex21 在内：它们的 ILA 第二轮没有发散）。
+- **动了的**，全部归因到 ILA 保留最好一轮（PA_DPD d5750c2 + 70d6cc3）：整链 ILA 在第二轮发散的链上
+  现在停在第一轮。`keep_best=False`（旧的固定两轮）逐位复现旧数。
+
+  | 量 | 改前 | 改后 | 被保留的轮 |
+  |---|---|---|---|
+  | ex09 实测 DPA_160MHz + 残差记忆，整链 ILA（GMP-510）EVM | −36.50 dB | **−40.37 dB** | 1（第二轮校验 −34.0 → −30.0） |
+  | 同上 ACLR | −33.8 dBc（比无 DPD 的 −38.0 差） | **−39.1 dBc** | 1 |
+  | 同上 ILA 买回 | 16.7 dB | **20.6 dB** | 1 |
+  | 同链默认 GMP 结构的 ILA（`cairn/measured-memory.md`） | 13.0 dB，ACLR → −32.0 | **15.6 dB**，ACLR → −34.7 | 1（第二轮差 1.4 dB） |
+  | 逐次归一化的非静态链，ILA 收益（`test_fixed_full_scale_is_required`） | ~4.0 dB | **14.7 dB**（固定满量程 48.5 dB） | 1 |
+
+  **更正**：README / ROADMAP / `cairn/measured-memory.md` 原写"ILA 在这里拿频谱换 EVM（ACLR −38 → −34）"
+  ——那是发散的第二轮。GMP-510 结构下保留第一轮，EVM 与 ACLR 一起变好；默认结构仍是拿 ACLR 换 EVM。
+  `test_ila_linearizes_the_measured_dpa_with_its_residual_memory` 原来断言 ACLR 变差，现在断言变好、
+  断言保留的是第一轮，并断言旧的固定两轮仍给出旧的交换（变化在留哪一轮，不在模型或链）。
+  `test_fixed_full_scale_is_required` 改为与固定满量程的同一条链比（14.7 vs 48.5 dB），不再按 15 dB 的
+  阈值——那个阈值离新读数只有 0.3 dB。
+
 ### E1（polar_tx#22）：仿真网格与 DTC/DPA 更新时钟分开（2026-11-16）
 
 - **为什么**：array_tx 报 FR2 400 MHz 在 os 4 上 ACLR2 读高 4.7 dB。查下来，本库的 `oversampling` 同时是仿真网格和
