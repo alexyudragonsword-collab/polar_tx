@@ -1,4 +1,4 @@
-# Vendored from pll_simulator@5564c64: src/pllsim/blocks/tdc.py
+# Vendored from pll_simulator@3d8611f: src/pllsim/blocks/tdc.py
 # Adapted-copy policy: see src/polartx/vendor/__init__.py
 """Time-to-digital converter models: flash TDC and bang-bang PD.
 
@@ -22,6 +22,16 @@ class TDCConfig:
     inl_sin: tuple = ()           # (amp_s, cycles, phase) over the code range
     jitter_rms_s: float = 0.0     # input-referred random jitter
     gain_error: float = 0.0       # true LSB = t_res*(1+gain_error), unknown to loop
+    # Subtractive dither (issue #80), TDC mode only: each reference cycle a
+    # pseudo-random offset k, uniform over dither_lsb LSB and centred on 0,
+    # moves the TDC's sampling instant (a DTC on the reference path) and the
+    # same k is subtracted from the code digitally.  The digital k is exact
+    # and continuous-valued; the DTC realises k*t_res*(1+dither_gain_error).
+    # A DTC's own jitter and INL are NOT modelled.  The sequence comes from
+    # simulate(seed=...) on a stream of its own, and it is applied with
+    # noise=False too: it is a circuit function, not a noise source.
+    dither_lsb: float = 0.0       # width of the uniform dither [LSB]; 0 = off
+    dither_gain_error: float = 0.0  # DTC gain error vs t_res (fraction)
 
     def __post_init__(self):
         if not self.t_res > 0:
@@ -30,9 +40,31 @@ class TDCConfig:
             raise ValueError(f"TDCConfig n_bits must be >= 1, got {self.n_bits}")
         if self.jitter_rms_s < 0:
             raise ValueError(f"TDCConfig jitter_rms_s cannot be negative, got {self.jitter_rms_s}")
+        if not (math.isfinite(self.dither_lsb) and self.dither_lsb >= 0):
+            raise ValueError(f"TDCConfig dither_lsb must be >= 0 (0 = off), got {self.dither_lsb}")
+        if not (math.isfinite(self.dither_gain_error) and self.dither_gain_error > -1):
+            raise ValueError("TDCConfig dither_gain_error must be finite and > -1, "
+                             f"got {self.dither_gain_error}")
+        if self.dither_gain_error and not self.dither_lsb:
+            raise ValueError("TDCConfig dither_gain_error describes the dither DTC: "
+                             "it does nothing with dither_lsb = 0")
         if self.inl_sin and len(self.inl_sin) != 3:
             raise ValueError("TDCConfig inl_sin is (amplitude_s, cycles, phase_rad) "
                              f"or empty, got {self.inl_sin}")
+
+    def dither_rms_s(self) -> float:
+        """RMS of the injected dither [s] (uniform: width / sqrt(12)).
+
+        Classical subtractive dither makes the quantization error white and
+        input-independent when it is uniform over a whole number of equal
+        steps.  The TDC's steps are not all equal: with a non-integer number
+        of codes per DCO period the bin that straddles the DCO edge is
+        short (0.46 LSB at 12.2 ps / 15 GHz), so no width is exact.  What
+        decides whether the loop leaves a parked bin is the same RMS motion
+        at the TDC input as for jitter, so this counts in
+        ``ADPLL.tdc_dither_rms_s`` (issue #80 measurements in
+        cairn/cross-domain.md)."""
+        return self.dither_lsb * self.t_res * (1.0 + self.dither_gain_error) / math.sqrt(12.0)
 
     def inl_scalars(self) -> tuple[bool, float, float, float]:
         if self.inl_sin:

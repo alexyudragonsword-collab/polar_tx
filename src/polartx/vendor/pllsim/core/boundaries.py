@@ -1,4 +1,4 @@
-# Vendored from pll_simulator@5564c64: src/pllsim/core/boundaries.py
+# Vendored from pll_simulator@3d8611f: src/pllsim/core/boundaries.py
 # Adapted-copy policy: see src/polartx/vendor/__init__.py
 """Where the two domains stop being comparable: the predicates, in one place.
 
@@ -54,6 +54,12 @@ SETTLE_FRAC = 0.25
 #: higher below 0.5 bin and up to 10 dB lower above it.)  A frequency ramp or a fractional FCW sweeps the phase
 #: across bins and dithers it regardless; analyze() cannot see a ramp, which
 #: is why the note it raises says so rather than the predicate.
+#: Correction 2026-11-18 (issue #80): a ramp sweeps the phase across bins
+#: but does not dither it.  The sweep is deterministic and repeats every
+#: modulation period, so below 0.5 bin the quantization error follows the
+#: ramp: its PSD level still matches analyze() (band-averaged within ~3 dB),
+#: but much of it is identical ramp to ramp and survives coherent
+#: integration.  See ``tdc_modulation_repeats``.
 #:
 #: The threshold flags where the white-quantization assumption is
 #: unsupported, not a guaranteed error.  The stock adpll_100m_10g moved to
@@ -69,6 +75,19 @@ TDC_DITHER_BINS = 0.5
 def tdc_dead_zone(fcw: float, t_res: float, dither_rms_s: float) -> bool:
     """Integer-N TDC loop with less than TDC_DITHER_BINS of RMS dither."""
     return abs(fcw - round(fcw)) < 1e-9 and dither_rms_s < TDC_DITHER_BINS * t_res
+
+
+def tdc_modulation_repeats(t_res: float, dither_rms_s: float) -> bool:
+    """A TDC loop driven by mod_freq with less than TDC_DITHER_BINS of RMS
+    dither: the TDC quantization error follows the modulation and repeats
+    with it, so it is partly coherent across modulation periods.
+
+    Not a PSD disagreement -- the level matches analyze() -- which is why it
+    is a simulate() note and not a cross-domain boundary.  Same threshold as
+    the dead zone and the same caveat: it marks where the white-quantization
+    picture is unsupported, not a guaranteed effect.
+    """
+    return dither_rms_s < TDC_DITHER_BINS * t_res
 
 
 def ct_approx_exceeded(f_ugb: float, fref: float) -> bool:
@@ -98,19 +117,35 @@ LOCK_FERR_FRACTION = 1e-3
 LOCK_TAIL_CYCLES = 5000
 
 
-def tail_frequency_error(freq_out, fout: float) -> float:
-    """|mean of the record's tail - fout| in Hz.
+def ferr_signed(freq_out, fout: float, mod_freq=None) -> float:
+    """mean of the record's tail - fout in Hz, modulation taken out.
 
     The tail is the last LOCK_TAIL_CYCLES samples, capped at a quarter of the
     record: a 4000-cycle run that started 5 MHz off and converged to 829 Hz
     read "never reached fout" when the tail was the whole record, transient
     included.
+
+    ``mod_freq`` (two-point modulation, Hz, same fref grid) is subtracted
+    sample for sample first: both engines that take it put mod_freq[n] into
+    freq_out[n] through the direct point.  Without that, a sawtooth chirp
+    whose last 5000 cycles sit on the upper half of the ramp read as a loop
+    hundreds of MHz off target (issue #80).
     """
     import numpy as np
-    n = len(freq_out)
+    f = np.asarray(freq_out, dtype=float)
+    if mod_freq is not None:
+        m = np.asarray(mod_freq, dtype=float)
+        k = min(f.size, m.size)
+        f = f.copy()
+        f[:k] = f[:k] - m[:k]
+    n = f.size
     n_tail = max(1, min(LOCK_TAIL_CYCLES, n // 4))
-    tail = np.asarray(freq_out[-n_tail:], dtype=float)
-    return abs(float(np.mean(tail)) - float(fout))
+    return float(np.mean(f[-n_tail:])) - float(fout)
+
+
+def tail_frequency_error(freq_out, fout: float, mod_freq=None) -> float:
+    """|ferr_signed|: how far the settled output sits from fout, in Hz."""
+    return abs(ferr_signed(freq_out, fout, mod_freq))
 
 
 def never_locked(ferr_hz: float, fref: float) -> bool:

@@ -2,6 +2,14 @@
 
 本文件按倒序记录实质性进展——最新的一条在这行下面。每条保持简短，只写摘要和指针；结论沉淀进 `cairn/<topic>.md`。
 
+## 2026-11-18 · pllsim 重新 pin 到 3d8611f（扣除式 TDC dither，polar_tx#26）
+
+- fmcw_radar 要 pll_simulator#80 的扣除式 TDC dither；23 个 pllsim 文件统一 3d8611f，`adpll.py` 三方合并进本仓扩展件，无冲突。
+- 指纹逐位不变：ADPLL 38/38、宽带 124/124、导出 43/43、22 个示例输出。dither 默认关。
+- 只有 `notes` 变：BLE event 的 "never reached fout" 误报消失；event 模式多一条 "quantization follows the modulation"。
+- 新测试钉住 dither 在本仓内核里被扣除（2 LSB：5.23 → 5.55 mrad，不扣则 89 mrad）、在线 dp_cal 照样收敛。
+- 见 `cairn/adpll-event-engine.md` 新增一节、CHANGELOG。
+
 ## 2026-11-17 · padpd 重新 pin 到 a9220d6（numbers-move：只有整链 ILA）
 
 - 27 个 padpd 文件统一 pin a9220d6（原 44cbcb3 + 两个 08b9725）；presets 重抽取正文不变；CascadePA 不拷（无人引用）。

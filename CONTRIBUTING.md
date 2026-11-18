@@ -77,7 +77,7 @@ assert -36.0 < res.evm().db < -30.0     # ✓ 落在 Degani'24 的公布类别�
 文件头必须带出处：
 
 ```python
-# Vendored from pll_simulator@5564c64: src/pllsim/arch/adpll.py
+# Vendored from pll_simulator@3d8611f: src/pllsim/arch/adpll.py
 ```
 
 `tools/vendor_check.py` 把每个文件分成四类，CI 的 `vendor-drift` job 每次

@@ -2,8 +2,10 @@
 
 polartx is self-contained: the phase-path engine comes from
 ``alexyudragonsword-collab/pll_simulator`` (package ``pllsim``, every file
-at commit 5564c64 since 2026-11-12; ``arch/adpll.py`` and ``arch/frac.py``
-had been held at d7be4712 until the dp_cal hook moved into the kernel) and
+at commit 3d8611f since 2026-11-18 -- the subtractive TDC dither, merged
+three-way into polartx's extended ``arch/adpll.py``; 5564c64 from 2026-11-12,
+and before that ``arch/adpll.py`` and ``arch/frac.py`` were held at
+d7be4712 until the dp_cal hook moved into the kernel) and
 the waveform/metrics/PA infrastructure from
 ``alexyudragonsword-collab/PA_DPD`` (package ``padpd``, every file at
 commit a9220d6 on PA_DPD's ``main`` since 2026-11-17; until then most files

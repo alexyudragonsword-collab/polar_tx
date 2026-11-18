@@ -5,7 +5,7 @@ summary: "ADPLL 两点调制的 event（逐参考周期）引擎：B1 的真因�
 tags: [polartx, adpll, event 引擎, tdc, 两点调制, vendor, fmcw_radar]
 contains: [decision, pitfall, lesson, experience]
 created: "2026-11-12"
-updated: "2026-11-12（C5 了结）"
+updated: "2026-11-18（pllsim 3d8611f：扣除式 TDC dither）"
 related: [history-inventory.md, static-gates-and-refactor.md]
 authoring_mode: ai_generated
 ---
@@ -96,3 +96,19 @@ period"提示现在也到手了（测试里断言）。
 本仓所有 ADPLL 路径与改前逐位一致（38/38 项指纹），所以上面所有数字不动；numba 下编译
 与解释也逐位一致（CI `test-jit`）。速度（BLE event，104k 周期，`simulate()` 含后处理）：
 旧循环 0.41 s，新内核解释执行 0.36 s，numba 0.07 s。
+
+## 扣除式 TDC dither 进来了（2026-11-18，polar_tx#26，decision / experience）
+
+fmcw_radar 要用 pll_simulator#80 的扣除式 TDC dither（60 GHz 档 12.2 ps TDC 每周期只有 5.5 个码，
+斜坡扫不散量化，帧里积出鬼目标），而它的 pllsim 经本仓拿，所以整棵子树 5564c64 → 3d8611f。
+上游在被拷文件里改了 4 个：`arch/adpll.py`、`blocks/tdc.py`、`core/boundaries.py`、`core/engine.py`。
+`adpll.py` 是本仓的扩展件（`mod_freq_dp`、`dp_cal` 步进内核），用三方合并（base 5564c64）叠上去，无冲突。
+
+- **默认关，逐位不变**：ADPLL 指纹 38/38、宽带 124/124、导出 43/43、22 个示例输出都与改前相同。
+- **提示变了，数没变**：event 模式下 BLE 1M/2M 原来的 "loop never reached the configured fout"
+  消失（上游修了锁定检测，先减 `mod_freq`；那是误报）；所有 event 模式 ADPLL 预设多一条
+  "TDC quantization follows the modulation"（预设 TDC 只有 0.17 格 RMS 抖动 < 0.5 格）。这条说误差
+  "随调制周期重复"，对周期斜坡（fmcw_radar）是实情，对本仓的随机数据调制只是信息；本仓的测试与报告不读 `notes`。
+- **与本仓扩展的配合（新测试钉住）**：dither 在形成相位误差之前就从码里扣掉，`dp_cal` 读的是扣除后的误差。
+  BLE 预设 2 LSB：相位误差 5.23 → 5.55 mrad（不扣除的话 dither 本身就有 89 mrad）；5 % 失配下在线 `dp_cal`
+  照样收敛（1.05 → 1.0016）。2 LSB 起那条新提示消失，与上游说法一致。把扣除那一行去掉，测试变红（已试）。

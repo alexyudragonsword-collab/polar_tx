@@ -1,4 +1,4 @@
-# Vendored from pll_simulator@5564c64: src/pllsim/modulation.py
+# Vendored from pll_simulator@3d8611f: src/pllsim/modulation.py
 # Adapted-copy policy: see src/polartx/vendor/__init__.py
 """Two-point PLL modulation: GMSK trajectories and EVM.
 

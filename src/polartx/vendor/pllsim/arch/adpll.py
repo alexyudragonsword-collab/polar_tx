@@ -1,4 +1,4 @@
-# Vendored from pll_simulator@5564c64: src/pllsim/arch/adpll.py
+# Vendored from pll_simulator@3d8611f: src/pllsim/arch/adpll.py
 # Adapted-copy policy: see src/polartx/vendor/__init__.py
 """All-digital PLL.
 
@@ -67,6 +67,11 @@ from .frac import FracConfig  # polartx: extracted from cppll.py
 TWOPI = 2.0 * np.pi
 
 
+#: SeedSequence tag of the subtractive-TDC-dither stream (issue #80); any
+#: fixed value works, it only has to differ from the main stream's.
+TDC_DITHER_STREAM = 80
+
+
 @dataclass
 class DLFConfig:
     """Digital loop filter: L(z) = alpha + rho/(1-z^-1), then IIR stages
@@ -123,6 +128,13 @@ class ADPLLConfig:
             raise ValueError("tdc mode requires TDCConfig")
         if self.mode == "dtc_bbpd" and self.frac is None:
             raise ValueError("dtc_bbpd mode requires FracConfig (MASH + DTC)")
+        if self.mode == "dtc_bbpd" and self.tdc is not None and (
+                self.tdc.dither_lsb or self.tdc.dither_gain_error):
+            # same rule as mod_freq: a knob the mode has no place for is
+            # refused, not accepted and silently ignored
+            raise ValueError(
+                "TDCConfig dither_lsb / dither_gain_error act on the TDC "
+                "loop only: dtc_bbpd has no TDC to dither")
         if self.mode == "tdc" and (self.div_pn_dbchz is not None
                                    or self.div_pn_fc is not None):
             raise ValueError(
@@ -183,6 +195,7 @@ def adpll_tdc_kernel(n_cycles: int, tref: float, fout: float, fref: float, fcw: 
                      tdc_t_lsb_true: float, tdc_code_max: int, tdc_jitter: float,
                      tdc_has_sin: bool, tdc_sin_amp: float, tdc_sin_cyc: float,
                      tdc_sin_ph: float, cpp_nom: float,
+                     has_tdith: bool, tdith_k: np.ndarray, tdith_inject_s: float,
                      has_tcal: bool, tcal_st: np.ndarray, tcal_ema: float,
                      tcal_trace: np.ndarray,
                      has_kcal: bool, kcal_st: np.ndarray, kcal_halves: np.ndarray,
@@ -228,6 +241,10 @@ def adpll_tdc_kernel(n_cycles: int, tref: float, fout: float, fref: float, fcw: 
             # (issue #76: -5..-6 dB with the jitter dominant).
             phi_sample = phi_sample + tdc_jitter * zn[zi] * fv
             zi += 1
+        if has_tdith:
+            # subtractive dither (issue #80): the DTC moves the same instant
+            # by k LSB, realised with its own gain; k is subtracted below
+            phi_sample = phi_sample + tdith_k[n] * tdith_inject_s * fv
         count = float(math.floor(phi_sample))
         frac_ui = phi_sample - count
         tdco = 1.0 / fv
@@ -240,9 +257,9 @@ def adpll_tdc_kernel(n_cycles: int, tref: float, fout: float, fref: float, fcw: 
                 cpp_meas = cpp_meas + 0.5 * zn[zi]
                 zi += 1
             tcal_trace[n] = tdc_period_step(tcal_st, cpp_meas, tcal_ema)
-            tdc_ui = code / tcal_st[0]
+            tdc_ui = (code - tdith_k[n]) / tcal_st[0] if has_tdith else code / tcal_st[0]
         else:
-            tdc_ui = code / cpp_nom
+            tdc_ui = (code - tdith_k[n]) / cpp_nom if has_tdith else code / cpp_nom
         e_ui = r_acc - (count + tdc_ui)
 
         if has_kcal and calibration and kcal_st[3] == 0.0:
@@ -465,7 +482,48 @@ class ADPLL(PLLBase):
              - bd.get("dco_quant", 0.0))
         sigma_loop_s = math.sqrt(max(integrate_pn(fg, s, fg[0], fg[-1]), 0.0)) \
             / (TWOPI * c.fout)
-        return math.hypot(c.tdc.jitter_rms_s, sigma_loop_s)
+        # the subtractive dither moves the input across bins exactly as
+        # jitter does, and adds no noise of its own (issue #80)
+        return math.hypot(c.tdc.jitter_rms_s, sigma_loop_s, c.tdc.dither_rms_s())
+
+    def tdc_dither_mod_residual(self, f: np.ndarray, freq_dev_rms_hz: float) -> np.ndarray:
+        """Output phase PSD [rad^2/Hz, double-sideband, at the DCO] of the
+        subtractive TDC dither's mismatch under frequency modulation.
+
+        While the output is freq_dev away from fout, the TDC's codes-per-
+        period normalisation (made at the nominal period) is off by
+        freq_dev/fout.  The measured phase error is then
+        (freq_dev/fout) * (m - u) [UI]: u is where the sample falls inside
+        the DCO period and m the number of DCO edges the dither pushed it
+        across.  Without dither that is a deterministic pattern in u (part
+        of what repeats with a ramp, issue #80); with dither it is random,
+        and when u sweeps the period (a ramp, a fractional FCW) its variance
+        is (freq_dev/fout)^2 (w^2 + 1)/12, w the dither width in DCO
+        periods -- in seconds, freq_dev^2 (sigma_d^2 + T^2/12), T = 1/fout.
+        The T^2/12 part dominates for narrow dither: 19 ps against
+        sigma_d = 3.5 ps for 1 LSB of 12.2 ps at 15 GHz.  Sampled white on
+        tdc_quant's path.  With the phase parked (integer FCW plus a
+        constant offset) the variance depends on where it parks and this
+        under-reads (measured up to 4.4 dB under at 0.9 period of dither).
+
+        analyze() takes no modulation, so the caller supplies the RMS
+        deviation over whatever the PSD is averaged with: a sawtooth of
+        +-D is D/sqrt(3) unweighted, but a Hann window centred on each ramp
+        weights its middle, where the deviation is smallest, and the
+        effective mean-square is 0.24 of that.  Add the result to
+        pn_breakdown["total"] -- same grid, same units, same convention.
+        Zero when the dither is off.
+        """
+        c = self.cfg
+        f = np.asarray(f, dtype=float)
+        if c.mode != "tdc" or c.tdc.dither_lsb == 0 or freq_dev_rms_hz == 0:
+            return np.zeros_like(f)
+        _gol, _kdet, h, _paths, _notes = self._noise_paths(f)
+        sigma_ui = float(freq_dev_rms_hz) * math.hypot(
+            c.tdc.dither_rms_s(), 1.0 / (c.fout * math.sqrt(12.0)))
+        src = NoiseSource(name="tdc_dither_mod", unit="rad^2/Hz",
+                          level=2.0 * (TWOPI * sigma_ui) ** 2 / c.fref)
+        return output_psd([NoisePath(src, h)], f)["tdc_dither_mod"]
 
     def _noise_paths(self, f: np.ndarray):
         """(gol, kdet, h, paths, notes) on grid ``f``: the noise model alone."""
@@ -502,6 +560,17 @@ class ADPLL(PLLBase):
                     NoiseSource(name="tdc_jitter", unit="rad^2/Hz",
                                 level=2.0 * (TWOPI * c.fout * c.tdc.jitter_rms_s) ** 2
                                 / c.fref), h))
+            if c.tdc.dither_gain_error:
+                # subtractive dither (issue #80): k is subtracted exactly, the
+                # DTC realised k*t_res*(1+eps), so eps*k*t_res is left over --
+                # one draw per cycle, sampled white on the same path.  The
+                # nominal dither's RMS times |eps|; at the nominal fout (a
+                # modulation adds tdc_dither_mod_residual()).
+                sig = abs(c.tdc.dither_gain_error) * c.tdc.dither_lsb * c.tdc.t_res \
+                    / math.sqrt(12.0)
+                paths.append(NoisePath(
+                    NoiseSource(name="tdc_dither_gain", unit="rad^2/Hz",
+                                level=2.0 * (TWOPI * c.fout * sig) ** 2 / c.fref), h))
         else:
             if c.div_pn_dbchz is not None:
                 # divider output phase enters at the PD like the reference:
@@ -559,9 +628,16 @@ class ADPLL(PLLBase):
                     "bandwidth (measured +16.9 dB at 0.08 bin, but +0.3 dB "
                     "for the stock loop at 0.20 bin -- the size depends on "
                     "the loop, so compare with simulate()).  A "
-                    "frequency ramp or two-point modulation dithers the TDC "
-                    "and this does not apply; neither does it in fractional-N."
-                    "  TDC jitter of ~0.5 bin or more also dithers it.")
+                    "frequency ramp moves the TDC across bins but does not "
+                    "dither it: under 0.5 bin the quantization error then "
+                    "repeats with the ramp, which simulate() notes.  Not "
+                    "applicable in fractional-N.  TDC jitter of ~0.5 bin or "
+                    "more dithers the TDC, and so does TDCConfig.dither_lsb "
+                    "(subtractive, adds no noise): its RMS counts in the "
+                    "figure above, 0.29 bin per LSB, so 2 LSB or more clears "
+                    "this note.  1 LSB is not enough when a DCO period is "
+                    "not a whole number of codes (measured +2.4..+2.9 dB at "
+                    "5.46 codes per period, 3 LSB within 0.8 dB).")
         if m.f_ugb > c.fref / 10:
             notes.append("UGB > fref/10: discrete loop peaking significant")
         from ..core.boundaries import conditionally_stable
@@ -754,6 +830,13 @@ class ADPLL(PLLBase):
         # at most two draws per cycle (TDC jitter, the period-cal counter
         # noise), taken from a pool in the order the loop consumes them
         zn = rng.standard_normal(2 * n_cycles) if noise else np.zeros(0)
+        # subtractive TDC dither: a stream of its own, so switching it on
+        # leaves every other draw of the run sample for sample unchanged,
+        # and drawn with noise=False too (a circuit function, not noise)
+        has_tdith = c.tdc.dither_lsb > 0
+        tdith_k = (c.tdc.dither_lsb * (np.random.default_rng(
+            np.random.SeedSequence([int(seed), TDC_DITHER_STREAM])).random(n_cycles) - 0.5)
+            if has_tdith else np.zeros(0))
         has_tcal = tdc_cal is not None
         has_kcal = kdco_cal is not None
         tcal_trace = np.empty(n_cycles if has_tcal else 0)
@@ -765,6 +848,7 @@ class ADPLL(PLLBase):
             jit_ref, bool(noise), bool(calibration), zn,
             float(tdc.t_lsb_true), int(tdc.code_max), float(c.tdc.jitter_rms_s),
             *c.tdc.inl_scalars(), float(cpp_nom),
+            has_tdith, tdith_k, float(c.tdc.t_res * (1.0 + c.tdc.dither_gain_error)),
             has_tcal, tdc_cal.st if has_tcal else np.zeros(1),
             float(tdc_cal._ema) if has_tcal else 0.0, tcal_trace,
             has_kcal, kdco_cal.st if has_kcal else np.zeros(7),
@@ -808,8 +892,30 @@ class ADPLL(PLLBase):
         offs = add_pull_offset(offs, c.osc, c.fref)
         if supply_ripple is not None and supply_ripple[1] < 0.45 * c.fref:
             offs = (offs or []) + [supply_ripple[1]]
+        if mod_freq is not None and np.any(np.asarray(mod_freq) != 0.0):
+            from ..core.boundaries import TDC_DITHER_BINS, tdc_modulation_repeats
+            dither_s = self.tdc_dither_rms_s()
+            if tdc_modulation_repeats(c.tdc.t_res, dither_s):
+                # issue #80: a ramp sweeps the TDC across bins without
+                # dithering it, so the error is a function of the ramp
+                sim.notes.append(
+                    f"TDC quantization follows the modulation: "
+                    f"{dither_s / c.tdc.t_res:.2f} TDC bins of RMS dither, "
+                    f"under {TDC_DITHER_BINS:g}.  The modulation sweeps the "
+                    "TDC across bins deterministically, so the quantization "
+                    "error repeats with it from one modulation period to "
+                    "the next.  Its PSD level can still agree with analyze()"
+                    "; what fails is the randomness: averaging or coherently "
+                    "integrating over periods does not reduce it (measured "
+                    "on a 12.2 ps TDC, 1 ps jitter, 0.08 bin: the part "
+                    "common to all ramps 3-8 dB below the total at "
+                    "0.3-10 MHz, against 12 dB for random noise over 16 "
+                    "ramps).  TDCConfig.dither_lsb breaks it up without "
+                    "adding noise (2 LSB or more clears this note); more TDC "
+                    "jitter does too, at the cost of in-band noise.")
         return postprocess(sim, int_band=c.int_band, spur_offsets=offs,
-                           flicker_corner_hz=flicker_corner_hz(c))
+                           flicker_corner_hz=flicker_corner_hz(c),
+                           mod_freq=mod_freq)
 
     def _sim_bbpd(self, n_cycles, noise, calibration, seed, f_start_offset,
                   dtc_gain_init_error, dtc_gain_drift=None,

@@ -10,6 +10,30 @@ release 分组。
 
 ## 未发布 / Unreleased
 
+### 重新 pin vendored pllsim：5564c64 → 3d8611f（扣除式 TDC dither，polar_tx#26，2026-11-18）
+
+- **为什么**：fmcw_radar 要用 pll_simulator#80 的扣除式 TDC dither（PR #81 / #82）。它的 pllsim
+  是经本仓拿的，所以本仓先跟。
+- **改了什么**：
+  - 23 个 pllsim 文件统一到 3d8611f。上游在被拷文件里改了 4 个：`arch/adpll.py`、`blocks/tdc.py`、
+    `core/boundaries.py`、`core/engine.py`。
+  - `adpll.py` 是本仓的扩展件（`mod_freq_dp`、`dp_cal` 步进内核），按三方合并（base 5564c64）
+    叠上上游改动，无冲突，manifest 记新的正文哈希。`arch/frac.py` 的抽取来源没变。
+  - CI 按全 SHA 检出 3d8611f。
+- **数字一个不动（指纹逐位不变）**：ADPLL 38/38（5 个预设 × 两引擎 × 噪声、`analyze()`、浮点校准轨迹、
+  定点金向量）、宽带 124/124（含 18 个 GUI 报告）、RTL / dp-cal 导出 43/43 逐字节、22 个示例输出逐字相同。
+  dither 默认关（`TDCConfig.dither_lsb = 0`）。
+- **提示变了**（`simulate()` 的 `notes`，本仓测试与报告都不读）：
+  - event 模式下 BLE 1M/2M 原来的 "loop never reached the configured fout" 消失。那是带调制时锁定检测
+    没减 `mod_freq` 的误报，上游修了。
+  - 所有 event 模式 ADPLL 预设多一条 "TDC quantization follows the modulation"（TDC 只有 0.17 格 RMS
+    抖动）。这条对周期斜坡是实情，对本仓的随机数据调制只是信息。
+- **新测试**（`tests/test_adpll_tp.py`）：
+  - 扣除式 dither 在本仓扩展的内核里确实被扣掉：BLE 2 LSB，相位误差 5.23 → 5.55 mrad；不扣的话
+    dither 本身有 89 mrad。2 LSB 起那条新提示消失。
+  - 在线 `dp_cal` 开着 dither 照样收敛：5 % 失配，1.05 → 1.0016。
+  - 把内核里扣除那一行去掉，第一条变红（已试）。
+
 ### 重新 pin vendored padpd：44cbcb3 / 08b9725 → a9220d6（PA_DPD main，2026-11-17）· numbers-move
 
 - **为什么**：padpd 的 pin 混在两个提交上（多数 44cbcb3，`pa/thermal.py` 与 `gain_modulation.py` 在 08b9725），
