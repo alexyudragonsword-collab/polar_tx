@@ -1,4 +1,4 @@
-# Vendored from pll_simulator@5564c64: src/pllsim/core/engine.py
+# Vendored from pll_simulator@3d8611f: src/pllsim/core/engine.py
 # Adapted-copy policy: see src/polartx/vendor/__init__.py
 """Reference-edge-driven simulation engine.
 
@@ -38,22 +38,30 @@ def detect_lock(t: np.ndarray, ferr: np.ndarray, tol_hz: float, hold: int = 200)
 
 def postprocess(sim: SimResult, settle_frac: float = 0.25,
                 int_band: tuple[float, float] = (1e3, 100e6),
-                spur_offsets=None, flicker_corner_hz: float = 0.0) -> SimResult:
+                spur_offsets=None, flicker_corner_hz: float = 0.0,
+                mod_freq=None) -> SimResult:
     """Attach PSD, jitter and spur estimates from the settled portion.
 
     ``flicker_corner_hz`` is the highest 1/f corner the run was configured
     with (0 = no flicker anywhere); it gates the synthesis-floor note.
+    ``mod_freq`` is the two-point modulation the run was driven with, if
+    any; the lock check takes it out of ``freq_out`` before comparing with
+    f0 (a chirp's output is meant to be away from f0).
     """
     n0 = int(sim.phase_err_out.size * settle_frac)
     ph = sim.phase_err_out[n0:]
-    from .boundaries import LOCK_FERR_FRACTION, never_locked, tail_frequency_error
-    ferr = tail_frequency_error(sim.freq_out, sim.f0)
+    from .boundaries import (
+        LOCK_FERR_FRACTION,
+        ferr_signed,
+        never_locked,
+        tail_frequency_error,
+    )
+    ferr = tail_frequency_error(sim.freq_out, sim.f0, mod_freq)
     if never_locked(ferr, sim.fs):
         # ILCM/MDLL have no lock detector, and an analog loop's detector is
         # tuned for its design point: without this, a ring railed against
         # its tuning range read as an ordinary result 2.4 GHz off target
-        n_tail = max(1, min(5000, len(sim.freq_out) // 4))
-        tail = float(np.mean(np.asarray(sim.freq_out[-n_tail:], dtype=float)))
+        tail = sim.f0 + ferr_signed(sim.freq_out, sim.f0, mod_freq)
         sim.notes.append(
             f"loop never reached the configured fout: output settled at "
             f"{tail / 1e9:.6f} GHz vs {sim.f0 / 1e9:.6f} GHz configured "

@@ -171,3 +171,45 @@ def test_event_engine_has_no_phase_advance_limit():
         p.tx.phasemod.mode = "response"
         e_rs = _phase_err_rms(p.tx.run(wf, noise=True, seed=3))
         assert abs(20 * np.log10(e_ev / e_rs)) < 1.0
+
+
+# ---- subtractive TDC dither (pll_simulator#80) through polartx's kernel
+def _with_tdc_dither(p, lsb):
+    """The preset's ADPLL with TDCConfig.dither_lsb set (pll_simulator 3d8611f)."""
+    from dataclasses import replace
+
+    from polartx.vendor.pllsim.arch.adpll import ADPLL
+    c = p.tx.phasemod.pll.cfg
+    p.tx.phasemod.pll = ADPLL(replace(c, tdc=replace(c.tdc, dither_lsb=lsb)))
+    return p
+
+
+def test_subtractive_tdc_dither_is_subtracted_in_the_extended_kernel():
+    """vendored adpll.py is polartx's extension of upstream's kernel
+    (mod_freq_dp, the dp_cal step), and the dither came in by a three-way
+    merge, so check it as it runs here: k LSB moves the TDC instant and the
+    same k comes off the code before the phase error is formed.  At 2 LSB
+    on the BLE preset's 10 ps TDC the phase error stays where it was
+    (measured 5.23 -> 5.55 mrad, noise off); left in, the dither alone
+    would add 2*10ps*2*pi*2.44GHz/sqrt(12) = 89 mrad.  And 2 LSB is enough
+    to clear simulate()'s "quantization follows the modulation" note."""
+    e = {}
+    for lsb in (0.0, 2.0):
+        p = _with_tdc_dither(ble_1m_adpll(mode="event"), lsb)
+        r = p.tx.run(p.make_waveform(n_bits=400, seed=5), noise=False, seed=3)
+        e[lsb] = _phase_err_rms(r)
+        notes = r.info["phasemod"]["sim"].notes
+        assert any("follows the modulation" in n for n in notes) == (lsb == 0.0)
+    assert e[2.0] < 1.25 * e[0.0]                      # measured x1.06
+
+
+def test_online_dp_cal_converges_with_tdc_dither_on():
+    """The online two-point calibrator reads the phase error after the
+    dither is subtracted: a 5 % direct-point mismatch still converges
+    (measured 1.05 -> 1.0016 with 2 LSB, 0.9972 without)."""
+    from polartx.vendor.pllsim.calibration.lms import SignSignLMS
+    p = _with_tdc_dither(ble_1m_adpll(mode="event", dp_gain=1.05), 2.0)
+    p.tx.phasemod.dp_cal = SignSignLMS(init=1.05, mu=2e-5)
+    r = p.tx.run(p.make_waveform(n_bits=600, seed=5), noise=True, seed=3)
+    tr = r.info["phasemod"]["sim"].cal_traces["dp_gain"]
+    assert abs(np.mean(tr[-len(tr) // 10:]) - 1.0) < 0.01

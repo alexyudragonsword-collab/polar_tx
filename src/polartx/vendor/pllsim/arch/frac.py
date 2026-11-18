@@ -1,4 +1,4 @@
-# Extracted from pll_simulator@5564c64: src/pllsim/arch/cppll.py (FracConfig only)
+# Extracted from pll_simulator@3d8611f: src/pllsim/arch/cppll.py (FracConfig only)
 # so the vendored ADPLL does not drag in the analog charge-pump PLL blocks.
 # Sole intentional divergence from upstream.
 """Fractional-N configuration shared by the DTC-based architectures."""
